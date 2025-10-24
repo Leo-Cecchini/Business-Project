@@ -1,0 +1,21 @@
+project/
+├── app.py                  # Flask application factory
+├── config.py              # Configuration settings
+├── run.py                 # Application entry point
+├── requirements.txt       # Python dependencies
+├── .env.example          # Environment variables template
+├── models/
+│   ├── vector_store.py   # Qdrant vector store management
+│   └── chat_model.py     # LLM and conversation management
+├── routes/
+│   ├── api.py            # API endpoints
+│   └── views.py          # View routes
+├── utils/
+│   └── file_processor.py # File processing utilities
+├── templates/
+│   └── index.html        # Main HTML template
+└── static/
+    ├── css/
+    │   └── style.css     # Styles
+    └── js/
+        └── app.js        # Frontend JavaScript

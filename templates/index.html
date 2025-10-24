@@ -1,0 +1,66 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>🧠 Project Assistant</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+</head>
+<body>
+    <div class="container">
+        <!-- Sidebar -->
+        <aside class="sidebar">
+            <div class="sidebar-header">
+                <h2>📂 Documenti</h2>
+            </div>
+            
+            <div class="documents-list" id="documentsList">
+                <p class="no-docs">Nessun documento caricato</p>
+            </div>
+            
+            <div class="upload-section">
+                <input type="file" id="fileInput" multiple accept=".txt,.pdf,.md" style="display: none;">
+                <button class="btn btn-primary" onclick="document.getElementById('fileInput').click()">
+                    📥 Carica documenti
+                </button>
+            </div>
+            
+            <div class="actions">
+                <button class="btn btn-secondary" id="resetChatBtn">🗑️ Reset Chat</button>
+                <button class="btn btn-danger" id="resetDbBtn">🗑️ Reset DB</button>
+            </div>
+        </aside>
+        
+        <!-- Main Chat Area -->
+        <main class="chat-container">
+            <header class="chat-header">
+                <h1>🧠 Project Assistant</h1>
+                <p>Chat con documenti caricati e memoria persistente</p>
+            </header>
+            
+            <div class="messages" id="messagesContainer">
+                <div class="message assistant">
+                    <div class="message-content">
+                        <strong>🤖 Assistant:</strong>
+                        <p>Ciao! Carica dei documenti e inizia a chattare.</p>
+                    </div>
+                </div>
+            </div>
+            
+            <div class="input-area">
+                <form id="chatForm">
+                    <input 
+                        type="text" 
+                        id="messageInput" 
+                        placeholder="Scrivi un messaggio..."
+                        autocomplete="off"
+                    >
+                    <button type="submit" class="btn btn-send">Invia</button>
+                </form>
+            </div>
+        </main>
+    </div>
+    
+    <script src="{{ url_for('static', filename='js/app.js') }}"></script>
+</body>
+</html>
