@@ -42,11 +42,16 @@ project/
 ### 1. Install Python dependencies
 
 ```bash
-# Create virtual environment
+# 1. Create virtual environment
+# With venv
 python -m venv venv
 source venv/bin/activate  # On Windows: venv\Scripts\activate
 
-# Install dependencies
+# or With conda
+conda create -n env_name python=3.12
+conda activate env_name
+
+# 2. Install dependencies
 pip install -r requirements.txt
 ```
 
