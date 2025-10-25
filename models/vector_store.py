@@ -2,20 +2,26 @@
 
 from qdrant_client import QdrantClient
 from qdrant_client.models import Distance, VectorParams, PointStruct
-from langchain_google_genai import GoogleGenerativeAIEmbeddings
-from langchain.text_splitter import RecursiveCharacterTextSplitter
+from sentence_transformers import SentenceTransformer
 from typing import List, Dict
 import uuid
 
 class VectorStore:
-    def __init__(self, path: str, collection_name: str, api_key: str):
+    def __init__(self, path: str, collection_name: str, embedding_model: str, embedding_dim: int):
         # Use local file-based storage instead of server
-        self.client = QdrantClient(path=path)
+        try:
+            self.client = QdrantClient(path=path)
+        except RuntimeError as e:
+            if "already accessed" in str(e):
+                print(f"⚠️  Warning: {path} is locked by another instance.")
+                print("Trying to use in-memory storage instead...")
+                self.client = QdrantClient(":memory:")
+            else:
+                raise e
+        
         self.collection_name = collection_name
-        self.embeddings = GoogleGenerativeAIEmbeddings(
-            model="models/embedding-001",
-            google_api_key=api_key
-        )
+        self.embedding_model = SentenceTransformer(embedding_model)
+        self.embedding_dim = embedding_dim
         self._ensure_collection()
     
     def _ensure_collection(self):
@@ -26,12 +32,12 @@ class VectorStore:
         if self.collection_name not in collection_names:
             self.client.create_collection(
                 collection_name=self.collection_name,
-                vectors_config=VectorParams(size=768, distance=Distance.COSINE)
+                vectors_config=VectorParams(size=self.embedding_dim, distance=Distance.COSINE)
             )
     
     def add_documents(self, texts: List[str], metadatas: List[Dict]) -> int:
         """Add documents to vector store"""
-        embeddings = self.embeddings.embed_documents(texts)
+        embeddings = self.embedding_model.encode(texts, show_progress_bar=False).tolist()
         
         points = [
             PointStruct(
@@ -54,7 +60,7 @@ class VectorStore:
     
     def search(self, query: str, limit: int = 4) -> List[Dict]:
         """Search for similar documents"""
-        query_vector = self.embeddings.embed_query(query)
+        query_vector = self.embedding_model.encode([query], show_progress_bar=False)[0].tolist()
         
         results = self.client.search(
             collection_name=self.collection_name,

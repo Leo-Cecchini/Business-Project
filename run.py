@@ -3,6 +3,7 @@ import os
 
 if __name__ == '__main__':
     app = create_app()
+    app.run(debug=False)
     
     # Get configuration from environment
     host = os.getenv('FLASK_HOST', '0.0.0.0')

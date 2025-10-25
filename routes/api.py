@@ -82,16 +82,15 @@ def chat():
         vector_store = current_app.config['VECTOR_STORE']
         chat_model = current_app.config['CHAT_MODEL']
         
-        qa_chain = chat_model.create_qa_chain(vector_store, session_id)
-        response = qa_chain({"question": question})
+        response = chat_model.chat(vector_store, session_id, question)
         
         answer = response["answer"]
         source_docs = response.get("source_documents", [])
         
         sources = [
             {
-                "source": doc.metadata.get("source", "Unknown"),
-                "text": doc.page_content[:200] + "..."
+                "source": doc["metadata"].get("source", "Unknown"),
+                "text": doc["text"][:200] + "..."
             }
             for doc in source_docs
         ]

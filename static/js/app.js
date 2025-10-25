@@ -38,9 +38,18 @@ class ChatApp {
         try {
             const response = await fetch('/api/chat', {
                 method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
+                headers: { 
+                    'Content-Type': 'application/json',
+                    'Accept': 'application/json'
+                },
                 body: JSON.stringify({ question: message })
             });
+            
+            // Check if response is JSON
+            const contentType = response.headers.get('content-type');
+            if (!contentType || !contentType.includes('application/json')) {
+                throw new Error('Server returned HTML instead of JSON. Check server logs.');
+            }
             
             const data = await response.json();
             
@@ -56,6 +65,7 @@ class ChatApp {
         } catch (error) {
             this.removeMessage(loadingId);
             this.addMessage('assistant', `Errore di connessione: ${error.message}`);
+            console.error('Error:', error);
         }
     }
     

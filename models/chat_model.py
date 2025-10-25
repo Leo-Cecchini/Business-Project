@@ -1,12 +1,12 @@
 # Chat and conversation management
 
 from langchain_google_genai import ChatGoogleGenerativeAI
-from langchain.memory import ConversationBufferMemory
-from langchain.chains import ConversationalRetrievalChain
+from langchain_community.chat_message_histories import ChatMessageHistory
+from langchain_core.runnables.history import RunnableWithMessageHistory
 from typing import Dict, List
 
 class ChatModel:
-    def __init__(self, api_key: str, model_name: str = "gemini-1.5-flash", temperature: float = 0.3):
+    def __init__(self, api_key: str, model_name: str = "gemini-2.0-flash", temperature: float = 0.3):
         self.llm = ChatGoogleGenerativeAI(
             model=model_name,
             temperature=temperature,
@@ -15,47 +15,62 @@ class ChatModel:
         )
         self.sessions = {}
     
-    def get_or_create_memory(self, session_id: str) -> ConversationBufferMemory:
-        """Get or create memory for a session"""
+    def get_or_create_history(self, session_id: str) -> ChatMessageHistory:
+        """Get or create message history for a session"""
         if session_id not in self.sessions:
-            self.sessions[session_id] = ConversationBufferMemory(
-                memory_key="chat_history",
-                return_messages=True,
-                output_key="answer"
-            )
+            self.sessions[session_id] = ChatMessageHistory()
         return self.sessions[session_id]
     
     def clear_session(self, session_id: str):
-        """Clear session memory"""
+        """Clear session history"""
         if session_id in self.sessions:
             del self.sessions[session_id]
     
-    def create_qa_chain(self, vector_store, session_id: str):
-        """Create QA chain with retriever"""
-        memory = self.get_or_create_memory(session_id)
+    def chat(self, vector_store, session_id: str, question: str):
+        """Chat with context from vector store"""
+        from langchain_core.prompts import ChatPromptTemplate, MessagesPlaceholder
+        from langchain_core.output_parsers import StrOutputParser
+        from langchain_core.runnables import RunnablePassthrough
         
-        # Custom retriever
-        class CustomRetriever:
-            def __init__(self, vs):
-                self.vector_store = vs
+        # Get chat history
+        history = self.get_or_create_history(session_id)
+        
+        # Search for relevant documents
+        search_results = vector_store.search(question, limit=4)
+        
+        # Format context
+        context = "\n\n".join([
+            f"[Documento: {r['metadata']['source']}]\n{r['text']}"
+            for r in search_results
+        ])
+        
+        # Create prompt
+        prompt = ChatPromptTemplate.from_messages([
+            ("system", """Sei un assistente utile che risponde a domande basandoti sui documenti forniti.
             
-            def get_relevant_documents(self, query: str):
-                results = self.vector_store.search(query, limit=4)
-                
-                class Doc:
-                    def __init__(self, text, metadata):
-                        self.page_content = text
-                        self.metadata = metadata
-                
-                return [Doc(r["text"], r["metadata"]) for r in results]
+Usa il seguente contesto per rispondere alla domanda. Se la risposta non è nel contesto, dillo chiaramente.
+
+Contesto:
+{context}"""),
+            MessagesPlaceholder(variable_name="history"),
+            ("human", "{question}")
+        ])
         
-        retriever = CustomRetriever(vector_store)
+        # Create chain
+        chain = prompt | self.llm | StrOutputParser()
         
-        chain = ConversationalRetrievalChain.from_llm(
-            llm=self.llm,
-            retriever=retriever,
-            memory=memory,
-            return_source_documents=True
-        )
+        # Get response
+        response = chain.invoke({
+            "context": context,
+            "history": history.messages,
+            "question": question
+        })
         
-        return chain
+        # Save to history
+        history.add_user_message(question)
+        history.add_ai_message(response)
+        
+        return {
+            "answer": response,
+            "source_documents": search_results
+        }
