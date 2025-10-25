@@ -23,6 +23,7 @@ class VectorStore:
         self.embedding_model = SentenceTransformer(embedding_model)
         self.embedding_dim = embedding_dim
         self._ensure_collection()
+        print("Vector store initilized\n")
     
     def _ensure_collection(self):
         """Create collection if it doesn't exist"""
@@ -58,7 +59,7 @@ class VectorStore:
         
         return len(points)
     
-    def search(self, query: str, limit: int = 4) -> List[Dict]:
+    def search(self, query: str, limit: int = 6) -> List[Dict]:
         """Search for similar documents"""
         query_vector = self.embedding_model.encode([query], show_progress_bar=False)[0].tolist()
         

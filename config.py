@@ -12,8 +12,8 @@ class Config:
     QDRANT_COLLECTION = 'documents'
     
     # Embedding settings
-    EMBEDDING_MODEL = os.getenv('EMBEDDING_MODEL', 'all-MiniLM-L12-v2')
-    EMBEDDING_DIMENSION = 384  # Dimension for all-MiniLM-L12-v2
+    EMBEDDING_MODEL = os.getenv('EMBEDDING_MODEL', 'all-mpnet-base-v2')
+    EMBEDDING_DIMENSION = 768  # Dimension for all-mpnet-base-v2
     
     # Upload settings
     UPLOAD_FOLDER = 'uploads'
@@ -21,9 +21,9 @@ class Config:
     ALLOWED_EXTENSIONS = {'txt', 'pdf', 'md'}
     
     # LLM settings
-    CHUNK_SIZE = 1000
-    CHUNK_OVERLAP = 200
-    SEARCH_LIMIT = 4
+    CHUNK_SIZE = 1500
+    CHUNK_OVERLAP = 300
+    SEARCH_LIMIT = 6
     MODEL_NAME = 'gemini-2.0-flash'
     TEMPERATURE = 0.3
     
