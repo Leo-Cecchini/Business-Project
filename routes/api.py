@@ -13,6 +13,10 @@ def allowed_file(filename, allowed_extensions):
 def upload_files():
     """Upload and process documents"""
     from flask import current_app
+    from app import vector_store, file_processor
+    
+    if vector_store is None or file_processor is None:
+        return jsonify({"error": "Server not initialized"}), 500
     
     if 'files' not in request.files:
         return jsonify({"error": "No files provided"}), 400
@@ -21,9 +25,6 @@ def upload_files():
     
     if not files or files[0].filename == '':
         return jsonify({"error": "No files selected"}), 400
-    
-    vector_store = current_app.config['VECTOR_STORE']
-    file_processor = current_app.config['FILE_PROCESSOR']
     
     processed = 0
     errors = []
@@ -53,9 +54,11 @@ def upload_files():
 @api_bp.route('/documents', methods=['GET'])
 def get_documents():
     """Get list of uploaded documents"""
-    from flask import current_app
+    from app import vector_store
     
-    vector_store = current_app.config['VECTOR_STORE']
+    if vector_store is None:
+        return jsonify({"error": "Server not initialized"}), 500
+    
     documents = vector_store.get_all_documents()
     
     return jsonify({"documents": documents})
@@ -63,7 +66,10 @@ def get_documents():
 @api_bp.route('/chat', methods=['POST'])
 def chat():
     """Chat endpoint"""
-    from flask import current_app
+    from app import vector_store, chat_model
+    
+    if vector_store is None or chat_model is None:
+        return jsonify({"error": "Server not initialized"}), 500
     
     data = request.json
     question = data.get('question', '').strip()
@@ -79,9 +85,6 @@ def chat():
     session_id = session['session_id']
     
     try:
-        vector_store = current_app.config['VECTOR_STORE']
-        chat_model = current_app.config['CHAT_MODEL']
-        
         response = chat_model.chat(vector_store, session_id, question)
         
         answer = response["answer"]
@@ -106,10 +109,12 @@ def chat():
 @api_bp.route('/reset-chat', methods=['POST'])
 def reset_chat():
     """Reset chat history"""
-    from flask import current_app
+    from app import chat_model
+    
+    if chat_model is None:
+        return jsonify({"error": "Server not initialized"}), 500
     
     if 'session_id' in session:
-        chat_model = current_app.config['CHAT_MODEL']
         chat_model.clear_session(session['session_id'])
         session.pop('session_id', None)
     
@@ -118,10 +123,12 @@ def reset_chat():
 @api_bp.route('/reset-db', methods=['POST'])
 def reset_db():
     """Reset vector database"""
-    from flask import current_app
+    from app import vector_store
+    
+    if vector_store is None:
+        return jsonify({"error": "Server not initialized"}), 500
     
     try:
-        vector_store = current_app.config['VECTOR_STORE']
         vector_store.delete_all()
         return jsonify({"success": True})
     except Exception as e:
