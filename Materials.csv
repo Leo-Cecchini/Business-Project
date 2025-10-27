@@ -1,0 +1,111 @@
+id,name,category,subcategory,unit,unit_price_eur_2025,supplier,vat_rate,sku,stock_qty,lead_time_days,notes
+1,Cemento Portland 32.5 R,Muratura,Leganti,kg,0.14,Italcementi,22,CEM325R,15000,2,Per calcestruzzi e malte generiche
+2,Cemento Portland 42.5 R,Muratura,Leganti,kg,0.18,Buzzi Unicem,22,CEM425R,12000,3,Per calcestruzzi strutturali
+3,Calce idrata,Muratura,Leganti,kg,0.12,Fassa Bortolo,22,CALCID,9000,3,Intonaci e malte
+4,Premiscelato malta M5,Muratura,Premiscelati,kg,0.22,Fassa Bortolo,22,MALM5,8000,3,Malta muratura classe M5
+5,Premiscelato intonaco civile,Muratura,Premiscelati,kg,0.24,Kerakoll,22,INTCIV,7000,4,Finitura civile
+6,Additivo antigelo,Muratura,Additivi,L,4.5,Mapei,22,ADGEL,600,3,Per basse temperature
+7,Additivo fluidificante,Muratura,Additivi,L,6.2,Mapei,22,ADFLU,500,4,Aumenta lavorabilità
+8,Calcestruzzo C20/25,Calcestruzzi,Preconfezionati,m3,95.0,Calcestruzzi SpA,22,CLS2025,120,2,Consegna in 48h
+9,Calcestruzzo C25/30,Calcestruzzi,Preconfezionati,m3,105.0,Calcestruzzi SpA,22,CLS2530,100,2,Consegna in 48h
+10,Calcestruzzo C28/35,Calcestruzzi,Preconfezionati,m3,112.0,Calcestruzzi SpA,22,CLS2835,90,3,Consegna in 72h
+11,Calcestruzzo alleggerito,Calcestruzzi,Speciali,m3,135.0,Unical,22,CLSLIGHT,60,5,"Isolante, bassa densità"
+12,Sabbia 0-3,Aggregati,Inerti,m3,22.0,Cava Roma,22,SAB003,400,2,Sfusa
+13,Ghiaia 4-8,Aggregati,Inerti,m3,24.0,Cava Roma,22,GHI408,380,2,Sfusa
+14,Pietrisco 20-30,Aggregati,Inerti,m3,26.5,Cava Roma,22,PIE2030,350,2,Sfusa
+15,Stabilizzato,Aggregati,Inerti,m3,21.0,Cava Roma,22,STAB,300,2,Massicciate
+16,Barra acciaio B450 Ø10,Acciaio,Armature,kg,1.35,Ferriere Nord,22,B450D10,5000,5,Barre 12 m
+17,Barra acciaio B450 Ø12,Acciaio,Armature,kg,1.35,Ferriere Nord,22,B450D12,5000,5,Barre 12 m
+18,Rete elettrosaldata 6 mm,Acciaio,Reti,m2,4.6,Reti Italia,22,RETE6,1200,4,Maglia 20x20
+19,Filo legatura,Ferramenta,Consumabili,kg,3.2,Beta,22,FILLEG,300,3,Per armature
+20,Tavole abete 25x200,Legname,Casseri,m2,9.5,Legnami Rossi,22,TAV25200,300,7,Casseri riutilizzabili
+21,Pannello fenolico 21mm,Legname,Casseri,m2,19.8,Peri,22,PANF21,200,7,Rivestito fenolico
+22,"Lastra cartongesso 12,5 mm",Cartongesso,Lastre,m2,3.9,Knauf Italia,22,GKB12,1200,3,Lastra standard
+23,"Lastra cartongesso idro 12,5 mm",Cartongesso,Lastre,m2,5.1,Knauf Italia,22,GKBI12,800,3,Per ambienti umidi
+24,Profilo montante 50 mm,Cartongesso,Profili,m,1.1,Siniat,22,M50,5000,3,Lamiera zincata
+25,Profilo guida 50 mm,Cartongesso,Profili,m,1.05,Siniat,22,U50,5000,3,Lamiera zincata
+26,Vite cartongesso 25 mm,Ferramenta,Viteria,pz,0.015,Fischer,22,VIT25,50000,2,Autofilettante
+27,Stucco cartongesso,Cartongesso,Accessori,kg,1.8,Knauf,22,STUGK,2000,3,Rasature giunti
+28,Nastro giunto rete,Cartongesso,Accessori,m,0.2,Knauf,22,NGRET,4000,3,Rinforzo giunti
+29,Lana di roccia 50 mm,Isolanti,Termoacustici,m2,6.2,Rockwool,22,LDR50,700,5,Pannello
+30,EPS 80 sp. 50 mm,Isolanti,Termici,m2,4.6,EdilPS,22,EPS80_50,900,5,Cappotto
+31,XPS 300 sp. 50 mm,Isolanti,Termici,m2,8.9,Ursa,22,XPS300_50,600,5,Alta resistenza
+32,EPDM guaina 4 mm,Impermeabilizzanti,Guaina,m2,7.5,Index,22,EPDM4,800,6,Membrana impermeabile
+33,Pittura lavabile bianca,Vernici,Murali,L,3.6,Sikkens,22,PITTLAV,1500,3,Interni
+34,Fissativo acrilico,Vernici,Primer,L,4.2,Sikkens,22,FISSACR,900,3,Primer pareti
+35,Smalto all’acqua,Vernici,Smalti,L,9.5,MaxMeyer,22,SMALLAQ,600,3,Per legno/ferro
+36,Stucco in pasta,Vernici,Rasanti,kg,2.9,Gyproc,22,STUPAST,1200,3,Rasature e ripristini
+37,Piastrella gres 60x60,Pavimenti,Gres Porcellanato,m2,19.5,Marazzi,22,GRES6060,800,7,Finitura opaca
+38,Colla C2TE,Pavimenti,Adesivi,kg,0.85,Kerakoll,22,COLC2TE,3000,3,Piastrelle ceramiche
+39,Stucco fughe CG2,Pavimenti,Stucchi,kg,1.1,Kerakoll,22,STUCG2,2000,3,Larghezza fughe 2-6 mm
+40,Massetto pronto sabbia/cemento,Pavimenti,Premiscelati,kg,0.22,Fassa Bortolo,22,MASPR,5000,3,Per interni
+41,Tubo corrugato Ø25 mm,Elettrico,Canalizzazioni,m,0.88,Vimar,22,TC25,5000,2,Filo sonda incluso
+42,"Cavo FG16OR 3x1,5",Elettrico,Cavi,m,1.25,Prysmian,22,FG1615,6000,3,Impianti civili
+43,"Cavo FG16OR 3x2,5",Elettrico,Cavi,m,1.65,Prysmian,22,FG1625,6000,3,Prese
+44,Scatola 503,Elettrico,Scatole,pz,0.85,Vimar,22,SC503,3000,2,Incasso 3 moduli
+45,Placca 3 moduli,Elettrico,Serie Civili,pz,4.2,Vimar,22,PLC3M,1200,3,Serie Plana
+46,Interruttore unipolare,Elettrico,Serie Civili,pz,3.1,Vimar,22,INTUNI,1200,3,1P 16AX
+47,Presa schuko 16A,Elettrico,Serie Civili,pz,4.8,Vimar,22,PRSK16,1000,3,Bipasso/Schuko
+48,Quadro elettrico 8M,Elettrico,Quadri,pz,22.0,Gewiss,22,QDR8M,80,7,Da incasso
+49,Magnetotermico 16A C,Elettrico,Protezione,pz,11.5,Gewiss,22,MT16C,200,7,Curve C
+50,Differenziale 25A 30mA,Elettrico,Protezione,pz,34.0,Gewiss,22,RCD25,120,7,Tipo AC
+51,Tubo multistrato Ø16,Idraulico,Tubazioni,m,1.55,Comisa,22,MLT16,4000,4,Acqua sanitaria
+52,Raccordo press Ø16,Idraulico,Raccordi,pz,1.25,Comisa,22,RAC16,3000,4,Press-fitting
+53,"Valvola sfera 1/2""",Idraulico,Valvole,pz,5.8,Cimberio,22,VS12,800,5,Ottone nichelato
+54,Rubinetto lavabo,Idraulico,Sanitari,pz,36.0,Grohe,22,RUBLAV,120,7,Monocomando
+55,Scarico sifonato Ø40,Idraulico,Scarichi,pz,4.5,Valsir,22,SIF40,600,5,PVC
+56,Guaina bituminosa 4 mm ardesiata,Impermeabilizzanti,Guaina,m2,6.8,Index,22,GBIT4A,600,6,A vista
+57,Primer bituminoso,Impermeabilizzanti,Primer,L,3.6,Index,22,PRIBIT,400,5,Per guaine
+58,Resina epossidica bicomponente,Chimici,Resine,kg,6.8,Mapei,22,EP2K,300,7,Sigillature industriali
+59,Casco da cantiere EN397,Sicurezza,DPI,pz,9.5,3M,22,CASCO,200,3,Regolazione rapida
+60,Imbracatura anticaduta,Sicurezza,DPI,pz,38.0,Camp,22,IMBRAC,80,5,EN361
+61,Occhiali protettivi,Sicurezza,DPI,pz,2.4,3M,22,OCCHPROT,500,3,Antigraffio
+62,Guanti nitrile,Sicurezza,DPI,pz,0.35,Honeywell,22,GUANNIT,5000,3,Monouso
+63,Silicone acetico,Ferramenta,Sigillanti,cart,2.6,Fischer,22,SILAC,800,3,Cartuccia 300 ml
+64,Schiuma poliuretanica,Ferramenta,Schiume,bomb,3.9,Fischer,22,SCHPU,600,3,Isolamento infissi
+65,Tassello nylon 8x60,Ferramenta,Fissaggi,pz,0.12,Fischer,22,TAS860,8000,3,Con vite
+66,Vite truciolare 4x40,Ferramenta,Viteria,pz,0.03,Spax,22,VTR440,20000,2,Zincata
+67,Nastro carta 50mm,Ferramenta,Consumabili,m,0.12,Tesa,22,NASTC50,4000,2,Mascherature
+68,Sacco macerie 70L,Pulizia,Smaltimento,pz,0.55,Edilpack,22,SAC70,5000,2,HDPE
+69,Detergente cementizio,Pulizia,Detergenti,L,3.8,Fila,22,DETCE,300,5,Residui stucco/cemento
+70,Scopa industriale,Pulizia,Attrezzi,pz,5.2,Vileda,22,SCIND,120,4,Setole dure
+71,Lastra cartongesso 9.5 mm,Cartongesso,Lastre,m2,3.59,Knauf Italia,22,GKB095,900,3,Lastra standard
+72,Lastra cartongesso 15 mm,Cartongesso,Lastre,m2,4.6,Knauf Italia,22,GKB15,900,3,Lastra standard
+73,Cavo FG16OR 3x4,Elettrico,Cavi,m,2.45,Prysmian,22,FG1634,4000,4,Linee forza
+74,Cavo FG16OR 3x6,Elettrico,Cavi,m,3.65,Prysmian,22,FG1636,4000,4,Linee forza
+75,Piastrella gres 30x60,Pavimenti,Gres Porcellanato,m2,17.5,Marazzi,22,GRES3060,600,8,Rettificato
+76,Piastrella gres 20x120,Pavimenti,Gres Porcellanato,m2,24.0,Marazzi,22,GRES20120,600,8,Rettificato
+77,Piastrella gres 60x120,Pavimenti,Gres Porcellanato,m2,32.0,Marazzi,22,GRES60120,600,8,Rettificato
+78,EPS 80 sp. 30 mm,Isolanti,Termici,m2,3.22,EdilPS,22,EPS80_30,700,5,Cappotto
+79,EPS 80 sp. 80 mm,Isolanti,Termici,m2,6.9,EdilPS,22,EPS80_80,700,5,Cappotto
+80,EPS 80 sp. 100 mm,Isolanti,Termici,m2,8.74,EdilPS,22,EPS80_100,700,5,Cappotto
+81,Lana di roccia 40 mm,Isolanti,Termoacustici,m2,5.27,Rockwool,22,LDR40,500,6,Pannello
+82,Lana di roccia 70 mm,Isolanti,Termoacustici,m2,8.06,Rockwool,22,LDR70,500,6,Pannello
+83,Lana di roccia 100 mm,Isolanti,Termoacustici,m2,11.78,Rockwool,22,LDR100,500,6,Pannello
+84,Deviatore,Elettrico,Serie Civili,pz,4.1,Vimar,22,DEV1P,1200,3,Serie Plana compatibile
+85,Invertitore,Elettrico,Serie Civili,pz,6.2,Vimar,22,INV1P,1200,3,Serie Plana compatibile
+86,Presa bipasso 10/16A,Elettrico,Serie Civili,pz,3.9,Vimar,22,PRBIP,1200,3,Serie Plana compatibile
+87,Porta frutti 3M,Elettrico,Serie Civili,pz,2.1,Vimar,22,PF3M,1200,3,Serie Plana compatibile
+88,Miscelatore doccia incasso,Idraulico,Sanitari/Accessori,pz,62.0,Grohe,22,MISCINC,200,7,Cromato
+89,"Piletta lavabo 1""1/4",Idraulico,Sanitari/Accessori,pz,6.2,Grohe,22,PILLAV,200,7,Cromato
+90,Flessibile doccia 150 cm,Idraulico,Sanitari/Accessori,pz,7.5,Grohe,22,FLESDC,200,7,Cromato
+91,Saliscendi doccia,Idraulico,Sanitari/Accessori,pz,22.0,Grohe,22,SALSDC,200,7,Cromato
+92,Mazzetta 1 kg,Ferramenta,Attrezzi,pz,8.2,Stanley,22,MAZ1KG,300,5,
+93,Frattazzo spugna,Ferramenta,Attrezzi,pz,4.1,Stanley,22,FRSP,300,5,
+94,Cazzuola 180,Ferramenta,Attrezzi,pz,5.6,Stanley,22,CAZ180,300,5,
+95,Taglierino professionale,Ferramenta,Attrezzi,pz,3.4,Stanley,22,TAGPRO,300,5,
+96,Punte muro Ø6,Ferramenta,Attrezzi,pz,0.9,Stanley,22,PUNM6,300,5,
+97,Punte muro Ø8,Ferramenta,Attrezzi,pz,1.1,Stanley,22,PUNM8,300,5,
+98,Pittura lavabile bianco,Vernici,Murali,L,3.6,Sikkens,22,PL_BIA,1000,3,Base opaca
+99,Pittura lavabile avorio,Vernici,Murali,L,3.78,Sikkens,22,PL_AVO,1000,3,Base opaca
+100,Pittura lavabile grigio,Vernici,Murali,L,3.85,Sikkens,22,PL_GRI,1000,3,Base opaca
+101,Mapelastic (guaina liquida),Impermeabilizzanti,Sistemi,kg,3.9,Mapei,22,MAPELAS,300,6,
+102,Nastro butilico 100 mm,Impermeabilizzanti,Sistemi,m,1.2,Mapei,22,NASBUT100,300,6,
+103,Primer poliuretanico,Impermeabilizzanti,Sistemi,L,6.8,Mapei,22,PRIPU,300,6,
+104,Mattone forato 8x25x19,Muratura,Laterizi,pz,0.65,Unieco,22,MATFOR,3000,5,
+105,Blocchetto cemento 20x20x40,Muratura,Laterizi,pz,1.45,Unieco,22,BLOCC20,3000,5,
+106,Foratella 8 fori,Muratura,Laterizi,pz,0.52,Unieco,22,FORA8,3000,5,
+107,Tavellone 25x50,Muratura,Laterizi,pz,2.8,Unieco,22,TAVEL25,3000,5,
+108,Piastrelle gres economico,Pavimenti,Gres Porcellanato,m2,12.5,Ragno,22,GRES_ECO,500,10,Varie finiture
+109,Piastrelle gres standard,Pavimenti,Gres Porcellanato,m2,18.5,Ragno,22,GRES_STD,500,10,Varie finiture
+110,Piastrelle gres premium,Pavimenti,Gres Porcellanato,m2,35.0,Ragno,22,GRES_PREM,500,10,Varie finiture

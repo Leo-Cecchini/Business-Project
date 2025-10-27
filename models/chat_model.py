@@ -74,3 +74,115 @@ Contesto:
             "answer": response,
             "source_documents": search_results
         }
+
+    def answer_with_contexts(self, session_id: str, question: str,
+                             local_ctx: list, web_ctx: list) -> dict:
+        """
+        Genera una risposta usando contesti separati (LOCAL vs WEB) e restituisce citazioni separate.
+        local_ctx: [{ "text": ..., "metadata": {...}, "score": ... }, ...]
+        web_ctx:   [{ "title": ..., "url": ..., "text": ..., "snippet": ... }, ...]
+        """
+        from langchain_core.prompts import ChatPromptTemplate
+        from langchain_core.output_parsers import StrOutputParser
+
+        # Helpers di formattazione fonti
+        def _fmt_local_refs(srcs):
+            if not srcs:
+                return "(nessuna)"
+            lines = []
+            for i, s in enumerate(srcs, 1):
+                title = (s.get("metadata") or {}).get("source") or f"Documento {i}"
+                score = s.get("score")
+                if score is not None:
+                    lines.append(f"[LOCAL {i}] {title} (score={round(score,3)})")
+                else:
+                    lines.append(f"[LOCAL {i}] {title}")
+            return "\n".join(lines)
+
+        def _fmt_web_refs(srcs):
+            if not srcs:
+                return "(nessuna)"
+            lines = []
+            for i, s in enumerate(srcs, 1):
+                title = s.get("title") or s.get("url") or f"Fonte {i}"
+                lines.append(f"[WEB {i}] {title}")
+            return "\n".join(lines)
+
+        def _pack_texts(items, key="text", limit=4, clip=900):
+            if not items:
+                return ""
+            parts = []
+            for it in items[:limit]:
+                txt = it.get(key) or (it.get("payload", {}) or {}).get("text") or ""
+                if txt:
+                    parts.append(txt[:clip])
+            return "\n---\n".join(parts)
+
+        local_refs = _fmt_local_refs(local_ctx)
+        web_refs   = _fmt_web_refs(web_ctx)
+        local_blob = _pack_texts(local_ctx, key="text")
+        web_blob   = _pack_texts(web_ctx, key="text")
+
+        system = (
+            "Separa rigorosamente le informazioni provenienti dai documenti interni (LOCAL) "
+            "da quelle provenienti dal web (WEB). "
+            "Quando citi, usa le sigle [LOCAL i] o [WEB j]. "
+            "Se non ci sono evidenze sufficienti, dillo chiaramente. "
+            "Per i prezzi, specifica sempre l'unità (kg/m3) e indica la fonte."
+        )
+
+        prompt = ChatPromptTemplate.from_messages([
+            ("system",
+             system + "\n\n"
+             "Domanda: {question}\n\n"
+             "FONTI INTERNE DISPONIBILI:\n{local_refs}\n\n"
+             "ESTRATTI INTERNI:\n{local_blob}\n\n"
+             "FONTI WEB DISPONIBILI:\n{web_refs}\n\n"
+             "ESTRATTI WEB:\n{web_blob}\n\n"
+             "Regole di output:\n"
+             "- Risposta concisa e pratica per il contesto edile.\n"
+             "- Se usi info da una fonte, cita [LOCAL i] o [WEB j].\n"
+             "- Chiudi con due elenchi: 'Fonti interne:' e 'Fonti web:' con titoli/URL."
+            ),
+            ("human", "{question}")
+        ])
+
+        chain = prompt | self.llm | StrOutputParser()
+
+        # Storia conversazione
+        history = self.get_or_create_history(session_id)
+
+        answer = chain.invoke({
+            "question": question,
+            "local_refs": local_refs,
+            "web_refs": web_refs,
+            "local_blob": local_blob,
+            "web_blob": web_blob,
+        })
+
+        # Aggiorna history
+        history.add_user_message(question)
+        history.add_ai_message(answer)
+
+        # Prepara citazioni strutturate per la UI
+        local_sources = [
+            {
+                "title": (s.get("metadata") or {}).get("source", "Documento"),
+                "snippet": (s.get("text") or (s.get("payload", {}) or {}).get("text",""))[:220]
+            }
+            for s in (local_ctx or [])
+        ]
+        web_sources = [
+            {
+                "title": (s.get("title") or s.get("url")),
+                "url": s.get("url"),
+                "snippet": s.get("snippet","")
+            }
+            for s in (web_ctx or [])
+        ]
+
+        return {
+            "answer": answer,
+            "local_sources": local_sources,
+            "web_sources": web_sources
+        }
