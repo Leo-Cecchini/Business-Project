@@ -1,10 +1,39 @@
-# Vector store management with Qdrant
+# Vector store management with Qdrant — robust + rerank
 
 from qdrant_client import QdrantClient
 from qdrant_client.models import Distance, VectorParams, PointStruct
 from sentence_transformers import SentenceTransformer
-from typing import List, Dict
+from typing import List, Dict, Optional, Tuple
 import uuid
+import math
+import re
+
+# --- Heuristics di dominio per l'edilizia ------------------------------------
+PRIORITY_SOURCES = [
+    "capitolato", "computo", "computo metrico", "preventivo",
+    "offerta", "contratto", "scheda tecnica", "analisi prezzi",
+]
+
+def _priority_score(source: str) -> int:
+    s = (source or "").lower()
+    for i, key in enumerate(PRIORITY_SOURCES):
+        if key in s:
+            return 100 - i * 10  # 100, 90, 80, ...
+    return 0
+
+def _keyword_boost(text: str, query: str) -> float:
+    """
+    Boost lessicale leggero: +log(1+hits) se i token della query compaiono nel chunk.
+    Evita di “dopare” troppo: è solo un tie-breaker.
+    """
+    if not text or not query:
+        return 0.0
+    q_tokens = [t for t in re.findall(r"[a-zà-ù0-9]+", query.lower()) if len(t) > 2]
+    if not q_tokens:
+        return 0.0
+    t = text.lower()
+    hits = sum(1 for qt in q_tokens if qt in t)
+    return math.log(1 + hits)
 
 class VectorStore:
     def __init__(self, path: str, collection_name: str, embedding_model: str, embedding_dim: int):
@@ -23,7 +52,7 @@ class VectorStore:
         self.embedding_model = SentenceTransformer(embedding_model)
         self.embedding_dim = embedding_dim
         self._ensure_collection()
-        print("Vector store initilized\n")
+        print("Vector store initialized\n")
     
     def _ensure_collection(self):
         """Create collection if it doesn't exist"""
@@ -38,48 +67,80 @@ class VectorStore:
     
     def add_documents(self, texts: List[str], metadatas: List[Dict]) -> int:
         """Add documents to vector store"""
+        if len(texts) != len(metadatas):
+            raise ValueError("texts e metadatas devono avere la stessa lunghezza")
+        if not texts:
+            return 0
+
         embeddings = self.embedding_model.encode(texts, show_progress_bar=False).tolist()
         
-        points = [
-            PointStruct(
-                id=str(uuid.uuid4()),
-                vector=embedding,
-                payload={
-                    "text": text,
-                    "metadata": metadata
-                }
+        points = []
+        for text, embedding, metadata in zip(texts, embeddings, metadatas):
+            payload = {
+                "text": text or "",
+                "metadata": metadata or {}
+            }
+            points.append(
+                PointStruct(
+                    id=str(uuid.uuid4()),
+                    vector=embedding,
+                    payload=payload
+                )
             )
-            for text, embedding, metadata in zip(texts, embeddings, metadatas)
-        ]
         
-        self.client.upsert(
-            collection_name=self.collection_name,
-            points=points
-        )
-        
+        if points:
+            self.client.upsert(collection_name=self.collection_name, points=points)
         return len(points)
     
-    def search(self, query: str, limit: int = 6) -> List[Dict]:
-        """Search for similar documents"""
+    def search(self, query: str, limit: int = 12) -> List[Dict]:
+        """
+        Search for similar documents con rerank:
+        - prende più risultati (>=12) dal vettoriale
+        - calcola un punteggio combinato: base_score + 0.01*priority + 0.05*keyword_boost
+        - ordina e taglia a 'limit'
+        Ritorna: [{"text", "metadata": {...}, "score"}]
+        """
+        if not query or not query.strip():
+            return []
+
+        # 1) Vettoriale
         query_vector = self.embedding_model.encode([query], show_progress_bar=False)[0].tolist()
-        
-        results = self.client.search(
+        raw_limit = max(limit, 12)  # prendiamo più hit, poi rerankiamo
+        raw_hits = self.client.search(
             collection_name=self.collection_name,
             query_vector=query_vector,
-            limit=limit
+            limit=raw_limit
         )
-        
-        return [
-            {
-                "text": hit.payload["text"],
-                "metadata": hit.payload["metadata"],
-                "score": hit.score
-            }
-            for hit in results
-        ]
+
+        # 2) Normalizza + rerank
+        results = []
+        for h in raw_hits:
+            payload = getattr(h, "payload", {}) or {}
+            text = payload.get("text", "")
+            md = payload.get("metadata", {}) or {}
+            source = md.get("source", "") or ""
+
+            base_score = float(getattr(h, "score", 0.0))  # cosine sim (più alto = meglio)
+            prio = _priority_score(source)                # 0..100
+            kw = _keyword_boost(text, query)              # 0..~log
+
+            rerank_score = base_score + (0.01 * prio) + (0.05 * kw)
+
+            results.append({
+                "text": text,
+                "metadata": md,
+                "score": rerank_score,   # punteggio finale usato per l'ordinamento
+                "_base": base_score,     # (debug) punteggio originale
+                "_prio": prio,           # (debug)
+                "_kw": kw                # (debug)
+            })
+
+        # 3) Ordina per score combinato e taglia
+        results.sort(key=lambda x: x["score"], reverse=True)
+        return results[:limit]
     
     def get_all_documents(self) -> List[Dict]:
-        """Get all document sources"""
+        """Get all document sources + conteggio chunk per ciascuna fonte"""
         try:
             result = self.client.scroll(
                 collection_name=self.collection_name,
@@ -87,13 +148,13 @@ class VectorStore:
                 with_payload=True,
                 with_vectors=False
             )
-            
-            sources = set()
+            sources = {}
             for point in result[0]:
-                source = point.payload.get("metadata", {}).get("source", "Unknown")
-                sources.add(source)
+                md = point.payload.get("metadata", {}) if point.payload else {}
+                src = md.get("source", "Unknown")
+                sources[src] = sources.get(src, 0) + 1
             
-            return [{"source": src, "chunks": 0} for src in sorted(sources)]
+            return [{"source": src, "chunks": cnt} for src, cnt in sorted(sources.items())]
         except Exception:
             return []
     

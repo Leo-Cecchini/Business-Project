@@ -29,7 +29,26 @@ from utils.intent_router import parse_intent_llm
 # -----------------------------------------------------------------------------
 # Blueprint
 # -----------------------------------------------------------------------------
+
 api_bp = Blueprint("api", __name__)
+
+# =============================================================================
+# 0) HELPERS ESTIMATE (preventivo/stima lavori)
+# =============================================================================
+
+ESTIMATE_MARKERS = [
+    "stima", "preventivo", "computo", "computometrico",
+    "ristrutturazione", "ristrutturare", "ristrutturazione completa",
+    "mq", "metri quadri", "bagno", "bagni", "cucina",
+    "punti luce", "punto luce", "prese", "prese elettriche",
+    "impianto elettrico", "impianto di luce", "impianto idrico",
+    "idraulico", "scarichi", "tubi", "boiler", "caldaia",
+    "pavimento", "rivestimento", "gres", "60x120", "60x60", "posa piastrelle",
+]
+
+def _looks_like_estimate(q: str) -> bool:
+    ql = (q or "").lower()
+    return any(m in ql for m in ESTIMATE_MARKERS)
 
 # =============================================================================
 # 1) HELPERS STAFF (lingua + query)
@@ -282,12 +301,18 @@ MATERIAL_PRICE_TRIGGERS = [
 
 
 def _looks_like_material_query(q: str) -> bool:
-    """Heuristica per capire se la domanda riguarda prezzi materiali."""
     ql = q.lower()
-    # Evita collisione con il ruolo "cartongessista/i"
-    if "cartongessist" in ql:
+    # trigger prezzo/costo
+    has_price = any(t in ql for t in ["quanto costa", "prezzo", "costo", "quanto viene", "quanto è", "€/","eur/"])
+    # parole tipiche materiali
+    is_material = any(t in ql for t in ["cemento","cartongesso","piastrel","gres","intonaco","colla","stucco","sabbia","calce","rame","ferro","acciaio","bitume"])
+    # collisione con "cartongessista": se c'è "cartongesso" consideralo materiale
+    if "cartongesso" in ql:
+        return has_price or is_material
+    # evita collisione col ruolo "cartongessista/i" solo quando NON sta chiedendo prezzo
+    if "cartongessist" in ql and not has_price:
         return False
-    return any(t in ql for t in MATERIAL_PRICE_TRIGGERS)
+    return has_price or is_material
 
 
 def _normalize_text(s: str) -> str:
@@ -447,6 +472,53 @@ def chat():
     mode = requested_mode.lower()
     web_focus = None
     ql = question.lower()
+
+    # ------------------- ESTIMATE ROUTING (short-circuit) -------------------
+    if _looks_like_estimate(ql):
+        try:
+            from routes.estimate import make_estimate_from_text
+        except Exception as e:
+            return jsonify({
+                "handled": False,
+                "topic": "estimate",
+                "answer": "Modulo di stima non disponibile (routes/estimate.py).",
+                "error": str(e),
+            }), 200
+
+        # Supporta sia make_estimate_from_text(text) sia varianti con kwargs
+        try:
+            res = make_estimate_from_text(question)
+        except TypeError:
+            # Fallback per versioni che accettano parametri espliciti
+            res = make_estimate_from_text(
+                question=question,
+                db=db,
+                materials_model=Material,
+                workers_model=Worker,
+            )
+        except Exception as e:
+            return jsonify({
+                "handled": False,
+                "topic": "estimate",
+                "answer": "Errore durante la generazione della stima.",
+                "error": str(e),
+            }), 200
+
+        # Confeziona la risposta (compatibile col frontend)
+        total = None
+        try:
+            total = (res or {}).get("project", {}).get("budget", {}).get("total")
+        except Exception:
+            total = None
+        total_str = (f" ~ {float(total):.2f} €" if isinstance(total, (int, float)) else "")
+
+        payload = {
+            "handled": True,
+            "topic": "estimate",
+            "answer": (res.get("summary") or res.get("answer") or ("Stima generata" + total_str)) if isinstance(res, dict) else ("Stima generata" + total_str),
+            "estimate": res,
+        }
+        return jsonify(payload), 200
 
     # ------------------- STAFF ROUTING -------------------
     last_ctx = session.get("staff_last")

@@ -28,7 +28,7 @@ class Config:
     CHUNK_SIZE = 1500
     CHUNK_OVERLAP = 300
     SEARCH_LIMIT = 6
-    MODEL_NAME = os.getenv('MODEL_NAME', 'gemini-2.0-flash')
+    MODEL_NAME = os.getenv('MODEL_NAME', 'gemini-2.5-flash')
     TEMPERATURE = float(os.getenv('TEMPERATURE', '0.3'))
     
     # ✅ Web retrieval settings (corretto)

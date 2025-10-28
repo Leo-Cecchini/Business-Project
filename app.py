@@ -12,11 +12,14 @@ from models.chat_model import ChatModel
 from utils.file_processor import FileProcessor
 from utils.web_retriever import WebRetriever  # opzionale
 
-# Blueprints
+# Blueprints esistenti
 from routes.api import api_bp
 from routes.views import views_bp
 from routes.materials import materials_bp
 from routes.staff import staff_bp
+from routes.estimate import estimate_bp
+# ✅ NUOVO: chat blueprint (routes/chat.py)
+from routes.chat import chat_bp
 
 # DB
 from models import db  # models/__init__.py -> db = SQLAlchemy()
@@ -37,7 +40,7 @@ def _init_components(app: Flask):
     if missing:
         raise RuntimeError(f"Config mancante: {', '.join(missing)}")
 
-    os.makedirs(cfg["UPLOAD_FOLDER"], exist_ok=True)
+    os.makedirs(cfg.get("UPLOAD_FOLDER", "uploads"), exist_ok=True)
 
     # --- Istanzia componenti principali ---
     vector_store = VectorStore(
@@ -50,7 +53,7 @@ def _init_components(app: Flask):
     chat_model = ChatModel(
         api_key=cfg["GOOGLE_API_KEY"],
         model_name=cfg["MODEL_NAME"],            # es. "gemini-2.5-flash"
-        temperature=cfg.get("TEMPERATURE", 0.2),
+        temperature=cfg.get("TEMPERATURE", 0.1), # 🔽 per ridurre vaghezza
     )
 
     file_processor = FileProcessor(
@@ -63,10 +66,10 @@ def _init_components(app: Flask):
     if cfg.get("ENABLE_WEB_RETRIEVAL", False):
         web_retriever = WebRetriever(
             max_results=5,
-            timeout=cfg.get("WEB_TIMEOUT_SEC", 6),
+            timeout=cfg.get("WEB_TIMEOUT_SEC", 8),
         )
 
-    # Registra in app.extensions per accesso nei blueprint
+    # Registra in app.extensions per accesso nei blueprint (via flask.g)
     app.extensions["deps"] = {
         "vector_store": vector_store,
         "chat_model": chat_model,
@@ -80,13 +83,16 @@ def create_app(config_class=Config) -> Flask:
     app = Flask(__name__, static_folder="static", template_folder="templates")
     app.config.from_object(config_class)
 
-    # --- Config DB (fallback a sqlite:///data.db)
-    app.config["SQLALCHEMY_DATABASE_URI"] = getattr(
-        Config, "DATABASE_URL", os.getenv("DATABASE_URL", "sqlite:///data.db")
-    )
+    # 🔐 Secret key per sessioni (necessaria per gestire session_id in chat)
+    app.secret_key = os.getenv("FLASK_SECRET_KEY", getattr(Config, "SECRET_KEY", "change-me"))
+
+    # --- Config DB: usa DATABASE_URL se presente, altrimenti SQLite locale ---
+    db_url = os.getenv("DATABASE_URL", getattr(Config, "DATABASE_URL", "")).strip()
+    if not db_url:
+        db_path = os.path.join(app.root_path, "data.db")
+        db_url = f"sqlite:///{db_path}"
+    app.config["SQLALCHEMY_DATABASE_URI"] = db_url
     app.config["SQLALCHEMY_TRACK_MODIFICATIONS"] = False
-    db_path = os.path.join(app.root_path, "data.db")
-    app.config["SQLALCHEMY_DATABASE_URI"] = f"sqlite:///{db_path}"
     db.init_app(app)
 
     # Validazione config opzionale
@@ -96,7 +102,7 @@ def create_app(config_class=Config) -> Flask:
     # CORS (frontend separato o uso locale)
     CORS(app, resources={r"/api/*": {"origins": "*"}})
 
-    # Logging
+    # Logging con request_id
     logging.basicConfig(
         level=logging.INFO,
         format="%(asctime)s %(levelname)s %(name)s [%(request_id)s] %(message)s",
@@ -126,11 +132,11 @@ def create_app(config_class=Config) -> Flask:
         from models.worker import Worker
 
         with app.app_context():
-            db.create_all()          # crea tabelle in data.db
+            db.create_all()          # crea tabelle
             _init_components(app)    # vector store / chat model / file processor / web retriever
-            log.info("Vector store, Chat model e DB inizializzati")
+            log.info("Vector store, Chat model, Web retriever e DB inizializzati")
 
-    # Request hooks
+    # Request hooks: espone deps in g.*
     @app.before_request
     def _before():
         g.request_id = request.headers.get("X-Request-ID", str(uuid.uuid4()))
@@ -179,9 +185,11 @@ def create_app(config_class=Config) -> Flask:
 
     # Blueprints
     app.register_blueprint(views_bp)                               # pagine HTML
-    app.register_blueprint(api_bp, url_prefix="/api")              # API JSON (chat, upload, ecc.)
+    app.register_blueprint(api_bp, url_prefix="/api")              # API legacy
     app.register_blueprint(staff_bp, url_prefix="/api/staff")      # API Operai
     app.register_blueprint(materials_bp, url_prefix="/api")        # /api/materials, /api/materials/import-csv
+    app.register_blueprint(estimate_bp)                            # espone /api/estimate
+    app.register_blueprint(chat_bp)                                # /api/chat (nuova chat “robusta”)
 
     return app
 
@@ -189,4 +197,5 @@ def create_app(config_class=Config) -> Flask:
 if __name__ == "__main__":
     app = create_app()
     port = int(os.getenv("PORT", "5001"))
+  
     app.run(host="0.0.0.0", port=port, debug=app.config.get("DEBUG", False))
