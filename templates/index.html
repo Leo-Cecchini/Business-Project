@@ -1,66 +1,695 @@
 <!DOCTYPE html>
 <html lang="it">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>🧠 Project Assistant</title>
-    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>🤖 Virtual Assistant</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+  <style>
+    :root{--brand:#3b5bfd;--bg:#f6f7fb;--border:#e5e7eb;--muted:#6b7280;}
+    *{box-sizing:border-box}
+    body{margin:0;background:var(--bg);font-family:system-ui,-apple-system,Segoe UI,Roboto,Helvetica,Arial}
+
+    /* Topbar */
+    .topbar{display:flex;align-items:center;gap:16px;padding:10px 16px;background:#fff;
+      border-bottom:1px solid var(--border);position:sticky;top:0;z-index:10}
+    .topbar .title{flex:1;text-align:center;font-weight:800;font-size:22px;letter-spacing:.2px}
+    .topbar .right{display:flex;align-items:center;gap:10px}
+    .muted{color:var(--muted)}
+
+    /* Layout principale */
+    .layout{display:grid;grid-template-columns:240px minmax(0,1fr);gap:16px;padding:16px;max-width:1280px;margin:0 auto}
+    .sidebar{background:#fff;border:1px solid var(--border);border-radius:14px;padding:10px}
+    .side-tabs{display:flex;flex-direction:column;gap:8px}
+    .side-tabs button{all:unset;padding:10px 12px;border-radius:10px;cursor:pointer}
+    .side-tabs button.active{background:var(--brand);color:#fff}
+
+    /* Card */
+    .content{display:flex;flex-direction:column;gap:16px}
+    .card{background:#fff;border:1px solid var(--border);border-radius:16px;padding:18px;box-shadow:0 1px 0 rgba(0,0,0,.02)}
+    .card h2,.card h3{margin:0 0 10px}
+
+    /* KPI */
+    .kpi-grid{display:grid;grid-template-columns:repeat(5, minmax(180px,1fr));gap:12px}
+    .kpi{background:#f8f9ff;border:1px solid var(--border);border-radius:14px;padding:12px;min-height:90px;display:flex;flex-direction:column;justify-content:space-between}
+    .kpi h3{margin:0;font-size:13px;color:var(--muted);font-weight:600}
+    .kpi .val{font-size:24px;font-weight:800}
+
+    .actions-row{display:flex;gap:10px;flex-wrap:wrap;margin-top:10px}
+    .btn{all:unset;display:inline-flex;align-items:center;gap:6px;background:#eef2ff;color:#1f2937;
+      border:1px solid var(--border);border-radius:10px;padding:9px 12px;cursor:pointer}
+    .btn.primary{background:var(--brand);color:#fff}
+    .btn.danger{background:#fee2e2;color:#991b1b}
+    .btn.ghost{background:#fff}
+    .btn:disabled{opacity:.5;cursor:not-allowed}
+
+    /* Chat */
+    .chat-card{background:#fff;border:1px solid var(--border);border-radius:16px;padding:12px 16px}
+    .chat-wrap{max-width:100%;margin:0}
+    .chat-messages{max-height:260px;overflow:auto;border:1px solid var(--border);border-radius:12px;padding:10px;background:#fafafa}
+    .msg{margin:8px 0}.msg .who{font-weight:600}
+    .composer{display:flex;gap:8px;margin-top:10px}
+    .composer input{flex:1;padding:10px 12px;border:1px solid var(--border);border-radius:10px}
+    .composer .btn{border-radius:10px}
+
+    /* Modali */
+    .modal{position:fixed;inset:0;background:rgba(17,24,39,.45);display:none;align-items:center;justify-content:center;z-index:50;padding:20px}
+    .modal.open{display:flex}
+    .modal-card{background:#fff;border:1px solid var(--border);border-radius:16px;max-width:720px;width:100%;padding:18px}
+    .modal h3{margin:0 0 12px 0}
+    .form-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px}
+    .field{display:flex;flex-direction:column;gap:6px}
+    .field label{font-size:12px;color:#374151;font-weight:600}
+    .field input,.field select,.field textarea{padding:10px 12px;border:1px solid var(--border);border-radius:10px}
+    .actions-end{display:flex;justify-content:flex-end;gap:8px;margin-top:14px}
+
+    /* Toggle switch */
+    .switch{position:relative;display:inline-block;width:48px;height:28px}
+    .switch input{opacity:0;width:0;height:0}
+    .slider{position:absolute;cursor:pointer;inset:0;background:#e5e7eb;border-radius:999px;transition:.2s}
+    .slider:before{content:"";position:absolute;height:22px;width:22px;left:3px;top:3px;background:#fff;border-radius:50%;transition:.2s;box-shadow:0 1px 2px rgba(0,0,0,.15)}
+    .switch input:checked + .slider{background:#3b5bfd}
+    .switch input:checked + .slider:before{transform:translateX(20px)}
+
+    /* ====== LAYOUT CANTIERI ====== */
+    .sites-layout{
+      display:grid;
+      grid-template-columns:minmax(0,1fr) 320px;
+      grid-template-areas:
+        "head list"
+        "docs list"
+        "chat list";
+      gap:16px;
+    }
+    .site-head{grid-area: head;}
+    .site-docs{grid-area: docs;}
+    .site-chat{grid-area: chat;}
+    .site-list{grid-area: list; position:sticky; top:84px}
+
+    /* Toolbar */
+    .site-toolbar{display:flex;flex-wrap:wrap;gap:8px;align-items:center}
+    .site-toolbar .btn{height:36px}
+    .site-toolbar .btn.ghost{border-style:dashed}
+
+    /* Badge */
+    .badge{display:inline-flex;align-items:center;gap:6px;padding:4px 10px;border-radius:999px;font-size:12px;border:1px solid var(--border);background:#f9fafb;color:#374151}
+    .badge-confirmed{background:#ecfdf5;color:#065f46;border-color:#a7f3d0}
+    .badge-pending{background:#fff7ed;color:#9a3412;border-color:#fed7aa}
+
+    /* Lista cantieri */
+    .sites-list{background:#fff;border:1px solid var(--border);border-radius:14px;padding:10px;max-height:60vh;overflow:auto}
+    .site-item{padding:10px 12px;border:1px solid var(--border);border-radius:10px;background:#fafafa;cursor:pointer;margin-bottom:8px}
+    .site-item.active{background:#eef2ff;border-color:#c7d2fe}
+
+    /* Minori */
+    .section-title{display:flex;align-items:center;gap:10px;margin:0}
+    .section-sub{margin:2px 0 0 0;color:var(--muted)}
+
+    /* Toast */
+    .toast{position:fixed;bottom:20px;right:20px;background:#111827;color:#fff;padding:10px 12px;border-radius:10px;opacity:.95;display:none}
+    .toast.show{display:block}
+  </style>
 </head>
 <body>
-    <div class="container">
-        <!-- Sidebar -->
-        <aside class="sidebar">
-            <div class="sidebar-header">
-                <h2>📂 Documenti</h2>
-            </div>
-            
-            <div class="documents-list" id="documentsList">
-                <p class="no-docs">Nessun documento caricato</p>
-            </div>
-            
-            <div class="upload-section">
-                <input type="file" id="fileInput" multiple accept=".txt,.pdf,.md" style="display: none;">
-                <button class="btn btn-primary" onclick="document.getElementById('fileInput').click()">
-                    📥 Carica documenti
-                </button>
-            </div>
-            
-            <div class="actions">
-                <button class="btn btn-secondary" id="resetChatBtn">🗑️ Reset Chat</button>
-                <button class="btn btn-danger" id="resetDbBtn">🗑️ Reset DB</button>
-            </div>
-        </aside>
-        
-        <!-- Main Chat Area -->
-        <main class="chat-container">
-            <header class="chat-header">
-                <h1>🧠 Project Assistant</h1>
-                <p>Chat con documenti caricati e memoria persistente</p>
-            </header>
-            
-            <div class="messages" id="messagesContainer">
-                <div class="message assistant">
-                    <div class="message-content">
-                        <strong>🤖 Assistant:</strong>
-                        <p>Ciao! Carica dei documenti e inizia a chattare.</p>
-                    </div>
-                </div>
-            </div>
-            
-            <div class="input-area">
-                <form id="chatForm">
-                    <input 
-                        type="text" 
-                        id="messageInput" 
-                        placeholder="Scrivi un messaggio..."
-                        autocomplete="off"
-                    >
-                    <button type="submit" class="btn btn-send">Invia</button>
-                </form>
-            </div>
-        </main>
+
+  <!-- TOPBAR -->
+  <div class="topbar">
+    <div></div>
+    <div class="title">🤖 Virtual Assistant</div>
+    <div class="right">
+      <label for="projectSelect" class="muted">Cantiere:</label>
+      <select id="projectSelect">
+        <option value="">— Nessuno —</option>
+      </select>
     </div>
-    
-    <script src="{{ url_for('static', filename='js/app.js') }}"></script>
+  </div>
+
+  <!-- MAIN -->
+  <div class="layout">
+    <!-- Sidebar -->
+    <aside class="sidebar">
+      <nav class="side-tabs">
+        <button id="tabAzienda" class="active">Azienda</button>
+        <button id="tabCantieri">Cantieri</button>
+      </nav>
+    </aside>
+
+    <!-- Contenuto -->
+    <section class="content">
+      <!-- VISTA: AZIENDA -->
+      <div id="viewAzienda" class="card">
+        <h2>Panoramica azienda</h2>
+        <p class="muted">Numeri aggiornati dal DB.</p>
+
+        <div class="kpi-grid">
+          <div class="kpi"><h3>Operai</h3><div id="kpiWorkers" class="val">—</div></div>
+          <div class="kpi"><h3>Cantieri</h3><div id="kpiProjects" class="val">—</div></div>
+          <div class="kpi"><h3>Cantieri attivi</h3><div id="kpiActiveProjects" class="val">—</div></div>
+          <div class="kpi"><h3>Operai attivi</h3><div id="kpiActiveWorkers" class="val">—</div></div>
+          <div class="kpi"><h3>Documenti (azienda)</h3><div id="kpiDocs" class="val">—</div></div>
+        </div>
+
+        <div class="actions-row">
+          <button id="btnAddWorker" class="btn">+ Aggiungi operaio</button>
+          <button id="btnRemoveWorker" class="btn danger">− Rimuovi operaio</button>
+          <button id="btnOpenCreateProject" class="btn primary">+ Crea cantiere</button>
+        </div>
+      </div>
+
+      <!-- DOCUMENTI AZIENDALI -->
+      <div id="viewDocs" class="card">
+        <h2>Documenti aziendali</h2>
+        <p class="muted">Documenti dell’azienda, consultabili da tutti i cantieri.</p>
+        <div class="actions-row">
+          <input type="file" id="fileInput" multiple accept=".pdf,.txt,.md" style="display:none">
+          <button id="uploadBtn" class="btn">📥 Carica documenti</button>
+        </div>
+        <div id="documentsList" style="margin-top:8px">
+          <p class="muted">—</p>
+        </div>
+      </div>
+
+      <!-- CHAT AZIENDALE -->
+      <div id="companyChat" class="chat-card">
+        <div class="chat-wrap">
+          <h3>Chat (Azienda)</h3>
+          <div class="muted" id="chatMeta">Contesto: azienda</div>
+          <div id="messagesContainer" class="chat-messages">
+            <div class="msg"><div class="who">Assistant</div><div>Benvenuto! Chat generale dell’azienda.</div></div>
+          </div>
+          <form id="chatForm" class="composer">
+            <input id="messageInput" type="text" placeholder="Scrivi un messaggio..." autocomplete="off">
+            <button type="button" id="resetChatBtn" class="btn">Reset Chat</button>
+            <button type="submit" class="btn primary">Invia</button>
+          </form>
+        </div>
+      </div>
+
+      <!-- ====== VISTA: CANTIERI ====== -->
+      <div id="viewSites" class="card" style="display:none">
+        <div class="sites-layout">
+          <!-- HEAD SINISTRA -->
+          <div class="site-head">
+            <div style="display:flex;align-items:center;justify-content:space-between;gap:12px">
+              <div class="section-title">
+                <h2 id="siteHeader">Nessun cantiere selezionato</h2>
+                <span id="siteStatusBadge" class="badge" style="display:none">—</span>
+              </div>
+              <div class="site-toolbar">
+                <button id="btnClearSite" class="btn ghost" disabled>Deseleziona</button>
+                <button id="btnAssignWorker" class="btn" disabled>Assegna operaio</button>
+                <button id="btnToggleStatus" class="btn" style="display:none">Segna come Confermato</button>
+                <button id="btnDeleteProject" class="btn danger" style="display:none">Elimina cantiere</button>
+                <button id="btnCreateProjectTop" class="btn ghost">+ Crea cantiere</button>
+              </div>
+            </div>
+          </div>
+
+          <!-- LISTA DESTRA (sticky) -->
+          <aside class="sites-list site-list" id="sitesList"><!-- popolata via JS --></aside>
+
+          <!-- DOCUMENTI CANTIERE -->
+          <div class="card site-docs" id="siteDocsCard" style="padding:14px; display:none">
+            <h3>Documenti cantiere</h3>
+            <p class="section-sub">Carica/consulta i documenti del cantiere selezionato.</p>
+            <div class="actions-row">
+              <input type="file" id="siteFileInput" multiple accept=".pdf,.txt,.md" style="display:none">
+              <button id="siteUploadBtn" class="btn" disabled>📥 Carica documenti</button>
+            </div>
+            <div id="siteDocumentsList" style="margin-top:8px"><p class="muted">—</p></div>
+          </div>
+
+          <!-- CHAT CANTIERE -->
+          <div class="chat-card site-chat" id="siteChatCard" style="display:none">
+            <div class="chat-wrap">
+              <h3 id="siteChatTitle">Chat cantiere</h3>
+              <div class="muted" id="siteChatMeta"></div>
+              <div id="siteMessages" class="chat-messages"></div>
+              <form id="siteChatForm" class="composer">
+                <input id="siteMessageInput" type="text" placeholder="Scrivi un messaggio..." autocomplete="off">
+                <button type="button" id="siteResetChatBtn" class="btn">Reset Chat</button>
+                <button type="submit" class="btn primary">Invia</button>
+              </form>
+            </div>
+          </div>
+        </div>
+      </div>
+      <!-- ====== /VISTA: CANTIERI ====== -->
+    </section>
+  </div>
+
+  <!-- MODALE: NUOVO OPERAIO -->
+  <div id="addWorkerModal" class="modal" aria-hidden="true">
+    <div class="modal-card" role="dialog" aria-modal="true">
+      <h3>Nuovo operaio</h3>
+      <form id="addWorkerForm">
+        <div class="form-grid">
+          <div class="field"><label for="w_id">ID (opz.)</label><input id="w_id" placeholder="es. W-1234"></div>
+          <div class="field"><label for="w_name">Nome</label><input id="w_name" required></div>
+          <div class="field"><label for="w_role">Ruolo</label><input id="w_role" required></div>
+          <div class="field"><label for="w_rate">Tariffa oraria (€)</label><input id="w_rate" type="number" step="0.01" min="0" required></div>
+          <div class="field"><label for="w_city">Città base</label><input id="w_city"></div>
+          <div class="field"><label for="w_certs">Certificazioni (comma)</label><input id="w_certs" placeholder="PONTEGGI, PES, DPI III..."></div>
+          <div class="field" style="grid-column: span 2"><label for="w_skills">Competenze</label><input id="w_skills" placeholder="muratura, cartongesso, elettrico"></div>
+          <div class="field">
+            <label>Disponibile</label>
+            <label class="switch"><input id="w_available" type="checkbox" checked><span class="slider"></span></label>
+          </div>
+        </div>
+        <div class="actions-end">
+          <button type="button" class="btn" data-close="#addWorkerModal">Annulla</button>
+          <button type="submit" class="btn primary">Salva operaio</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- MODALE: RIMUOVI OPERAIO -->
+  <div id="removeWorkerModal" class="modal" aria-hidden="true">
+    <div class="modal-card" role="dialog" aria-modal="true">
+      <h3>Rimuovi operaio</h3>
+      <form id="removeWorkerForm">
+        <div class="field" style="max-width:320px">
+          <label for="remove_id">ID dipendente</label>
+          <input id="remove_id" placeholder="es. W-1001" required>
+        </div>
+        <div class="actions-end">
+          <button type="button" class="btn" data-close="#removeWorkerModal">Annulla</button>
+          <button type="submit" class="btn danger">Rimuovi</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- MODALE: ASSEGNA OPERAIO A CANTIERE -->
+  <div id="assignModal" class="modal" aria-hidden="true">
+    <div class="modal-card" role="dialog" aria-modal="true">
+      <h3>Assegna operaio al cantiere</h3>
+      <form id="assignForm">
+        <div class="form-grid">
+          <div class="field"><label for="as_worker">ID operaio</label><input id="as_worker" placeholder="es. W-1002" required></div>
+          <div class="field"><label for="as_start">Data inizio</label><input id="as_start" type="date" required></div>
+          <div class="field"><label for="as_days">Giorni</label><input id="as_days" type="number" min="1" value="1" required></div>
+        </div>
+        <div class="actions-end">
+          <button type="button" class="btn" data-close="#assignModal">Annulla</button>
+          <button type="submit" class="btn primary">Assegna</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- MODALE: CREA CANTIERE -->
+  <div id="projectModal" class="modal" aria-hidden="true">
+    <div class="modal-card" role="dialog" aria-modal="true">
+      <h3>Nuovo cantiere</h3>
+      <form id="projectForm">
+        <div class="form-grid">
+          <div class="field"><label for="projName">Nome</label><input id="projName" required></div>
+          <div class="field"><label for="projCity">Città</label><input id="projCity"></div>
+          <div class="field"><label for="projStart">Inizio</label><input id="projStart" type="date"></div>
+          <div class="field"><label for="projEnd">Fine</label><input id="projEnd" type="date"></div>
+          <div class="field"><label for="projStatus">Stato</label>
+            <select id="projStatus">
+              <option value="Preventivo">Preventivo</option>
+              <option value="Confermato">Confermato</option>
+            </select>
+          </div>
+        </div>
+        <div class="actions-end">
+          <button type="button" class="btn" data-close="#projectModal">Annulla</button>
+          <button type="submit" class="btn primary">Crea</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- Toast -->
+  <div id="toast" class="toast"></div>
+
+  <script>
+    /* ====== STATO (demo) ====== */
+    const state = {
+      workerSeq: 1000,
+      workers: [],
+      projectSeq: 3,
+      projects: [
+        { id: 'p1', nome: 'Residenza Verdi', citta: 'Milano', stato: 'Preventivo' },
+        { id: 'p2', nome: 'Capannone Alfa', citta: 'Modena', stato: 'Preventivo' },
+        { id: 'p3', nome: 'Ristrutturazione Centro', citta: 'Roma', stato: 'Confermato' },
+      ],
+      selectedProjectId: '',
+      projectDocs: {},
+      assignments: []
+    };
+
+    /* ====== UTIL ====== */
+    const $ = sel => document.querySelector(sel);
+    function openModal(id){ $(id)?.classList.add('open'); }
+    function closeModal(id){ $(id)?.classList.remove('open'); }
+    function toast(msg){ const t=$("#toast"); t.textContent=msg; t.classList.add('show'); setTimeout(()=>t.classList.remove('show'),2200); }
+
+    function updateKPI(){
+      $("#kpiWorkers").textContent = state.workers.length;
+      $("#kpiProjects").textContent = state.projects.length;
+      const attivi = state.projects.filter(p => p.stato === 'Confermato').length;
+      $("#kpiActiveProjects").textContent = attivi;
+      const disponibili = state.workers.filter(w => w.available).length;
+      $("#kpiActiveWorkers").textContent = disponibili;
+      $("#kpiDocs").textContent = document.querySelectorAll('#documentsList .doc-row').length || '—';
+    }
+
+    function renderProjectSelect(){
+      const sel = $("#projectSelect");
+      sel.innerHTML = '<option value="">— Nessuno —</option>' +
+        state.projects.map(p => `<option value="${p.id}">${p.nome}</option>`).join('');
+      sel.value = state.selectedProjectId || '';
+    }
+
+    function prettyStatus(s){ return s === 'Confermato' ? 'Confermato' : 'Da approvare'; }
+    function isConfirmed(p){ return p && p.stato === 'Confermato'; }
+
+    function renderSitesList(){
+      const list = $("#sitesList");
+      list.innerHTML = state.projects.map(p => `
+        <div class="site-item ${p.id===state.selectedProjectId?'active':''}" data-id="${p.id}">
+          <div style="font-weight:600">${p.nome}</div>
+          <div class="muted" style="font-size:12px">${p.citta} — ${prettyStatus(p.stato)}</div>
+        </div>
+      `).join('');
+      list.querySelectorAll('.site-item').forEach(el=>{
+        el.addEventListener('click',()=>{ state.selectedProjectId = el.dataset.id; applySiteSelection(); });
+      });
+    }
+
+    function clearSiteSelection(){
+      state.selectedProjectId = '';
+      applySiteSelection();
+    }
+
+    function updateStatusControls(p){
+      const btn = document.getElementById('btnToggleStatus');
+      const badge = document.getElementById('siteStatusBadge');
+      if(!p){
+        btn.style.display = 'none';
+        badge.style.display = 'none';
+        return;
+      }
+      btn.style.display = 'inline-flex';
+      btn.textContent = isConfirmed(p) ? 'Segna come Da approvare' : 'Segna come Confermato';
+
+      badge.style.display = 'inline-flex';
+      badge.textContent = prettyStatus(p.stato);
+      badge.classList.remove('badge-confirmed','badge-pending');
+      badge.classList.add(isConfirmed(p) ? 'badge-confirmed' : 'badge-pending');
+    }
+
+    function recalcActiveProjectsKPI(){
+      const attivi = state.projects.filter(p => p.stato === 'Confermato').length;
+      document.getElementById('kpiActiveProjects').textContent = attivi;
+    }
+
+    function renderSiteDocs(){
+      const list = $('#siteDocumentsList');
+      const pid = state.selectedProjectId;
+      const docs = state.projectDocs[pid] || [];
+      list.innerHTML = docs.length ? docs.map(n => `<div class="doc-row">📄 ${n}</div>`).join('') : '<p class="muted">—</p>';
+    }
+
+    function applySiteSelection(){
+      const p = state.projects.find(x=>x.id===state.selectedProjectId);
+
+      // Header & meta
+      $('#siteHeader').textContent = p ? p.nome : 'Nessun cantiere selezionato';
+      $('#siteChatMeta').textContent = p ? `Contesto: cantiere (${p.nome})` : '';
+      if (p) {
+        $('#siteChatTitle').textContent = `Chat cantiere — ${p.nome}`;
+        $('#siteChatCard').style.display = 'block';
+        $('#siteDocsCard').style.display = 'block';
+      } else {
+        $('#siteChatCard').style.display = 'none';
+        $('#siteDocsCard').style.display = 'none';
+        $('#siteMessages').innerHTML = '';
+      }
+      updateStatusControls(p);
+
+      // Abilitazioni
+      $('#siteUploadBtn').disabled   = !p;
+      $('#btnAssignWorker').disabled = !p;
+      $('#btnClearSite').disabled    = !p;
+
+      // Mostra/Nascondi azioni
+      $('#btnDeleteProject').style.display   = p ? 'inline-flex' : 'none';
+      $('#btnCreateProjectTop').style.display= p ? 'none' : 'inline-flex';
+
+      // Sync select topbar
+      const sel = $('#projectSelect');
+      if (sel && sel.value !== (state.selectedProjectId||'')) sel.value = state.selectedProjectId || '';
+
+      renderSiteDocs();
+      renderSitesList();
+    }
+
+    /* ====== ROUTER (tabs) ====== */
+    document.addEventListener('DOMContentLoaded', () => {
+      const tabA = $('#tabAzienda'), tabC = $('#tabCantieri');
+      const viewA = $('#viewAzienda');
+      const viewDocs = $('#viewDocs');
+      const companyChat = $('#companyChat');
+      const viewSites = $('#viewSites');
+      const projectModalSel = '#projectModal';
+
+      function showAzienda(){
+        tabA.classList.add('active'); tabC.classList.remove('active');
+        viewA.style.display='block'; viewDocs.style.display='block'; companyChat.style.display='block';
+        viewSites.style.display='none';
+      }
+      function showCantieri(){
+        tabC.classList.add('active'); tabA.classList.remove('active');
+        viewA.style.display='none'; viewDocs.style.display='none'; companyChat.style.display='none';
+        viewSites.style.display='block';
+        renderSitesList();
+        applySiteSelection();
+      }
+      tabA.addEventListener('click', showAzienda);
+      tabC.addEventListener('click', showCantieri);
+
+      /* Topbar select -> selezione/deselezione */
+      $('#projectSelect').addEventListener('change', e=>{
+        state.selectedProjectId = e.target.value; // "" = nessuno
+        if(tabC.classList.contains('active')) applySiteSelection();
+      });
+
+      /* Bottoni operai */
+      $('#btnAddWorker').addEventListener('click', ()=> openModal('#addWorkerModal'));
+      $('#btnRemoveWorker').addEventListener('click', ()=> openModal('#removeWorkerModal'));
+
+      /* Bottoni cantieri */
+      $('#btnOpenCreateProject').addEventListener('click', ()=> openModal(projectModalSel));   // in Azienda
+      $('#btnCreateProjectTop').addEventListener('click', ()=> openModal(projectModalSel));    // in Cantieri (nessuna selezione)
+      $('#btnClearSite').addEventListener('click', clearSiteSelection);
+
+      // Toggle stato cantiere
+      document.getElementById('btnToggleStatus').addEventListener('click', ()=>{
+        const p = state.projects.find(x=>x.id===state.selectedProjectId);
+        if(!p) return;
+        p.stato = isConfirmed(p) ? 'Preventivo' : 'Confermato';
+        updateStatusControls(p);
+        recalcActiveProjectsKPI();
+        renderSitesList();
+        toast(`Stato aggiornato: ${prettyStatus(p.stato)}`);
+      });
+
+      // Elimina cantiere
+      $('#btnDeleteProject').addEventListener('click', ()=>{
+        const p = state.projects.find(x=>x.id===state.selectedProjectId);
+        if(!p) return;
+        if(confirm(`Eliminare il cantiere "${p.nome}"?`)){
+          state.projects = state.projects.filter(x=>x.id!==p.id);
+          delete state.projectDocs[p.id];
+          state.assignments = state.assignments.filter(a=>a.project_id!==p.id);
+          clearSiteSelection();
+          renderProjectSelect();
+          renderSitesList();
+          updateKPI();
+          toast('Cantiere eliminato');
+        }
+      });
+
+      /* Chiudi modali con [data-close] */
+      document.body.addEventListener('click', e=>{
+        const trg = e.target.closest('[data-close]'); if(trg){ closeModal(trg.getAttribute('data-close')); }
+      });
+
+      /* Submit: Nuovo operaio */
+      $('#addWorkerForm').addEventListener('submit', e=>{
+        e.preventDefault();
+        const typedId = $('#w_id').value.trim();
+        let id = typedId || `W-${++state.workerSeq}`;
+        if (typedId && state.workers.some(w => w.id === typedId)) { toast('ID già esistente.'); return; }
+        const worker = {
+          id,
+          name: $('#w_name').value.trim(),
+          role: $('#w_role').value.trim(),
+          hourly_rate: parseFloat($('#w_rate').value||0),
+          home_city: $('#w_city').value.trim(),
+          certifications: ($('#w_certs').value||'').split(',').map(s=>s.trim()).filter(Boolean),
+          skills: ($('#w_skills').value||'').split(',').map(s=>s.trim()).filter(Boolean),
+          available: $('#w_available').checked
+        };
+        state.workers.push(worker);
+        updateKPI();
+        closeModal('#addWorkerModal');
+        toast(`Operaio aggiunto: ${worker.name} (ID: ${worker.id})`);
+        e.target.reset();
+      });
+
+      /* Submit: Rimuovi operaio */
+      $('#removeWorkerForm').addEventListener('submit', e=>{
+        e.preventDefault();
+        const id = $('#remove_id').value.trim();
+        const idx = state.workers.findIndex(w => w.id === id);
+        if(idx === -1){ toast('ID non trovato'); return; }
+        const removed = state.workers.splice(idx,1)[0];
+        updateKPI();
+        closeModal('#removeWorkerModal');
+        toast(`Operaio rimosso: ${removed.name} (${removed.id})`);
+        e.target.reset();
+      });
+
+      /* Submit: Assegna operaio a cantiere */
+      $('#assignForm').addEventListener('submit', e=>{
+        e.preventDefault();
+        const pid = state.selectedProjectId;
+        if(!pid){ toast('Seleziona un cantiere'); return; }
+        const workerId = $('#as_worker').value.trim();
+        const w = state.workers.find(x=>x.id===workerId);
+        if(!w){ toast('ID operaio non valido'); return; }
+        const start = $('#as_start').value;
+        const days = parseInt($('#as_days').value||0,10);
+        if(!start || days<1){ toast('Compila data inizio e giorni'); return; }
+
+        state.assignments.push({ worker_id: workerId, project_id: pid, start_date: start, days });
+        w.available = false; // demo
+        updateKPI();
+        closeModal('#assignModal');
+        toast(`Assegnato ${workerId} a ${pid} per ${days} giorno/i`);
+        e.target.reset();
+      });
+
+      /* Submit: Crea cantiere */
+      $('#projectForm').addEventListener('submit', e=>{
+        e.preventDefault();
+        const nome = $('#projName').value.trim();
+        const citta = $('#projCity').value.trim();
+        const start = $('#projStart').value;
+        const end = $('#projEnd').value;
+        const stato = $('#projStatus').value; // Preventivo / Confermato
+        const id = `p${++state.projectSeq}`;
+        state.projects.push({ id, nome, citta, stato, start, end });
+        closeModal(projectModalSel);
+        toast(`Cantiere creato: ${nome}`);
+        e.target.reset();
+        renderProjectSelect();
+        renderSitesList();
+        updateKPI();
+        if($('#tabCantieri').classList.contains('active')){
+          state.selectedProjectId = id;
+          applySiteSelection();
+        }
+      });
+
+      /* Upload documenti aziendali */
+      const fileInput = $('#fileInput');
+      $('#uploadBtn').addEventListener('click', ()=> fileInput.click());
+      fileInput.addEventListener('change', ()=>{
+        const list = $('#documentsList');
+        if(!fileInput.files.length){ return; }
+        [...fileInput.files].forEach(f=>{
+          const row = document.createElement('div');
+          row.className = 'doc-row';
+          row.textContent = `📄 ${f.name}`;
+          list.appendChild(row);
+        });
+        updateKPI();
+      });
+
+      /* Upload documenti cantiere */
+      const siteFileInput = $('#siteFileInput');
+      $('#siteUploadBtn').addEventListener('click', ()=> siteFileInput.click());
+      siteFileInput.addEventListener('change', ()=>{
+        const pid = state.selectedProjectId;
+        if(!pid || !siteFileInput.files.length){ return; }
+        state.projectDocs[pid] = state.projectDocs[pid] || [];
+        [...siteFileInput.files].forEach(f=> state.projectDocs[pid].push(f.name));
+        renderSiteDocs();
+      });
+
+      /* Chat aziendale (backend) */
+      async function apiChat(message, meta={}){
+        const res = await fetch('/api/chat', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ message, ...meta })
+        });
+        const text = await res.text();
+        let data; try { data = JSON.parse(text); } catch (_) {}
+        if(!res.ok){ throw new Error(data?.error || text || `HTTP ${res.status}`); }
+        return data?.answer ?? text ?? '';
+      }
+
+      const chatSubmitBtn = document.querySelector('#chatForm button[type="submit"]');
+      $('#chatForm').addEventListener('submit', async (e)=>{
+        e.preventDefault();
+        const txt = $('#messageInput').value.trim(); if(!txt) return;
+        const box = $('#messagesContainer');
+        box.insertAdjacentHTML('beforeend', `<div class="msg"><div class="who">Tu</div><div>${txt}</div></div>`);
+        $('#messageInput').value=''; box.scrollTop = box.scrollHeight;
+
+        // Chiamata al backend
+        try {
+          chatSubmitBtn.disabled = true;
+          const answer = await apiChat(txt, { scope: 'company' });
+          box.insertAdjacentHTML('beforeend', `<div class="msg"><div class="who">Assistant</div><div>${answer || '(nessuna risposta)'} </div></div>`);
+        } catch (err){
+          console.error(err);
+          box.insertAdjacentHTML('beforeend', `<div class="msg"><div class="who">Assistant</div><div class="error">Errore: ${String(err.message||err)}</div></div>`);
+        } finally { chatSubmitBtn.disabled = false; box.scrollTop = box.scrollHeight; }
+      });
+      $('#resetChatBtn').addEventListener('click', ()=>{
+        $('#messagesContainer').innerHTML = '<div class="msg"><div class="who">Assistant</div><div>Chat aziendale resettata.</div></div>';
+      });
+
+      /* Chat cantiere (backend) */
+      const siteChatSubmitBtn = document.querySelector('#siteChatForm button[type="submit"]');
+      $('#siteChatForm').addEventListener('submit', async (e)=>{
+        e.preventDefault();
+        const pid = state.selectedProjectId;
+        if(!pid){ toast('Seleziona un cantiere'); return; }
+        const p = state.projects.find(x=>x.id===pid);
+        const txt = $('#siteMessageInput').value.trim(); if(!txt) return;
+        const box = $('#siteMessages');
+        box.insertAdjacentHTML('beforeend', `<div class="msg"><div class="who">Tu</div><div>${txt}</div></div>`);
+        $('#siteMessageInput').value=''; box.scrollTop = box.scrollHeight;
+
+        try {
+          siteChatSubmitBtn.disabled = true;
+          const answer = await apiChat(txt, { scope: 'site', project_id: pid, project_name: p?.nome });
+          box.insertAdjacentHTML('beforeend', `<div class="msg"><div class="who">Assistant</div><div>${answer || '(nessuna risposta)'} </div></div>`);
+        } catch (err){
+          console.error(err);
+          box.insertAdjacentHTML('beforeend', `<div class="msg"><div class="who">Assistant</div><div class="error">Errore: ${String(err.message||err)}</div></div>`);
+        } finally { siteChatSubmitBtn.disabled = false; box.scrollTop = box.scrollHeight; }
+      });
+      $('#siteResetChatBtn').addEventListener('click', ()=>{
+        $('#siteMessages').innerHTML = '';
+      });
+
+      /* Init */
+      renderProjectSelect();
+      renderSitesList();
+      updateKPI();
+    });
+  </script>
 </body>
 </html>

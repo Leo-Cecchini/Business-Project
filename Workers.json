@@ -1,0 +1,572 @@
+[
+  {
+    "ID":"W-1048",
+    "name":"Marco Rossi",
+    "role":"Capo cantiere",
+    "hourly_rate":28.0,
+    "available":true,
+    "home_city":"Roma",
+    "skills":"coordinamento, sicurezza, pianificazione",
+    "certifications":"CSP\/CSE, DPI III, PLE"
+  },
+  {
+    "ID":"W-1057",
+    "name":"Luca Bianchi",
+    "role":"Capo cantiere",
+    "hourly_rate":37.0,
+    "available":true,
+    "home_city":"Roma",
+    "skills":"coordinamento, sicurezza, pianificazione",
+    "certifications":"CSP\/CSE, DPI III, PLE"
+  },
+  {
+    "ID":"W-1049",
+    "name":"Giulia Esposito",
+    "role":"Capo cantiere",
+    "hourly_rate":29.0,
+    "available":true,
+    "home_city":"Roma",
+    "skills":"coordinamento, sicurezza, pianificazione",
+    "certifications":"CSP\/CSE, DPI III, PLE"
+  },
+  {
+    "ID":"W-1050",
+    "name":"Francesco Romano",
+    "role":"Capo cantiere",
+    "hourly_rate":30.0,
+    "available":true,
+    "home_city":"Roma",
+    "skills":"coordinamento, sicurezza, pianificazione",
+    "certifications":"CSP\/CSE, DPI III, PLE"
+  },
+  {
+    "ID":"W-1051",
+    "name":"Martina Ferri",
+    "role":"Capo cantiere",
+    "hourly_rate":31.0,
+    "available":true,
+    "home_city":"Roma",
+    "skills":"coordinamento, sicurezza, pianificazione",
+    "certifications":"CSP\/CSE, DPI III, PLE"
+  },
+  {
+    "ID":"W-1052",
+    "name":"Davide Conti",
+    "role":"Capo cantiere",
+    "hourly_rate":32.0,
+    "available":true,
+    "home_city":"Roma",
+    "skills":"coordinamento, sicurezza, pianificazione",
+    "certifications":"CSP\/CSE, DPI III, PLE"
+  },
+  {
+    "ID":"W-1053",
+    "name":"Alessia Greco",
+    "role":"Capo cantiere",
+    "hourly_rate":33.0,
+    "available":true,
+    "home_city":"Roma",
+    "skills":"coordinamento, sicurezza, pianificazione",
+    "certifications":"CSP\/CSE, DPI III, PLE"
+  },
+  {
+    "ID":"W-1054",
+    "name":"Simone Gallo",
+    "role":"Capo cantiere",
+    "hourly_rate":34.0,
+    "available":true,
+    "home_city":"Roma",
+    "skills":"coordinamento, sicurezza, pianificazione",
+    "certifications":"CSP\/CSE, DPI III, PLE"
+  },
+  {
+    "ID":"W-1055",
+    "name":"Chiara Moretti",
+    "role":"Capo cantiere",
+    "hourly_rate":35.0,
+    "available":true,
+    "home_city":"Roma",
+    "skills":"coordinamento, sicurezza, pianificazione",
+    "certifications":"CSP\/CSE, DPI III, PLE"
+  },
+  {
+    "ID":"W-1056",
+    "name":"Andrea Rizzo",
+    "role":"Capo cantiere",
+    "hourly_rate":36.0,
+    "available":true,
+    "home_city":"Roma",
+    "skills":"coordinamento, sicurezza, pianificazione",
+    "certifications":"CSP\/CSE, DPI III, PLE"
+  },
+  {
+    "ID":"W-1029",
+    "name":"Federico Marino",
+    "role":"capo muratore",
+    "hourly_rate":33.48,
+    "available":true,
+    "home_city":"Roma",
+    "skills":"coordinamento,muratura,pavimenti",
+    "certifications":"CSE,PONTEGGI"
+  },
+  {
+    "ID":"W-1030",
+    "name":"Giuseppe Bianchi",
+    "role":"capo muratore",
+    "hourly_rate":33.86,
+    "available":true,
+    "home_city":"Roma",
+    "skills":"coordinamento,muratura",
+    "certifications":"CSE,PONTEGGI"
+  },
+  {
+    "ID":"W-1031",
+    "name":"Salvatore Ferrari",
+    "role":"capo muratore",
+    "hourly_rate":30.09,
+    "available":true,
+    "home_city":"Roma",
+    "skills":"muratura",
+    "certifications":"PONTEGGI"
+  },
+  {
+    "ID":"W-1019",
+    "name":"Davide Conti",
+    "role":"carpentiere",
+    "hourly_rate":21.65,
+    "available":true,
+    "home_city":"Roma",
+    "skills":"armature,casseri,getti cls",
+    "certifications":"CARRELLI"
+  },
+  {
+    "ID":"W-1021",
+    "name":"Giuseppe Mariani",
+    "role":"carpentiere",
+    "hourly_rate":23.23,
+    "available":true,
+    "home_city":"Roma",
+    "skills":"casseri,getti cls",
+    "certifications":null
+  },
+  {
+    "ID":"W-1020",
+    "name":"Mario Costa",
+    "role":"carpentiere",
+    "hourly_rate":25.91,
+    "available":true,
+    "home_city":"Roma",
+    "skills":"armature,casseri,getti cls",
+    "certifications":null
+  },
+  {
+    "ID":"W-1016",
+    "name":"Riccardo Marino",
+    "role":"carpentiere",
+    "hourly_rate":26.18,
+    "available":true,
+    "home_city":"Roma",
+    "skills":"armature,getti cls",
+    "certifications":"CARRELLI"
+  },
+  {
+    "ID":"W-1017",
+    "name":"Tommaso Esposito",
+    "role":"carpentiere",
+    "hourly_rate":22.6,
+    "available":true,
+    "home_city":"Roma",
+    "skills":"armature",
+    "certifications":"CARRELLI,PONTEGGI"
+  },
+  {
+    "ID":"W-1018",
+    "name":"Tommaso Rossi",
+    "role":"carpentiere",
+    "hourly_rate":22.88,
+    "available":true,
+    "home_city":"Roma",
+    "skills":"armature",
+    "certifications":null
+  },
+  {
+    "ID":"W-1015",
+    "name":"Vincenzo De Luca",
+    "role":"carpentiere",
+    "hourly_rate":25.22,
+    "available":true,
+    "home_city":"Roma",
+    "skills":"armature",
+    "certifications":null
+  },
+  {
+    "ID":"W-1033",
+    "name":"Antonio Martini",
+    "role":"cartongessista",
+    "hourly_rate":21.24,
+    "available":true,
+    "home_city":"Roma",
+    "skills":"cartongesso,tramezzi",
+    "certifications":null
+  },
+  {
+    "ID":"W-1032",
+    "name":"Antonio Romano",
+    "role":"cartongessista",
+    "hourly_rate":22.53,
+    "available":true,
+    "home_city":"Roma",
+    "skills":"cartongesso",
+    "certifications":null
+  },
+  {
+    "ID":"W-1034",
+    "name":"Giuseppe Mancini",
+    "role":"cartongessista",
+    "hourly_rate":18.78,
+    "available":true,
+    "home_city":"Roma",
+    "skills":"controsoffitti,tramezzi",
+    "certifications":null
+  },
+  {
+    "ID":"W-1037",
+    "name":"Luca Bruno",
+    "role":"cartongessista",
+    "hourly_rate":21.3,
+    "available":true,
+    "home_city":"Roma",
+    "skills":"cartongesso",
+    "certifications":"PONTEGGI"
+  },
+  {
+    "ID":"W-1036",
+    "name":"Paolo Esposito",
+    "role":"cartongessista",
+    "hourly_rate":21.22,
+    "available":true,
+    "home_city":"Roma",
+    "skills":"cartongesso,controsoffitti,tramezzi",
+    "certifications":"PONTEGGI"
+  },
+  {
+    "ID":"W-1035",
+    "name":"Roberto Gallo",
+    "role":"cartongessista",
+    "hourly_rate":18.59,
+    "available":true,
+    "home_city":"Roma",
+    "skills":"cartongesso",
+    "certifications":null
+  },
+  {
+    "ID":"W-1007",
+    "name":"Luca Costa",
+    "role":"elettricista",
+    "hourly_rate":29.84,
+    "available":true,
+    "home_city":"Roma",
+    "skills":"cavidotti,civile,industriale",
+    "certifications":null
+  },
+  {
+    "ID":"W-1002",
+    "name":"Marco Bruno",
+    "role":"elettricista",
+    "hourly_rate":23.13,
+    "available":true,
+    "home_city":"Roma",
+    "skills":"cavidotti,industriale,quadri elettrici",
+    "certifications":null
+  },
+  {
+    "ID":"W-1003",
+    "name":"Nicola Rossi",
+    "role":"elettricista",
+    "hourly_rate":22.48,
+    "available":true,
+    "home_city":"Roma",
+    "skills":"industriale",
+    "certifications":"PEI"
+  },
+  {
+    "ID":"W-1006",
+    "name":"Paolo Russo",
+    "role":"elettricista",
+    "hourly_rate":25.09,
+    "available":true,
+    "home_city":"Roma",
+    "skills":"cavidotti",
+    "certifications":null
+  },
+  {
+    "ID":"W-1005",
+    "name":"Pietro Marino",
+    "role":"elettricista",
+    "hourly_rate":28.06,
+    "available":true,
+    "home_city":"Roma",
+    "skills":"quadri elettrici",
+    "certifications":null
+  },
+  {
+    "ID":"W-1001",
+    "name":"Roberto Rizzo",
+    "role":"elettricista",
+    "hourly_rate":25.61,
+    "available":true,
+    "home_city":"Roma",
+    "skills":"civile,industriale,quadri elettrici",
+    "certifications":"PES"
+  },
+  {
+    "ID":"W-1004",
+    "name":"Simone Bruno",
+    "role":"elettricista",
+    "hourly_rate":26.15,
+    "available":true,
+    "home_city":"Roma",
+    "skills":"cavidotti,civile,quadri elettrici",
+    "certifications":"PAV,PEI,PES"
+  },
+  {
+    "ID":"W-1014",
+    "name":"Andrea Barbieri",
+    "role":"idraulico",
+    "hourly_rate":24.49,
+    "available":true,
+    "home_city":"Roma",
+    "skills":"bagni,caldaie,impianti idrici",
+    "certifications":null
+  },
+  {
+    "ID":"W-1011",
+    "name":"Antonio Lombardi",
+    "role":"idraulico",
+    "hourly_rate":29.98,
+    "available":true,
+    "home_city":"Roma",
+    "skills":"bagni,impianti idrici",
+    "certifications":null
+  },
+  {
+    "ID":"W-1013",
+    "name":"Giuseppe Colombo",
+    "role":"idraulico",
+    "hourly_rate":22.12,
+    "available":true,
+    "home_city":"Roma",
+    "skills":"bagni,caldaie,impianti idrici",
+    "certifications":"FGAS"
+  },
+  {
+    "ID":"W-1012",
+    "name":"Luca Ferrari",
+    "role":"idraulico",
+    "hourly_rate":25.53,
+    "available":true,
+    "home_city":"Roma",
+    "skills":"bagni,impianti idrici",
+    "certifications":"FGAS"
+  },
+  {
+    "ID":"W-1009",
+    "name":"Pietro Russo",
+    "role":"idraulico",
+    "hourly_rate":22.48,
+    "available":true,
+    "home_city":"Roma",
+    "skills":"bagni,caldaie,impianti idrici",
+    "certifications":null
+  },
+  {
+    "ID":"W-1010",
+    "name":"Riccardo Colombo",
+    "role":"idraulico",
+    "hourly_rate":25.35,
+    "available":true,
+    "home_city":"Roma",
+    "skills":"impianti idrici",
+    "certifications":"FGAS"
+  },
+  {
+    "ID":"W-1008",
+    "name":"Simone Esposito",
+    "role":"idraulico",
+    "hourly_rate":24.66,
+    "available":true,
+    "home_city":"Roma",
+    "skills":"impianti idrici",
+    "certifications":null
+  },
+  {
+    "ID":"W-1047",
+    "name":"Alessandro Mariani",
+    "role":"imbianchino",
+    "hourly_rate":25.22,
+    "available":true,
+    "home_city":"Roma",
+    "skills":"verniciature",
+    "certifications":"PONTEGGI"
+  },
+  {
+    "ID":"W-1044",
+    "name":"Francesco Ricci",
+    "role":"imbianchino",
+    "hourly_rate":23.5,
+    "available":true,
+    "home_city":"Roma",
+    "skills":"rasature,tinteggiature,verniciature",
+    "certifications":"PONTEGGI"
+  },
+  {
+    "ID":"W-1046",
+    "name":"Salvatore Mancini",
+    "role":"imbianchino",
+    "hourly_rate":22.31,
+    "available":true,
+    "home_city":"Roma",
+    "skills":"decorazioni,tinteggiature,verniciature",
+    "certifications":null
+  },
+  {
+    "ID":"W-1045",
+    "name":"Tommaso Lombardi",
+    "role":"imbianchino",
+    "hourly_rate":24.82,
+    "available":true,
+    "home_city":"Roma",
+    "skills":"rasature,tinteggiature,verniciature",
+    "certifications":null
+  },
+  {
+    "ID":"W-1041",
+    "name":"Federico Esposito",
+    "role":"installatore",
+    "hourly_rate":20.53,
+    "available":true,
+    "home_city":"Roma",
+    "skills":"impianti speciali,serramenti",
+    "certifications":"CARRELLI"
+  },
+  {
+    "ID":"W-1042",
+    "name":"Federico Ferrari",
+    "role":"installatore",
+    "hourly_rate":23.47,
+    "available":true,
+    "home_city":"Roma",
+    "skills":"serramenti",
+    "certifications":"CARRELLI"
+  },
+  {
+    "ID":"W-1043",
+    "name":"Stefano Moretti",
+    "role":"installatore",
+    "hourly_rate":27.4,
+    "available":true,
+    "home_city":"Roma",
+    "skills":"serramenti",
+    "certifications":null
+  },
+  {
+    "ID":"W-1039",
+    "name":"Federico Lombardi",
+    "role":"intonacatore",
+    "hourly_rate":22.55,
+    "available":true,
+    "home_city":"Roma",
+    "skills":"intonaci,rasature",
+    "certifications":"PONTEGGI"
+  },
+  {
+    "ID":"W-1040",
+    "name":"Gabriele Russo",
+    "role":"intonacatore",
+    "hourly_rate":21.63,
+    "available":true,
+    "home_city":"Roma",
+    "skills":"intonaci,rasature",
+    "certifications":null
+  },
+  {
+    "ID":"W-1038",
+    "name":"Stefano Bianchi",
+    "role":"intonacatore",
+    "hourly_rate":21.2,
+    "available":true,
+    "home_city":"Roma",
+    "skills":"intonaci,rasature",
+    "certifications":null
+  },
+  {
+    "ID":"W-1026",
+    "name":"Alberto Gallo",
+    "role":"muratore",
+    "hourly_rate":21.49,
+    "available":true,
+    "home_city":"Roma",
+    "skills":"intonaci",
+    "certifications":"PONTEGGI"
+  },
+  {
+    "ID":"W-1028",
+    "name":"Federico Conti",
+    "role":"muratore",
+    "hourly_rate":22.98,
+    "available":true,
+    "home_city":"Roma",
+    "skills":"pavimenti",
+    "certifications":"PONTEGGI"
+  },
+  {
+    "ID":"W-1025",
+    "name":"Marco Costa",
+    "role":"muratore",
+    "hourly_rate":19.79,
+    "available":true,
+    "home_city":"Roma",
+    "skills":"intonaci,muratura,pavimenti",
+    "certifications":"PONTEGGI"
+  },
+  {
+    "ID":"W-1024",
+    "name":"Riccardo Martini",
+    "role":"muratore",
+    "hourly_rate":20.17,
+    "available":true,
+    "home_city":"Roma",
+    "skills":"intonaci",
+    "certifications":null
+  },
+  {
+    "ID":"W-1023",
+    "name":"Salvatore Russo",
+    "role":"muratore",
+    "hourly_rate":24.16,
+    "available":true,
+    "home_city":"Roma",
+    "skills":"muratura,pavimenti",
+    "certifications":"PONTEGGI"
+  },
+  {
+    "ID":"W-1027",
+    "name":"Stefano Martini",
+    "role":"muratore",
+    "hourly_rate":24.16,
+    "available":true,
+    "home_city":"Roma",
+    "skills":"muratura",
+    "certifications":"PONTEGGI"
+  },
+  {
+    "ID":"W-1022",
+    "name":"Tommaso Bianchi",
+    "role":"muratore",
+    "hourly_rate":23.55,
+    "available":true,
+    "home_city":"Roma",
+    "skills":"intonaci,muratura,pavimenti",
+    "certifications":"PONTEGGI"
+  }
+]

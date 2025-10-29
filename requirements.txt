@@ -1,13 +1,26 @@
-flask>=3.0.0
-python-dotenv>=1.0.0
-langchain>=0.3.0
-langchain-text-splitters>=0.0.1
-langchain-google-genai>=1.0.0
-langchain-community>=0.0.10
-langchain-core>=0.1.52
-sentence-transformers>=2.2.2
-qdrant-client>=1.7.0
-PyPDF2>=3.0.1
-werkzeug>=3.0.1
-duckduckgo-search>=6.3.0
-trafilatura>=1.7.0
+# --- Core web stack ---
+flask==3.0.*
+werkzeug==3.0.*
+python-dotenv==1.0.*
+
+# --- LangChain (linea 0.3 stabile e compatibile con Gemini 2.x) ---
+langchain==0.3.*
+langchain-core==0.3.*
+langchain-community==0.3.*
+langchain-text-splitters==0.3.*
+
+# Bridge ufficiale verso Google Gemini
+langchain-google-genai==2.*
+google-generativeai>=0.8.0
+
+# --- AI / NLP / Vector store ---
+sentence-transformers==3.0.*
+transformers>=4.41
+huggingface-hub>=0.23
+torch>=2.3
+qdrant-client==1.7.*
+PyPDF2==3.0.*
+
+# --- Web retrieval ---
+duckduckgo-search==6.*
+trafilatura==1.7.*

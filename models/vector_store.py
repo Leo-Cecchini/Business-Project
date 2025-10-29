@@ -1,9 +1,13 @@
-# Vector store management with Qdrant — robust + rerank
+# models/vector_store.py
+# Vector store management with Qdrant — robust + rerank + per-cantiere filter
 
 from qdrant_client import QdrantClient
-from qdrant_client.models import Distance, VectorParams, PointStruct
+from qdrant_client.models import (
+    Distance, VectorParams, PointStruct,
+    Filter, FieldCondition, MatchValue
+)
 from sentence_transformers import SentenceTransformer
-from typing import List, Dict, Optional, Tuple
+from typing import List, Dict, Optional
 import uuid
 import math
 import re
@@ -64,9 +68,44 @@ class VectorStore:
                 collection_name=self.collection_name,
                 vectors_config=VectorParams(size=self.embedding_dim, distance=Distance.COSINE)
             )
-    
+
+    # -------------------- Helper filtro Qdrant --------------------
+    def _build_filter(self, where: Optional[Dict]) -> Optional[Filter]:
+        """
+        Crea un filtro Qdrant da un dizionario 'where' semplice.
+        Supporta:
+          - {"project_id": 12}
+          - puoi estendere aggiungendo altre chiavi -> metadata.<key>
+        """
+        if not where:
+            return None
+
+        must = []
+        for key, val in where.items():
+            if val is None:
+                continue
+            must.append(
+                FieldCondition(
+                    key=f"metadata.{key}",
+                    match=MatchValue(value=val)
+                )
+            )
+
+        if not must:
+            return None
+        return Filter(must=must)
+
+    # -------------------- Upsert documenti -----------------------
     def add_documents(self, texts: List[str], metadatas: List[Dict]) -> int:
-        """Add documents to vector store"""
+        """Add documents to vector store.
+        Ogni metadata può contenere, ad esempio:
+        {
+            "source": "file.pdf",
+            "page": 3,
+            "project_id": 12,  # ⬅️ per filtro per cantiere
+            ...
+        }
+        """
         if len(texts) != len(metadatas):
             raise ValueError("texts e metadatas devono avere la stessa lunghezza")
         if not texts:
@@ -91,12 +130,14 @@ class VectorStore:
         if points:
             self.client.upsert(collection_name=self.collection_name, points=points)
         return len(points)
-    
-    def search(self, query: str, limit: int = 12) -> List[Dict]:
+
+    # -------------------- Ricerca con rerank + filtro -------------
+    def search(self, query: str, limit: int = 12, where: Optional[Dict] = None) -> List[Dict]:
         """
-        Search for similar documents con rerank:
+        Search for similar documents con rerank + filtro opzionale:
         - prende più risultati (>=12) dal vettoriale
-        - calcola un punteggio combinato: base_score + 0.01*priority + 0.05*keyword_boost
+        - applica filtro per metadata (es. where={"project_id": 12})
+        - calcola punteggio combinato: base_score + 0.01*priority + 0.05*keyword_boost
         - ordina e taglia a 'limit'
         Ritorna: [{"text", "metadata": {...}, "score"}]
         """
@@ -106,10 +147,13 @@ class VectorStore:
         # 1) Vettoriale
         query_vector = self.embedding_model.encode([query], show_progress_bar=False)[0].tolist()
         raw_limit = max(limit, 12)  # prendiamo più hit, poi rerankiamo
+        q_filter = self._build_filter(where)
+
         raw_hits = self.client.search(
             collection_name=self.collection_name,
             query_vector=query_vector,
-            limit=raw_limit
+            limit=raw_limit,
+            query_filter=q_filter
         )
 
         # 2) Normalizza + rerank
@@ -139,8 +183,9 @@ class VectorStore:
         results.sort(key=lambda x: x["score"], reverse=True)
         return results[:limit]
     
-    def get_all_documents(self) -> List[Dict]:
-        """Get all document sources + conteggio chunk per ciascuna fonte"""
+    # -------------------- Utility elenco sorgenti -----------------
+    def get_all_documents(self, where: Optional[Dict] = None) -> List[Dict]:
+        """Get all document sources + conteggio chunk per ciascuna fonte (opz. filtrato)."""
         try:
             result = self.client.scroll(
                 collection_name=self.collection_name,
@@ -150,7 +195,21 @@ class VectorStore:
             )
             sources = {}
             for point in result[0]:
-                md = point.payload.get("metadata", {}) if point.payload else {}
+                payload = point.payload or {}
+                md = payload.get("metadata", {}) or {}
+
+                # Filtro lato-client se where presente (alcune versioni locali non supportano Filter in scroll)
+                if where:
+                    ok = True
+                    for k, v in where.items():
+                        if v is None:
+                            continue
+                        if md.get(k) != v:
+                            ok = False
+                            break
+                    if not ok:
+                        continue
+
                 src = md.get("source", "Unknown")
                 sources[src] = sources.get(src, 0) + 1
             

@@ -402,3 +402,27 @@ def route(question: str, llm=None, last_context: dict | None = None) -> dict:
       ritorna sempre: {"intent": "...", "entities": {...}, "staff": StaffIntent|None}
     """
     return parse_intent_llm(llm, question, last_context)
+
+# ---------------- Lightweight class wrapper ----------------
+class IntentRouter:
+    """
+    Wrapper compatibile con app.py/chat.py.
+    Puoi passarci un LLM (ad es. quello di ChatModel) oppure lasciarlo None:
+    - se llm è None, il routing userà solo le euristiche locali;
+    - se llm è presente, lo impiega per i casi STAFF con schema strutturato.
+    """
+    def __init__(self, llm=None, api_key: str | None = None):
+        self.llm = llm
+        self.api_key = api_key  # tenuto per compatibilità, non usato qui
+
+    def route(self, question: str, last_context: dict | None = None) -> dict:
+        return parse_intent_llm(self.llm, question, last_context)
+
+
+# (facoltativo, così `from utils.intent_router import *` include i simboli utili)
+__all__ = [
+    "IntentRouter",
+    "route",
+    "parse_intent_llm",
+    "extract_estimate_entities",
+]
