@@ -7,12 +7,13 @@ from typing import Dict, Any
 from flask import Flask, g, jsonify, request, send_from_directory
 from flask_cors import CORS
 from werkzeug.exceptions import HTTPException
-from sqlalchemy import text
 
 from config import Config
 
+# MongoDB
+from db.mongo import init_mongo, ensure_mongo_indexes
+
 # DB
-from models import db  # models/__init__.py: db = SQLAlchemy()
 
 # Componenti RAG
 from models.vector_store import VectorStore
@@ -88,13 +89,14 @@ def create_app(config_class=Config) -> Flask:
     app.config.from_object(config_class)
     app.secret_key = os.getenv("FLASK_SECRET_KEY", getattr(Config, "SECRET_KEY", "change-me"))
 
-    # DB URL (fallback a SQLite locale)
-    db_url = os.getenv("DATABASE_URL", getattr(Config, "DATABASE_URL", "")).strip()
-    if not db_url:
-        db_path = os.path.join(app.root_path, "data.db")
-        db_url = f"sqlite:///{db_path}"
-    app.config["SQLALCHEMY_DATABASE_URI"] = db_url
-    app.config["SQLALCHEMY_TRACK_MODIFICATIONS"] = False
+
+    # --- MongoDB init ---
+    # Inizializza la connessione a Mongo (workers/materials/projects si appoggeranno qui)
+    init_mongo()
+    try:
+        ensure_mongo_indexes()
+    except Exception as e:
+        app.logger.warning(f"Mongo index build skipped: {e}")
 
     # Uploads
     app.config.setdefault("UPLOAD_FOLDER", os.path.join(app.root_path, "uploads"))
@@ -123,8 +125,6 @@ def create_app(config_class=Config) -> Flask:
     log.info("GOOGLE_API_KEY presente: %s", bool(os.getenv("GOOGLE_API_KEY")))
     log.info("MODEL_NAME: %s", os.getenv("MODEL_NAME"))
 
-    # Inizializza DB
-    db.init_app(app)
 
     # Valida config se previsto
     if hasattr(Config, "validate"):
@@ -134,25 +134,12 @@ def create_app(config_class=Config) -> Flask:
     should_init = not app.debug or os.environ.get("WERKZEUG_RUN_MAIN") == "true"
     if should_init:
         with app.app_context():
-            # IMPORTA TUTTI I MODELLI PRIMA DI create_all()
-            from models.material import Material  # noqa: F401
-            from models.worker import Worker      # noqa: F401
-            # Project & co. (Company, Project, ProjectDocument, ProjectMaterial se presente)
-            from models.project import Company, Project, ProjectDocument  # noqa: F401
-            try:
-                # se nel tuo models/project.py hai definito anche ProjectMaterial:
-                from models.project import ProjectMaterial  # noqa: F401
-            except Exception:
-                pass
-            # Shifts (se esiste)
-            try:
-                from models.staff_shift import StaffShift  # noqa: F401
-            except Exception:
-                pass
+            # Non creiamo più le tabelle SQL per workers/materials/projects.
+            # Manteniamo SQLAlchemy caricato solo per eventuali parti legacy.
 
-            db.create_all()
+            # Inizializza componenti condivisi (VectorStore/LLM/Router, ecc.)
             _init_components(app)
-            log.info("DB e componenti inizializzati.")
+            log.info("Componenti inizializzati (Mongo attivo per workers/materials/projects).")
 
     # Request hooks
     @app.before_request
@@ -170,20 +157,16 @@ def create_app(config_class=Config) -> Flask:
         resp.headers["X-Request-ID"] = getattr(g, "request_id", "-")
         return resp
 
-    @app.teardown_appcontext
-    def _shutdown_session(exception=None):
-        # chiude in modo sicuro eventuali sessioni DB al termine del contesto
-        try:
-            db.session.remove()
-        except Exception:
-            pass
 
     # Health check
     @app.get("/healthz")
     def healthz():
+        from mongoengine.connection import get_connection
         deps = app.extensions.get("deps", {})
+        # Verifica MongoDB
         try:
-            db.session.execute(text("SELECT 1"))
+            client = get_connection()
+            client.admin.command("ping")
             ok_db = True
         except Exception:
             ok_db = False
@@ -202,44 +185,23 @@ def create_app(config_class=Config) -> Flask:
     def api_ping():
         return jsonify({"ok": True, "msg": "pong"}), 200
 
-    # --- Stats helpers (SQLite direct) ---
-    import sqlite3
-    db_uri = app.config.get("SQLALCHEMY_DATABASE_URI", "")
-    if db_uri.startswith("sqlite:////"):  # absolute path
-        _db_path = db_uri.replace("sqlite:////", "/", 1)
-    elif db_uri.startswith("sqlite:///"):  # relative to app
-        _db_path = db_uri.replace("sqlite:///", "", 1)
-    else:
-        _db_path = db_uri  # fallback (non-sqlite URIs won't work with sqlite3)
-
-    def _q(sql, params=()):
-        con = sqlite3.connect(_db_path)
-        con.row_factory = sqlite3.Row
-        with con:
-            rows = con.execute(sql, params).fetchall()
-        return rows
-
+    # --- Stats helpers (Mongo) ---
     @app.get("/api/stats/workers")
     def stats_workers():
         try:
-            tot = _q("SELECT COUNT(*) AS c FROM workers")[0]["c"]
+            from models_mongo.worker import WorkerDoc
+            tot = WorkerDoc.objects.count()
+            lib = WorkerDoc.objects(available=True).count()
         except Exception:
-            tot = 0
-        try:
-            lib = _q("SELECT COUNT(*) AS c FROM workers WHERE available=1")[0]["c"]
-        except Exception:
-            lib = 0
+            tot, lib = 0, 0
         return jsonify({"total": int(tot), "free": int(lib)}), 200
 
     @app.get("/api/stats/projects")
     def stats_projects():
         try:
-            exists = _q("SELECT name FROM sqlite_master WHERE type='table' AND name='projects'")
-            if exists:
-                tot = _q("SELECT COUNT(*) AS c FROM projects")[0]["c"]
-                att = _q("SELECT COUNT(*) AS c FROM projects WHERE status='Confermato'")[0]["c"]
-            else:
-                tot, att = 0, 0
+            from models_mongo.project import ProjectDoc
+            tot = ProjectDoc.objects.count()
+            att = ProjectDoc.objects(status__iexact="Confermato").count()
         except Exception:
             tot, att = 0, 0
         return jsonify({"total": int(tot), "active": int(att)}), 200
@@ -275,13 +237,13 @@ def create_app(config_class=Config) -> Flask:
 
     app.register_blueprint(views_bp)                    # pagine HTML
     app.register_blueprint(api_bp, url_prefix="/api")   # API legacy/varie
-    app.register_blueprint(materials_bp, url_prefix="/api")
-    app.register_blueprint(staff_bp, url_prefix="/api/staff")
+    app.register_blueprint(materials_bp)
+    app.register_blueprint(staff_bp)
     app.register_blueprint(estimate_bp)                 # /api/estimate
     app.register_blueprint(chat_bp)                     # /api/chat
-    app.register_blueprint(company_bp)                  # /api/company
-    app.register_blueprint(projects_bp)                 # /api/projects
-    app.register_blueprint(workers_bp)                  # /api/workers
+    app.register_blueprint(company_bp)
+    app.register_blueprint(projects_bp)
+    app.register_blueprint(workers_bp)
 
     # Log mappa delle rotte esposte (utile per verificare i prefix)
     try:

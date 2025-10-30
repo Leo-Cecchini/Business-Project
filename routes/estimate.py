@@ -5,9 +5,8 @@ from dataclasses import dataclass, asdict
 from typing import Dict, Any, List, Optional
 from flask import Blueprint, request, jsonify, g, current_app
 
-from models import db
-from models.material import Material
-from models.worker import Worker
+from models_mongo.material import MaterialDoc
+from models_mongo.worker import WorkerDoc
 
 estimate_bp = Blueprint("estimate", __name__, url_prefix="/api/estimate")
 
@@ -53,36 +52,44 @@ MATERIAL_ALIASES = {
 
 def _db_price(name_tokens: List[str], prefer_unit: Optional[str]=None) -> Optional[Dict[str, Any]]:
     """
-    Cerca nel DB Material dove name contiene TUTTI i token.
-    Se prefer_unit è indicato (es. 'm2','m','pz','kg'), priorizza risultati con quella unità.
+    Cerca nel DB Material (MongoEngine) dove name contiene TUTTI i token.
+    Se prefer_unit è indicato (es. 'm2','m','pz','kg','lt'), priorizza risultati con quella unità.
     """
     if not name_tokens:
         return None
 
-    # query iniziale ampia
-    q = Material.query
+    # Query iniziale ampia (MongoEngine)
+    q = MaterialDoc.objects
     for tok in name_tokens:
-        q = q.filter(Material.name.ilike(f"%{tok}%"))
-    results = q.order_by(Material.unit.asc()).all()
+        if tok:
+            q = q.filter(name__icontains=tok)
+
+    results = list(q.order_by("unit"))
     if not results:
         return None
 
     # scoring semplice: +2 se unit combacia, +1 se name inizia con primo token
-    def score(m: Material) -> int:
+    nl0 = (name_tokens[0] or "").lower() if name_tokens else ""
+
+    def score(m: MaterialDoc) -> int:
         s = 0
-        if prefer_unit and (m.unit or "").lower() == prefer_unit.lower():
+        unit = (getattr(m, "unit", "") or "").lower()
+        name = (getattr(m, "name", "") or "").lower()
+        if prefer_unit and unit == prefer_unit.lower():
             s += 2
-        if (m.name or "").lower().startswith(name_tokens[0].lower()):
+        if name.startswith(nl0):
             s += 1
         return s
 
     results.sort(key=score, reverse=True)
     best = results[0]
+    mat_dict = best.to_mongo().to_dict() if hasattr(best, "to_mongo") else {}
+
     return {
-        "name": best.name,
-        "unit": best.unit,
-        "price": best.unit_price_eur_2025,
-        "raw": best.to_dict()
+        "name": getattr(best, "name", None),
+        "unit": getattr(best, "unit", None),
+        "price": getattr(best, "unit_price_eur_2025", None),
+        "raw": mat_dict,
     }
 
 def _price_for(alias_key: str, prefer_unit: Optional[str]=None) -> Optional[Dict[str, Any]]:
@@ -151,9 +158,12 @@ HYDRAULIC_PRODUCTIVITY = {
 # -------------------------
 
 def _hourly_rate_for(role: str) -> float:
-    w = Worker.query.filter(Worker.role.ilike(f"%{role}%")).first()
-    if w and w.hourly_rate:
-        return float(w.hourly_rate)
+    w = WorkerDoc.objects(role__icontains=role).first()
+    if w and getattr(w, "hourly_rate", None) is not None:
+        try:
+            return float(w.hourly_rate)
+        except Exception:
+            pass
     return DEFAULT_WAGE.get(role, 28.0)
 
 # -------------------------

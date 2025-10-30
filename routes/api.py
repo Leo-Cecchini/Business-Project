@@ -10,18 +10,14 @@ from typing import Optional, Tuple
 from flask import Blueprint, request, jsonify, session, current_app, g
 from werkzeug.utils import secure_filename
 
-# --- Estensioni / DB ---
-from models import db
-
 # --- Utils guardrail / web / comparator / prezzi ---
 from utils.policy import decide_policy
 from utils.price_extractor import extract_prices, pick_best
 from utils.comparator import build_comparison
 
-# --- Modelli DB ---
-from sqlalchemy import or_, func
-from models.worker import Worker
-from models.material import Material
+# --- Modelli MongoDB ---
+from models_mongo.worker import WorkerDoc
+from models_mongo.material import MaterialDoc
 
 # --- LLM intent parser (staff) opzionale ---
 from utils.intent_router import parse_intent_llm
@@ -119,6 +115,15 @@ def np_article_plus_plural(role: Optional[str]) -> str:
 def _norm_role_from_text(q: str) -> Optional[str]:
     """Inferenza semplice del ruolo a partire dal testo utente."""
     ql = q.lower()
+
+    # parole generiche che NON definiscono un ruolo specifico → ritorna None
+    generic_terms = [
+        "operaio", "operai", "dipendente", "dipendenti",
+        "personale", "staff", "lavoratori", "team", "organico", "forza lavoro"
+    ]
+    if any(t in ql for t in generic_terms):
+        return None
+
     for role, aliases in ROLE_ALIASES.items():
         if any(a in ql for a in aliases):
             return role
@@ -137,18 +142,17 @@ def _looks_like_anaphora(q: str) -> bool:
 
 
 def _query_workers(intent: dict):
-    """Costruisce la query dei dipendenti a partire dall’intent."""
-    q = Worker.query
-    if intent.get("role"):
-        q = q.filter(Worker.role.ilike(f"%{intent['role']}%"))
+    """Costruisce la queryset Mongo dei dipendenti a partire dall’intent."""
+    q = WorkerDoc.objects
+    role = intent.get("role")
+    if role:
+        q = q.filter(role__icontains=role)
+
     if intent.get("free_only"):
-        thr = intent.get("free_hours_threshold", 20.0)
-        q = (
-            q.filter(or_(Worker.availability.is_(None), Worker.availability != "OFF"))
-             .filter(or_(Worker.current_load.is_(None), Worker.current_load < thr))
-        )
-    q = q.order_by(Worker.role.asc(), Worker.name.asc())
-    return q
+        # Usa il campo booleano 'available'
+        q = q.filter(available=True)
+
+    return q.order_by("role", "name")
 
 
 def _remember_staff_ctx(intent: dict) -> None:
@@ -160,7 +164,7 @@ def _remember_staff_ctx(intent: dict) -> None:
             "role": intent.get("role"),
             "free_only": bool(intent.get("free_only", False)),
             "limit": int(intent.get("limit", 25)),
-            "free_hours_threshold": float(intent.get("free_hours_threshold", 20.0)),
+            "load_threshold_hours": float(intent.get("load_threshold_hours", intent.get("free_hours_threshold", 20.0))),
         },
     }
 
@@ -173,10 +177,11 @@ def _run_staff_intent(intent: dict) -> dict:
     op = intent.get("operation", "list")
     role = intent.get("role") or None
 
-    # Se manca il ruolo ma c’era nel turno precedente, riusalo
+    # Se manca il ruolo ma c’era nel turno precedente, riusalo SOLO se la query è anaforica
     if not role and session.get("staff_last") and session["staff_last"].get("intent", {}).get("role"):
-        role = session["staff_last"]["intent"]["role"]
-        intent["role"] = role
+        if _looks_like_anaphora(intent.get("question", "")) or intent.get("operation") == "clarify":
+            role = session["staff_last"]["intent"]["role"]
+            intent["role"] = role
 
     q = _query_workers(intent)
 
@@ -191,7 +196,8 @@ def _run_staff_intent(intent: dict) -> dict:
 
     # WHERE (località sintetizzata)
     if op == "where":
-        rows = q.limit(intent.get("limit", 25)).all()
+        rows = q.limit(intent.get("limit", 25))
+        rows = list(rows)
         if not rows:
             free_part = " liberi" if intent.get("free_only") else ""
             answer = f"Non ho trovato {role_plural(role)}{free_part}."
@@ -200,13 +206,13 @@ def _run_staff_intent(intent: dict) -> dict:
                     "staff_intent": intent, "staff": []}
 
         items = [{
-            "id": w.id,
-            "name": w.name,
-            "role": w.role,
-            "home_city": w.home_city,
-            "availability": w.availability,
-            "current_load": w.current_load,
-            "hourly_rate": w.hourly_rate,
+            "id": str(getattr(w, "id", "")),
+            "name": getattr(w, "name", None),
+            "role": getattr(w, "role", None),
+            "home_city": getattr(w, "home_city", None),
+            "availability": getattr(w, "availability", None),
+            "current_load": getattr(w, "current_load", None),
+            "hourly_rate": getattr(w, "hourly_rate", None),
         } for w in rows]
 
         cities = {i["home_city"] for i in items if i.get("home_city")}
@@ -244,16 +250,14 @@ def _run_staff_intent(intent: dict) -> dict:
     # ROLES (elenco ruoli con conteggi)
     if op == "roles":
         try:
-            roles_counts = (
-                db.session.query(Worker.role, func.count(Worker.id))
-                .group_by(Worker.role)
-                .order_by(Worker.role.asc())
-                .all()
-            )
+            roles_counts = list(WorkerDoc.objects.aggregate([
+                {"$group": {"_id": "$role", "count": {"$sum": 1}}},
+                {"$sort": {"_id": 1}}
+            ]))
             if not roles_counts:
                 answer = "Non ci sono ruoli registrati nel database dei dipendenti."
             else:
-                parts = [f"{(r or 'Senza ruolo').lower()}: {c}" for r, c in roles_counts]
+                parts = [f"{(r.get('_id') or 'Senza ruolo').lower()}: {int(r.get('count', 0))}" for r in roles_counts]
                 answer = "Ruoli presenti tra i dipendenti: " + ", ".join(parts) + "."
         except Exception as e:
             print(f"[staff roles error] {e}")
@@ -263,7 +267,7 @@ def _run_staff_intent(intent: dict) -> dict:
                 "staff_intent": intent}
 
     # LIST (default)
-    rows = q.limit(intent.get("limit", 25)).all()
+    rows = list(q.limit(intent.get("limit", 25)))
     if not rows:
         free_part = " liberi" if intent.get("free_only") else ""
         answer = f"Non ho trovato {role_plural(role)}{free_part}."
@@ -272,16 +276,16 @@ def _run_staff_intent(intent: dict) -> dict:
                 "staff_intent": intent, "staff": []}
 
     items = [{
-        "id": w.id,
-        "name": w.name,
-        "role": w.role,
-        "home_city": w.home_city,
-        "availability": w.availability,
-        "current_load": w.current_load,
-        "hourly_rate": w.hourly_rate,
+        "id": str(getattr(w, "id", "")),
+        "name": getattr(w, "name", None),
+        "role": getattr(w, "role", None),
+        "home_city": getattr(w, "home_city", None),
+        "availability": getattr(w, "availability", None),
+        "current_load": getattr(w, "current_load", None),
+        "hourly_rate": getattr(w, "hourly_rate", None),
     } for w in rows]
 
-    names = ", ".join(i["name"] for i in items)
+    names = ", ".join(i["name"] for i in items if i.get("name"))
     free_part = " liberi" if intent.get("free_only") else ""
     answer = f"Ecco i primi {len(items)} {role_plural(role)}{free_part}: {names}."
     _remember_staff_ctx(intent)
@@ -304,8 +308,13 @@ def _looks_like_material_query(q: str) -> bool:
     ql = q.lower()
     # trigger prezzo/costo
     has_price = any(t in ql for t in ["quanto costa", "prezzo", "costo", "quanto viene", "quanto è", "€/","eur/"])
-    # parole tipiche materiali
-    is_material = any(t in ql for t in ["cemento","cartongesso","piastrel","gres","intonaco","colla","stucco","sabbia","calce","rame","ferro","acciaio","bitume"])
+    # parole tipiche materiali + categorie opzionali
+    is_material = any(t in ql for t in [
+        "cemento","cartongesso","piastrel","gres","intonaco","colla","stucco","sabbia","calce",
+        "rame","ferro","acciaio","bitume",
+        # categorie opzionali
+        "leganti","premiscelati"
+    ])
     # collisione con "cartongessista": se c'è "cartongesso" consideralo materiale
     if "cartongesso" in ql:
         return has_price or is_material
@@ -361,33 +370,181 @@ def _material_name_guess(q: str) -> str:
     qn = re.sub(r"\s+", " ", qn).strip()
     return qn
 
+def _extract_sku_from_text(q: str) -> Optional[str]:
+    """
+    Se l'utente scrive un codice tipo CEM425R, catturarlo.
+    Regola semplice: 3–12 caratteri alfanumerici, almeno una lettera e un numero.
+    """
+    m = re.search(r"\b(?=[A-Z0-9]{3,12}\b)(?=[A-Z0-9]*[A-Z])(?=[A-Z0-9]*[0-9])[A-Z0-9]+\b", q.upper())
+    return m.group(0) if m else None
 
-def _lookup_material_in_db(name_like: str, unit: Optional[str]) -> Tuple[Optional[Material], int]:
-    """Cerca il materiale nel DB e ritorna (best_match, numero_corrispondenze)."""
+def _lookup_material_in_db(name_like: str, unit: Optional[str]) -> Tuple[Optional[MaterialDoc], int]:
+    """Cerca il materiale in MongoDB e ritorna (best_match, numero_corrispondenze).
+    Priorità: SKU esatto (case-insensitive), poi nome; bonus se categoria/subcategoria sono citate nel testo.
+    """
+    # 0) Se nell'input c'è uno SKU, prova match diretto
+    #    (recuperiamo anche l'unit perché arriva già calcolata a monte)
+    sku = _extract_sku_from_text(name_like or "")
+    if sku:
+        hit = MaterialDoc.objects(sku__iexact=sku).first()
+        if hit:
+            # 1 solo match, ritorna subito
+            return hit, 1
+
+    # 1) Fallback: match per nome (case-insensitive, contains)
     if not name_like:
         return None, 0
-    q = Material.query.filter(Material.name.ilike(f"%{name_like}%"))
+
+    q = MaterialDoc.objects(name__icontains=name_like)
     if unit:
-        q = q.filter(Material.unit.ilike(unit))
-    rows = q.order_by(Material.name.asc()).all()
+        q = q.filter(unit__iexact=unit)
+    rows = list(q.order_by("name"))
     if not rows:
-        return None, 0
+        # Seconda chance: cerca su category/subcategory se il nome è vago
+        q2 = MaterialDoc.objects(__raw__={
+            "$or": [
+                {"category": {"$regex": name_like, "$options": "i"}},
+                {"subcategory": {"$regex": name_like, "$options": "i"}},
+            ]
+        })
+        if unit:
+            q2 = q2.filter(unit__iexact=unit)
+        rows = list(q2.order_by("category", "subcategory", "name"))
+        if not rows:
+            return None, 0
 
-    nl = name_like.lower()
+    nl = (name_like or "").lower()
 
-    def _score(m: Material) -> int:
+    def _score(m: MaterialDoc) -> int:
         s = 0
-        if m.name.lower() == nl:
-            s += 2
-        if unit and (m.unit or "").lower() == (unit or "").lower():
-            s += 1
-        if m.name.lower().startswith(nl):
-            s += 1
+        name_lower = (getattr(m, "name", "") or "").lower()
+        unit_m = (getattr(m, "unit", "") or "").lower()
+        cat_l = (getattr(m, "category", "") or "").lower()
+        sub_l = (getattr(m, "subcategory", "") or "").lower()
+        sku_l = (getattr(m, "sku", "") or "").lower()
+
+        # Priorità a match forti
+        if sku and sku_l == sku.lower(): s += 100  # già gestito sopra, ma keep per coerenza
+        if name_lower == nl: s += 10
+        if name_lower.startswith(nl): s += 5
+        if nl in name_lower: s += 2
+
+        # Bonus se la query “somiglia” a categoria/subcategoria (es. "leganti", "premiscelati")
+        if nl and nl in cat_l: s += 2
+        if nl and nl in sub_l: s += 2
+
+        # Bonus se l'unità combacia
+        if unit and unit_m == (unit or "").lower(): s += 1
+
         return s
 
     rows.sort(key=_score, reverse=True)
     return rows[0], len(rows)
 
+# =============================================================================
+# 2b) MATERIALS: quick lookup endpoints (debug/test)
+# =============================================================================
+
+@api_bp.route("/materials/search", methods=["GET"])
+def materials_search():
+    """
+    Ricerca rapida materiali senza passare dalla chat.
+    Esempi:
+      /materials/search?q=cemento%2042.5r&unit=kg
+      /materials/search?q=leganti&unit=kg
+    """
+    q = (request.args.get("q") or "").strip()
+    unit = (request.args.get("unit") or "").strip() or None
+    if not q:
+        return jsonify({"error": "q is required"}), 400
+
+    m, matches = _lookup_material_in_db(q, unit)
+    if not m:
+        return jsonify({
+            "found": False,
+            "matches": 0,
+            "query": {"q": q, "unit": unit},
+        }), 200
+
+    mat = m.to_mongo().to_dict() if hasattr(m, "to_mongo") else {}
+    return jsonify({
+        "found": True,
+        "matches": matches,
+        "material": mat,
+    }), 200
+
+
+@api_bp.route("/materials/sku/<sku>", methods=["GET"])
+def materials_by_sku(sku: str):
+    """
+    Fetch diretto per SKU (case-insensitive).
+    Esempio: /materials/sku/CEM325R
+    """
+    if not sku:
+        return jsonify({"error": "sku is required"}), 400
+    hit = MaterialDoc.objects(sku__iexact=sku.strip().upper()).first()
+    if not hit:
+        return jsonify({"found": False, "sku": sku}), 200
+
+    return jsonify({
+        "found": True,
+        "material": hit.to_mongo().to_dict() if hasattr(hit, "to_mongo") else {},
+    }), 200
+
+# =============================================================================
+# 2c) HEALTH CHECKS
+# =============================================================================
+
+@api_bp.route("/health/app", methods=["GET"])
+def health_app():
+    """Liveness semplice dell'app."""
+    return jsonify({"ok": True}), 200
+
+
+@api_bp.route("/health/db", methods=["GET"])
+def health_db():
+    """Ping a MongoDB via mongoengine."""
+    try:
+        from mongoengine.connection import get_db
+        db = get_db()
+        db.command("ping")
+        return jsonify({"ok": True}), 200
+    except Exception as e:
+        return jsonify({"ok": False, "error": str(e)}), 500
+
+
+@api_bp.route("/health/qdrant", methods=["GET"])
+def health_qdrant():
+    """
+    Verifica la connettività con Qdrant:
+    - prova g.qdrant_client se presente
+    - altrimenti prova g.vector_store (se espone un client o un metodo di lista collezioni)
+    """
+    try:
+        qc = getattr(g, "qdrant_client", None)
+        if qc is not None:
+            # API standard python-client: get_collections()
+            _ = qc.get_collections()
+            return jsonify({"ok": True, "via": "g.qdrant_client"}), 200
+
+        vs = getattr(g, "vector_store", None)
+        if vs is None:
+            return jsonify({"ok": False, "error": "No qdrant_client or vector_store on g"}), 500
+
+        # Tentativi comuni sui wrapper
+        if hasattr(vs, "client") and hasattr(vs.client, "get_collections"):
+            _ = vs.client.get_collections()
+            return jsonify({"ok": True, "via": "vector_store.client"}), 200
+
+        # Alcuni wrapper espongono direttamente un metodo
+        for meth in ("get_collections", "list_collections", "collections"):
+            if hasattr(vs, meth) and callable(getattr(vs, meth)):
+                _ = getattr(vs, meth)()
+                return jsonify({"ok": True, "via": f"vector_store.{meth}()"}), 200
+
+        return jsonify({"ok": False, "error": "Cannot detect Qdrant connectivity methods"}), 500
+    except Exception as e:
+        return jsonify({"ok": False, "error": str(e)}), 500
 
 # =============================================================================
 # 3) Upload / Documenti (RAG)
@@ -492,9 +649,8 @@ def chat():
             # Fallback per versioni che accettano parametri espliciti
             res = make_estimate_from_text(
                 question=question,
-                db=db,
-                materials_model=Material,
-                workers_model=Worker,
+                materials_model=MaterialDoc,
+                workers_model=WorkerDoc,
             )
         except Exception as e:
             return jsonify({
@@ -602,7 +758,7 @@ def chat():
             "role": role,
             "free_only": free_only,
             "limit": 25,
-            "free_hours_threshold": 20.0,
+            "load_threshold_hours": 20.0,
         }
 
         # follow-up
@@ -670,28 +826,48 @@ def chat():
                     "matches": 0,
                 }), 200
 
-            price = m.unit_price_eur_2025
-            unit_label = m.unit or unit or ""
+            price = getattr(m, "unit_price_eur_2025", None)
+            unit_label = getattr(m, "unit", None) or unit or ""
             if price is None:
                 return jsonify({
                     "handled": True,
-                    "answer": f"‘{m.name}’ è presente nel database ma non ha un prezzo impostato.",
-                    "material": m.to_dict(),
+                    "answer": f"‘{getattr(m, 'name', 'Materiale')}’ è presente nel database ma non ha un prezzo impostato.",
+                    "material": m.to_mongo().to_dict() if hasattr(m, "to_mongo") else {},
                     "found": True,
                     "matches": matches,
                 }), 200
 
+            mat_dict = m.to_mongo().to_dict() if hasattr(m, "to_mongo") else {}
+            stock = mat_dict.get("stock_qty")
+            lead = mat_dict.get("lead_time_days")
+            vat = mat_dict.get("vat_rate")
+
+            extra_bits = []
+            if isinstance(stock, (int, float)):
+                extra_bits.append(f"stock: {int(stock)} {unit_label}")
+            if isinstance(lead, (int, float)):
+                extra_bits.append(f"lead time: {int(lead)} giorni")
+            if isinstance(vat, (int, float)):
+                extra_bits.append(f"IVA: {int(vat)}%")
+
+            extra_str = (" (" + ", ".join(extra_bits) + ")") if extra_bits else ""
+
             return jsonify({
                 "handled": True,
-                "answer": f"Il prezzo di {m.name} è {price:.2f} €/{unit_label}.",
-                "material": m.to_dict(),
+                "answer": f"Il prezzo di {m.name} è {price:.2f} €/{unit_label}{extra_str}.",
+                "material": mat_dict,
                 "price": price,
                 "unit": unit_label,
                 "found": True,
                 "matches": matches,
             }), 200
     except Exception as e:
-        print(f"[API.chat][materials-routing] error: {e}")
+        return jsonify({
+            "handled": False,
+            "topic": "materials",
+            "answer": "Errore durante il recupero del materiale dal database.",
+            "error": str(e),
+        }), 200
 
     # -------------------- RAG / WEB GENERICO --------------------
     pol = decide_policy(question)

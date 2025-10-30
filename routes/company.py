@@ -7,12 +7,10 @@ from typing import List, Dict
 
 from flask import Blueprint, jsonify, request, current_app, g
 from werkzeug.utils import secure_filename
-from sqlalchemy import func
 
-from models import db
-from models.worker import Worker
-from models.project import Project
-from models.material import Material
+from models_mongo.worker import WorkerDoc
+from models_mongo.project import ProjectDoc
+from models_mongo.material import MaterialDoc
 
 company_bp = Blueprint("company", __name__, url_prefix="/api/company")
 
@@ -56,49 +54,51 @@ def company_overview():
     today = date.today()
 
     # Operai totali
-    workers_total = db.session.scalar(
-        db.select(func.count()).select_from(Worker)
-    ) or 0
+    try:
+        workers_total = WorkerDoc.objects.count()
+    except Exception:
+        workers_total = 0
 
-    # Progetti
-    projects_total = db.session.scalar(
-        db.select(func.count()).select_from(Project)
-    ) or 0
+    # Progetti totali
+    try:
+        projects_total = ProjectDoc.objects.count()
+    except Exception:
+        projects_total = 0
 
-    # Materiali
-    materials_total = db.session.scalar(
-        db.select(func.count()).select_from(Material)
-    ) or 0
+    # Materiali totali
+    try:
+        materials_total = MaterialDoc.objects.count()
+    except Exception:
+        materials_total = 0
 
-    # Progetti confermati
-    active_projects = db.session.scalar(
-        db.select(func.count())
-        .select_from(Project)
-        .where(func.lower(func.coalesce(Project.status, "")) == "confermato")
-    ) or 0
+    # Progetti confermati (case-insensitive: "Confermato")
+    try:
+        active_projects = ProjectDoc.objects(status__iexact="Confermato").count()
+    except Exception:
+        active_projects = 0
 
     # Lista nomi progetti confermati (max 10)
-    active_projects_list = [
-        name
-        for (name,) in db.session.execute(
-            db.select(Project.name)
-            .where(func.lower(func.coalesce(Project.status, "")) == "confermato")
-            .order_by(Project.id.desc())
-            .limit(10)
-        ).all()
-    ]
+    try:
+        active_projects_list = [
+            getattr(p, "name", None)
+            for p in ProjectDoc.objects(status__iexact="Confermato").only("name").order_by("-id").limit(10)
+        ]
+    except Exception:
+        active_projects_list = []
 
-    # Ruoli (tutti)
-    roles_breakdown = dict(
-        db.session.execute(
-            db.select(Worker.role, func.count()).group_by(Worker.role)
-        ).all()
-    )
+    # Ruoli (tutti) con conteggio e disponibili
+    try:
+        col = WorkerDoc._get_collection()
+        agg_total = list(col.aggregate([{ "$group": { "_id": "$role", "count": { "$sum": 1 } } }]))
+        roles_breakdown = { (r.get("_id") or "Senza ruolo"): int(r.get("count", 0)) for r in agg_total }
+    except Exception:
+        roles_breakdown = {}
 
-    # Operai disponibili (available = 1)
-    active_workers = db.session.scalar(
-        db.select(func.count()).select_from(Worker).where(Worker.available.is_(True))
-    ) or 0
+    # Operai disponibili (available = True)
+    try:
+        active_workers = WorkerDoc.objects(available=True).count()
+    except Exception:
+        active_workers = 0
 
     # Documenti aziendali (FS)
     documents_total = len(_list_company_docs())

@@ -30,7 +30,8 @@ def add_work(
     duration_estimated: float,
     workers: Optional[List[str]] = None
 ) -> None:
-    """Add a work item to a project."""
+    """Add a work item to a project, with automatic number_of_workers count."""
+    worker_list = workers or []
     work = {
         "work_name": work_name,
         "status": "planned",
@@ -40,7 +41,8 @@ def add_work(
         "end_date_actual": None,
         "duration_estimated_hours": duration_estimated,
         "duration_actual_hours": None,
-        "workers": workers or []
+        "number_of_workers": len(worker_list),
+        "workers": worker_list
     }
     project["works"].append(work)
 
@@ -63,29 +65,30 @@ def save_project(project: dict, filename: str) -> None:
 # ✅ Example usage
 if __name__ == "__main__":
     project = create_new_project(
-        project_id="PRJ-2025-003",
-        name="Warehouse Renovation",
-        address="Via Verdi 10, Bologna, Italy"
+        project_id="PRJ-2025-004",
+        name="New School Building",
+        address="Via Dante 20, Florence, Italy"
     )
 
     add_work(
         project,
-        work_name="Demolition",
-        start_planned="2025-11-05",
-        end_planned="2025-11-10",
-        duration_estimated=40,
-        workers=["WRK-101", "WRK-102"]
+        work_name="Excavation",
+        start_planned="2025-11-01",
+        end_planned="2025-11-05",
+        duration_estimated=50,
+        workers=["WRK-201", "WRK-202", "WRK-203"]
     )
 
     add_work(
         project,
-        work_name="Floor reconstruction",
-        start_planned="2025-11-11",
-        end_planned="2025-11-20",
-        duration_estimated=60
+        work_name="Concrete foundations",
+        start_planned="2025-11-06",
+        end_planned="2025-11-15",
+        duration_estimated=80,
+        workers=["WRK-204", "WRK-205"]
     )
 
-    update_work_status(project, "Demolition", "completed")
+    update_work_status(project, "Excavation", "completed")
 
-    save_project(project, "warehouse_project.json")
-    print("✅ Project saved as warehouse_project.json")
+    save_project(project, "school_project.json")
+    print("✅ Project saved as school_project.json")

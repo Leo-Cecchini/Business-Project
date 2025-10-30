@@ -1,12 +1,40 @@
 from __future__ import annotations
-from flask import Blueprint, request, jsonify
-from io import StringIO
-import csv
+from flask import Blueprint, request, jsonify, abort
 
-from models import db
-from models.material import Material
+# Mongo modell
+from models_mongo.material import MaterialDoc
 
-materials_bp = Blueprint("materials", __name__)
+materials_bp = Blueprint("materials", __name__, url_prefix="/api/materials")
+
+# ------------------------------
+# Helpers
+# ------------------------------
+
+def _to_float(s):
+    if s is None or s == "":
+        return None
+    try:
+        return float(str(s).replace(",", ".").strip())
+    except Exception:
+        return None
+
+
+def _doc_to_dict(doc: MaterialDoc) -> dict:
+    return {
+        "id": doc.id,
+        "name": doc.name,
+        "category": getattr(doc, "category", None),
+        "subcategory": getattr(doc, "subcategory", None),
+        "unit": getattr(doc, "unit", None),
+        "unit_price_eur_2025": getattr(doc, "unit_price_eur_2025", None),
+        "vat_rate": getattr(doc, "vat_rate", None),
+        "supplier": getattr(doc, "supplier", None),
+        "sku": getattr(doc, "sku", None),
+        "stock_qty": getattr(doc, "stock_qty", None),
+        "lead_time_days": getattr(doc, "lead_time_days", None),
+        "notes": getattr(doc, "notes", None),
+    }
+
 
 # --------------------------------------------------------------------
 # LISTA / FILTRI
@@ -14,7 +42,7 @@ materials_bp = Blueprint("materials", __name__)
 # --------------------------------------------------------------------
 @materials_bp.route("/", methods=["GET"])
 def list_materials():
-    q = Material.query
+    qs = MaterialDoc.objects
 
     txt = (request.args.get("q") or "").strip()
     cat = (request.args.get("category") or "").strip()
@@ -24,30 +52,30 @@ def list_materials():
     limit = min(200, max(1, limit))
 
     if txt:
-        like = f"%{txt}%"
-        q = q.filter(Material.name.ilike(like))
+        qs = qs.filter(name__icontains=txt)
     if cat:
-        q = q.filter(Material.category.ilike(cat))
+        qs = qs.filter(category__icontains=cat)
     if sub:
-        q = q.filter(Material.subcategory.ilike(sub))
+        qs = qs.filter(subcategory__icontains=sub)
     if unit:
-        q = q.filter(Material.unit.ilike(unit))
+        qs = qs.filter(unit__iexact=unit)
 
-    q = q.order_by(Material.category.asc(), Material.name.asc())
-    rows = q.limit(limit).all()
-    return jsonify([r.to_dict() for r in rows])
+    qs = qs.order_by("category", "name")
+    rows = qs.limit(limit)
+    return jsonify([_doc_to_dict(r) for r in rows])
 
 
 # --------------------------------------------------------------------
 # DETTAGLIO
 # GET /api/materials/123
 # --------------------------------------------------------------------
-@materials_bp.route("/<int:material_id>", methods=["GET"])
-def get_material(material_id: int):
-    m = Material.query.get(material_id)
-    if not m:
+@materials_bp.route("/<material_id>", methods=["GET"])
+def get_material(material_id: str):
+    try:
+        m = MaterialDoc.objects.get(id=str(material_id))
+    except Exception:
         return jsonify({"error": "not found"}), 404
-    return jsonify(m.to_dict())
+    return jsonify(_doc_to_dict(m))
 
 
 # --------------------------------------------------------------------
@@ -58,95 +86,31 @@ def get_material(material_id: int):
 @materials_bp.route("/", methods=["POST"])
 def create_material():
     data = request.get_json(force=True)
-    m = Material(
-        name=data["name"],
-        category=data.get("category"),
-        subcategory=data.get("subcategory"),
-        unit=data["unit"],
-        unit_price_eur_2025=data.get("unit_price_eur_2025"),
-        vat_rate=data.get("vat_rate", 22.0),
-        supplier=data.get("supplier"),
-        sku=data.get("sku"),
-        stock_qty=data.get("stock_qty", 0.0),
-        lead_time_days=data.get("lead_time_days", 0),
-        notes=data.get("notes"),
+    name = (data.get("name") or "").strip()
+    unit = (data.get("unit") or "").strip().lower()
+    sku = (data.get("sku") or "").strip().upper()
+    if not name or not unit or not sku:
+        return jsonify({"error": "name, unit e sku sono obbligatori"}), 422
+
+    # chiave stabile basata su (sku, unit)
+    _id = (data.get("id") or f"{sku}|{unit}")
+
+    MaterialDoc.objects(id=_id).update_one(
+        set__name=name,
+        set__category=(data.get("category") or None),
+        set__subcategory=(data.get("subcategory") or None),
+        set__unit=unit,
+        set__unit_price_eur_2025=(data.get("unit_price_eur_2025") if data.get("unit_price_eur_2025") not in (None, "") else data.get("price")),
+        set__vat_rate=_to_float(data.get("vat_rate")) if data.get("vat_rate") not in (None, "") else 22.0,
+        set__supplier=(data.get("supplier") or None),
+        set__sku=sku,
+        set__stock_qty=_to_float(data.get("stock_qty")) if data.get("stock_qty") not in (None, "") else 0.0,
+        set__lead_time_days=int(_to_float(data.get("lead_time_days")) or 0),
+        set__notes=(data.get("notes") or None),
+        upsert=True,
     )
-    db.session.add(m)
-    db.session.commit()
+    m = MaterialDoc.objects.get(id=_id)
     return jsonify({"id": m.id}), 201
-
-
-# --------------------------------------------------------------------
-# IMPORT CSV (UPSERT su (name, unit))
-# POST /api/materials/import-csv  (multipart form con file=@...)
-# Accetta sia 'unit_price_eur_2025' che 'price' come colonna prezzo.
-# --------------------------------------------------------------------
-@materials_bp.route("/import-csv", methods=["POST"])
-def import_materials_csv():
-    """
-    CSV header esempio:
-    name,category,subcategory,unit,unit_price_eur_2025,vat_rate,supplier,sku,stock_qty,lead_time_days,notes
-    oppure con 'price' al posto di 'unit_price_eur_2025'
-    """
-    if "file" not in request.files:
-        return jsonify({"error": "no file"}), 400
-
-    f = request.files["file"]
-    text = f.read().decode("utf-8-sig")  # gestisce eventuale BOM
-    reader = csv.DictReader(StringIO(text))
-
-    def _to_float(s):
-        if s is None or s == "":
-            return None
-        return float(str(s).replace(",", ".").strip())
-
-    created, updated, errors = 0, 0, []
-    for i, row in enumerate(reader, start=1):
-        try:
-            name = (row.get("name") or "").strip()
-            unit = (row.get("unit") or "").strip()
-            if not name or not unit:
-                errors.append(f"row {i}: name/unit mancanti")
-                continue
-
-            existing = Material.query.filter_by(name=name, unit=unit).first()
-            target = existing or Material(name=name, unit=unit)
-
-            target.category = (row.get("category") or None)
-            target.subcategory = (row.get("subcategory") or None)
-
-            # --- Punto 2: accetta unit_price_eur_2025 O price ---
-            price_val = None
-            if row.get("unit_price_eur_2025"):
-                price_val = _to_float(row.get("unit_price_eur_2025"))
-            elif row.get("price"):
-                price_val = _to_float(row.get("price"))
-            target.unit_price_eur_2025 = price_val
-
-            vr = row.get("vat_rate")
-            target.vat_rate = _to_float(vr) if vr not in (None, "") else 22.0
-
-            target.supplier = (row.get("supplier") or None)
-            target.sku = (row.get("sku") or None)
-
-            sq = row.get("stock_qty")
-            target.stock_qty = _to_float(sq) if sq not in (None, "") else 0.0
-
-            ltd = row.get("lead_time_days")
-            target.lead_time_days = int(float(ltd)) if ltd not in (None, "") else 0
-
-            target.notes = (row.get("notes") or None)
-
-            db.session.add(target)
-            if existing:
-                updated += 1
-            else:
-                created += 1
-        except Exception as e:
-            errors.append(f"row {i}: {e}")
-
-    db.session.commit()
-    return jsonify({"created": created, "updated": updated, "errors": errors})
 
 
 # --------------------------------------------------------------------
@@ -161,20 +125,19 @@ def lookup_material():
     if not name:
         return jsonify({"error": "param 'name' richiesto"}), 400
 
-    q = Material.query.filter(Material.name.ilike(f"%{name}%"))
+    qs = MaterialDoc.objects(name__icontains=name)
     if unit:
-        q = q.filter(Material.unit.ilike(unit))
+        qs = qs.filter(unit__iexact=unit)
 
-    rows = q.order_by(Material.name.asc()).all()
+    rows = list(qs.order_by("name"))
     if not rows:
         return jsonify({"found": False, "matches": 0})
 
-    # preferisci match esatto su name+unit (case insensitive)
-    def _score(m: Material) -> int:
+    def _score(m: MaterialDoc) -> int:
         score = 0
-        if m.name.lower() == name.lower():
+        if (m.name or "").lower() == name.lower():
             score += 2
-        if unit and m.unit.lower() == unit.lower():
+        if unit and (m.unit or "").lower() == unit.lower():
             score += 1
         return score
 
@@ -183,7 +146,7 @@ def lookup_material():
     return jsonify({
         "found": True,
         "matches": len(rows),
-        "material": best.to_dict(),
+        "material": _doc_to_dict(best),
         "price": best.unit_price_eur_2025,
         "unit": best.unit
     })

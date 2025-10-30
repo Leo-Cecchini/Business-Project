@@ -24,3 +24,7 @@ PyPDF2==3.0.*
 # --- Web retrieval ---
 duckduckgo-search==6.*
 trafilatura==1.7.*
+
+# --- Database ---
+pymongo==4.*
+mongoengine==0.29.*
