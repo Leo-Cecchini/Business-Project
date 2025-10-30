@@ -6,10 +6,13 @@ class WorkerDoc(Document):
         "indexes": [
             "name",
             "role",
-            {"fields": ["available"], "name": "w_available"}
+            {"fields": ["available"]}, 
+            {"fields": ["name", "role", "home_city"], "unique": True},
         ]
     }
-    id = StringField(primary_key=True)  # dagli JSON (ID/id/_id → normalizzato nello script)
+
+    
+    id = StringField(primary_key=True)
     name = StringField(required=True)
     role = StringField(required=True)
     hourly_rate = FloatField()

@@ -32,6 +32,57 @@ from typing import List, Dict, Any
 from db.mongo import init_mongo, ensure_mongo_indexes
 
 # -----------------------------
+# Normalization helpers
+# -----------------------------
+UNIT_MAP = {
+    "mq": "m2", "m²": "m2",
+    "mc": "m3", "m³": "m3",
+    "l": "lt", "litri": "lt",
+    "pezzi": "pz", "pezzo": "pz", "cart": "pz", "bomb": "pz"
+}
+
+def _as_bool(v):
+    if isinstance(v, bool):
+        return v
+    s = str(v or "").strip().lower()
+    return s in {"1", "true", "si", "sì", "yes", "y"}
+
+def _as_float(v):
+    if v is None:
+        return None
+    if isinstance(v, (int, float)):
+        return float(v)
+    s = str(v)
+    s = s.replace(",", ".")  # decimali con virgola → punto
+    import re as _re
+    m = _re.search(r"(-?\d+(?:\.\d+)?)", s)
+    return float(m.group(1)) if m else None
+
+def _as_int(v):
+    f = _as_float(v)
+    return int(f) if f is not None else None
+
+def _as_list_csv(v):
+    if v is None:
+        return []
+    if isinstance(v, list):
+        return sorted({str(x).strip() for x in v if str(x).strip()})
+    parts = [p.strip() for p in str(v).split(",")]
+    return sorted({p for p in parts if p})
+
+def _norm_unit(u: str | None) -> str | None:
+    if not u:
+        return None
+    u = str(u).strip().lower()
+    return UNIT_MAP.get(u, u)
+
+def _capName(name: str | None) -> str:
+    if not name:
+        return ""
+    return " ".join(w.capitalize() for w in str(name).strip().split())
+
+
+# -----------------------------
 # Utilities
 # -----------------------------
 
@@ -58,35 +109,55 @@ def _resolve_default(path_hint: str) -> str | None:
 # Workers
 # -----------------------------
 
-def upsert_workers(path: str) -> tuple[int, int]:
+def upsert_workers(path: str) -> tuple[int, int, list[str]]:
     data = _load_json(path)
     if not isinstance(data, list):
         raise ValueError("workers.json deve contenere una lista di oggetti")
 
     created, updated = 0, 0
-    for r in data:
-        if not isinstance(r, dict):
-            continue
-        _id = str(r.get("id") or r.get("_id") or r.get("code") or r.get("name") or "").strip()
-        if not _id:
-            # salta record senza id identificabile
-            continue
-        exists = WorkerDoc.objects(id=_id).first() is not None
-        WorkerDoc.objects(id=_id).update_one(
-            set__name=r.get("name"),
-            set__role=r.get("role"),
-            set__hourly_rate=r.get("hourly_rate"),
-            set__available=bool(r.get("available", True)),
-            set__home_city=r.get("home_city"),
-            set__skills=r.get("skills") or [],
-            set__certifications=r.get("certifications") or [],
-            upsert=True,
-        )
-        if exists:
-            updated += 1
-        else:
-            created += 1
-    return created, updated
+    errors: list[str] = []
+    for i, r in enumerate(data, start=1):
+        try:
+            if not isinstance(r, dict):
+                continue
+            name = (r.get("name") or "").strip()
+            role = (r.get("role") or "").strip()
+            home_city = (r.get("home_city") or "").strip()
+            if not name or not role:
+                errors.append(f"row {i}: name/role mancanti")
+                continue
+
+            # id: usa id/ID/_id se presente, altrimenti chiave logica name|role|home_city
+            raw_id = (r.get("id") or r.get("ID") or r.get("_id") or "").strip()
+            _id = raw_id or f"{name}|{role}|{home_city}"
+
+            payload = {
+                "id": _id,
+                "name": _capName(name),
+                "role": role.strip(),
+                "hourly_rate": _as_float(r.get("hourly_rate")),
+                "available": _as_bool(r.get("available", True)),
+                "home_city": _capName(home_city),
+                "skills": _as_list_csv(r.get("skills")),
+                "certifications": _as_list_csv(r.get("certifications")),
+            }
+
+            existing = WorkerDoc.objects(id=_id).first()
+            if existing:
+                existing.modify(**{k: v for k, v in payload.items() if k != "id"})
+                updated += 1
+            else:
+                # prova match per chiave logica se ID differente
+                clash = WorkerDoc.objects(name=payload["name"], role=payload["role"], home_city=payload["home_city"]).first()
+                if clash:
+                    clash.modify(**{k: v for k, v in payload.items() if k != "id"})
+                    updated += 1
+                else:
+                    WorkerDoc(**payload).save()
+                    created += 1
+        except Exception as e:
+            errors.append(f"row {i}: {e}")
+    return created, updated, errors
 
 
 # -----------------------------
@@ -104,30 +175,41 @@ def upsert_materials(path: str) -> tuple[int, int, List[str]]:
         try:
             if not isinstance(r, dict):
                 continue
-            name = (r.get("name") or "").strip()
-            unit = (r.get("unit") or "").strip()
+            name = _capName(r.get("name"))
+            unit = _norm_unit(r.get("unit"))
             if not name or not unit:
                 errors.append(f"row {i}: name/unit mancanti")
                 continue
-            _id = f"{name}|{unit}"
-            exists = MaterialDoc.objects(id=_id).first() is not None
-            MaterialDoc.objects(id=_id).update_one(
-                set__name=name,
-                set__category=r.get("category"),
-                set__subcategory=r.get("subcategory"),
-                set__unit=unit,
-                set__unit_price_eur_2025=r.get("unit_price_eur_2025") or r.get("price"),
-                set__vat_rate=r.get("vat_rate"),
-                set__supplier=r.get("supplier"),
-                set__sku=r.get("sku"),
-                set__stock_qty=r.get("stock_qty"),
-                set__lead_time_days=r.get("lead_time_days"),
-                set__notes=r.get("notes"),
-                upsert=True,
-            )
-            if exists:
+
+            sku = (r.get("sku") or "").strip().upper() or None
+
+            _id = str(r.get("id") or r.get("_id") or sku or f"{name}|{unit}")
+
+            payload = {
+                "id": _id,
+                "name": name,
+                "category": r.get("category"),
+                "subcategory": r.get("subcategory"),
+                "unit": unit,
+                "unit_price_eur_2025": _as_float(r.get("unit_price_eur_2025") or r.get("price")),
+                "supplier": r.get("supplier"),
+                "vat_rate": _as_float(r.get("vat_rate")),
+                "sku": sku,
+                "stock_qty": _as_float(r.get("stock_qty")),
+                "lead_time_days": _as_int(r.get("lead_time_days")),
+                "notes": r.get("notes"),
+            }
+
+            existing = MaterialDoc.objects(id=_id).first()
+            if not existing and sku:
+                # rispetta l'unicità dello SKU (se già presente, aggiorna quel record)
+                existing = MaterialDoc.objects(sku=sku).first()
+
+            if existing:
+                existing.modify(**{k: v for k, v in payload.items() if k != "id"})
                 updated += 1
             else:
+                MaterialDoc(**payload).save()
                 created += 1
         except Exception as e:
             errors.append(f"row {i}: {e}")
@@ -155,8 +237,12 @@ def main():
     m_path = _resolve_default(args.materials)
 
     if w_path:
-        w_new, w_upd = upsert_workers(w_path)
+        w_new, w_upd, w_err = upsert_workers(w_path)
         print(f"[workers] {w_new} inseriti, {w_upd} aggiornati (file: {w_path})")
+        if w_err:
+            print(f"[workers] errori: {len(w_err)}")
+            for e in w_err[:10]:
+                print(" -", e)
     else:
         print("[workers] nessun file trovato (cercati workers.json e data/workers.json)")
 

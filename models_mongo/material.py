@@ -5,8 +5,8 @@ class MaterialDoc(Document):
         "collection": "materials",
         "indexes": [
             "name", "category", "subcategory",
-            {"fields": ["sku"], "unique": True, "name": "m_sku"},
-            {"fields": ["unit"], "name": "m_unit"}
+            {"fields": ["sku"], "unique": True},
+            {"fields": ["unit"]}
         ]
     }
     id = StringField(primary_key=True)           # normalizzato a stringa nello script

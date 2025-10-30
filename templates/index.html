@@ -61,6 +61,13 @@
     .field{display:flex;flex-direction:column;gap:6px}
     .field label{font-size:12px;color:#374151;font-weight:600}
     .field input,.field select,.field textarea{padding:10px 12px;border:1px solid var(--border);border-radius:10px}
+    .checkbox-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px}
+    .checkbox-grid label{border:1px solid var(--border);border-radius:10px;padding:8px;background:#fff}
+    .checkbox-grid input[type="checkbox"]{transform:translateY(1px)}
+    .chips{display:flex;flex-wrap:wrap;gap:6px;margin-bottom:6px}
+    .chip{display:inline-flex;align-items:center;gap:6px;background:#eef2ff;border:1px solid var(--border);border-radius:999px;padding:4px 8px;font-size:12px}
+    .chip button{all:unset;cursor:pointer;font-weight:700;opacity:.6}
+    .chip button:hover{opacity:1}
     .actions-end{display:flex;justify-content:flex-end;gap:8px;margin-top:14px}
 
     /* Toggle switch */
@@ -244,13 +251,28 @@
       <h3>Nuovo operaio</h3>
       <form id="addWorkerForm">
         <div class="form-grid">
-          <div class="field"><label for="w_id">ID (opz.)</label><input id="w_id" placeholder="es. W-1234"></div>
           <div class="field"><label for="w_name">Nome</label><input id="w_name" required></div>
-          <div class="field"><label for="w_role">Ruolo</label><input id="w_role" required></div>
+          <div class="field"><label for="w_role_sel">Ruoli</label>
+            <div id="w_role_chips" class="chips"></div>
+            <select id="w_role_sel"></select>
+            <small>Seleziona dal menu per aggiungere (max 3)</small>
+          </div>
           <div class="field"><label for="w_rate">Tariffa oraria (€)</label><input id="w_rate" type="number" step="0.01" min="0" required></div>
-          <div class="field"><label for="w_city">Città base</label><input id="w_city"></div>
-          <div class="field"><label for="w_certs">Certificazioni (comma)</label><input id="w_certs" placeholder="PONTEGGI, PES, DPI III..."></div>
-          <div class="field" style="grid-column: span 2"><label for="w_skills">Competenze</label><input id="w_skills" placeholder="muratura, cartongesso, elettrico"></div>
+          <div class="field"><label for="w_city_sel">Città (base + aggiuntive)</label>
+            <div id="w_city_chips" class="chips"></div>
+            <select id="w_city_sel"></select>
+            <small>Seleziona dal menu per aggiungere (max 3)</small>
+          </div>
+          <div class="field"><label for="w_certs_sel">Certificazioni</label>
+            <div id="w_certs_chips" class="chips"></div>
+            <select id="w_certs_sel"></select>
+            <small>Seleziona dal menu per aggiungere (max 3)</small>
+          </div>
+          <div class="field" style="grid-column: span 2"><label for="w_skills_sel">Competenze</label>
+            <div id="w_skills_chips" class="chips"></div>
+            <select id="w_skills_sel"></select>
+            <small>Seleziona dal menu per aggiungere (max 3)</small>
+          </div>
           <div class="field">
             <label>Disponibile</label>
             <label class="switch"><input id="w_available" type="checkbox" checked><span class="slider"></span></label>
@@ -271,7 +293,7 @@
       <form id="removeWorkerForm">
         <div class="field" style="max-width:320px">
           <label for="remove_id">ID dipendente</label>
-          <input id="remove_id" placeholder="es. W-1001" required>
+          <input id="remove_id" placeholder="ID operaio (es. W-1048)" required>
         </div>
         <div class="actions-end">
           <button type="button" class="btn" data-close="#removeWorkerModal">Annulla</button>
@@ -349,14 +371,253 @@
     function closeModal(id){ $(id)?.classList.remove('open'); }
     function toast(msg){ const t=$("#toast"); t.textContent=msg; t.classList.add('show'); setTimeout(()=>t.classList.remove('show'),2200); }
 
-    function updateKPI(){
-      $("#kpiWorkers").textContent = state.workers.length;
-      $("#kpiProjects").textContent = state.projects.length;
-      const attivi = state.projects.filter(p => p.stato === 'Confermato').length;
-      $("#kpiActiveProjects").textContent = attivi;
-      const disponibili = state.workers.filter(w => w.available).length;
-      $("#kpiActiveWorkers").textContent = disponibili;
-      $("#kpiDocs").textContent = document.querySelectorAll('#documentsList .doc-row').length || '—';
+    // Helper per chiamate API JSON
+    function apiURL(path){
+      if (/^https?:\/\//.test(path)) return path;
+      const base = window.API_BASE || (location.origin && location.origin !== 'null' ? location.origin : 'http://127.0.0.1:5001');
+      return base.replace(/\/$/, '') + path;
+    }
+
+  async function fetchJSON(url, opts = {}){
+    // base assoluta
+    const base = apiURL(url);
+    // cache-buster
+    const full = base + (base.includes('?') ? '&' : '?') + '_ts=' + Date.now();
+
+    const res = await fetch(full, {
+      cache: 'no-store',
+      headers: {
+        'Content-Type': 'application/json',
+        'Cache-Control': 'no-cache'
+      },
+      credentials: 'same-origin',
+      ...opts
+    });
+
+    const text = await res.text();
+    let data; try { data = text ? JSON.parse(text) : {}; } catch { data = { raw: text }; }
+    if(!res.ok){ throw new Error(data?.error || text || `HTTP ${res.status}`); }
+    return data;
+  }
+
+    // === Opzioni per tendine (ruolo, città, certificazioni, competenze) ===
+    const ROLE_OPTIONS = [
+      "Operaio edile", "Muratore", "Carpentiere", "Ferraiolo", "Piastrellista",
+      "Imbianchino", "Cartongessista", "Capo cantiere", "Preposto",
+      "Elettricista", "Idraulico", "Termoidraulico", "Gruista",
+      "Escavatorista", "Magazziniere", "Geometra", "Tecnico sicurezza (HSE)", "RSPP"
+    ];
+
+    // Principali città italiane
+    const CITY_OPTIONS = [
+      "Roma", "Milano", "Napoli", "Torino", "Palermo", "Genova", "Bologna", "Firenze", "Bari", "Catania",
+      "Venezia", "Verona", "Messina", "Padova", "Trieste", "Taranto", "Brescia", "Parma", "Modena", "Reggio Calabria",
+      "Reggio Emilia", "Perugia", "Livorno", "Ravenna", "Cagliari", "Foggia", "Rimini", "Salerno", "Ferrara", "Sassari"
+    ];
+
+    // Certificazioni tipiche nel settore edilizia (DM 2/9/21 antincendio; Accordo Stato-Regioni attrezzature; lavori in quota/DPI III; spazi confinati)
+    const CERT_OPTIONS = [
+      // Antincendio D.M. 2/9/2021 (Livelli)
+      "Addetto antincendio – Livello 1 (ex rischio basso)",
+      "Addetto antincendio – Livello 2 (ex rischio medio)",
+      "Addetto antincendio – Livello 3 (ex rischio alto)",
+      // Lavori in quota / DPI III categoria
+      "Lavori in quota", "DPI III categoria (imbracature)",
+      // Spazi confinati (D.Lgs. 81/08, DPR 177/2011)
+      "Spazi confinati",
+      // Impianti elettrici
+      "PES/PAV/PEI",
+      // Ponteggi
+      "Ponteggi – PIMUS (montaggio/smontaggio/trasformazione)",
+      // Attrezzature – Accordo Stato-Regioni 22/02/2012 (e aggiornamenti)
+      "PLE – Piattaforme di Lavoro Elevabili",
+      "Carrelli elevatori industriali",
+      "Gru a torre",
+      "Gru su autocarro",
+      "Gru mobili",
+      "Escavatori idraulici",
+      "Pale caricatrici frontali",
+      "Terne",
+      "Autoribaltabili a cingoli",
+      "Pompe per calcestruzzo"
+    ];
+
+    const SKILL_OPTIONS = [
+      "muratura", "cassaforma", "armatura ferro", "posa impianti", "cartongesso",
+      "intonaci", "pavimentazioni", "posa piastrelle", "impermeabilizzazioni",
+      "coordinamento", "caposquadra", "lettura disegni", "preventivazione",
+      "sicurezza", "pianificazione", "posa serramenti", "finiture"
+    ];
+
+    function renderCheckboxes(containerId, options, cls){
+      const box = document.getElementById(containerId);
+      if(!box) return; box.innerHTML = '';
+      options.forEach(v => {
+        const id = `${cls}-` + v.replace(/[^a-z0-9]+/gi,'-').toLowerCase();
+        const label = document.createElement('label');
+        label.style.display = 'flex';
+        label.style.alignItems = 'center';
+        label.style.gap = '8px';
+        const cb = document.createElement('input');
+        cb.type = 'checkbox'; cb.className = cls; cb.value = v; cb.id = id;
+        const span = document.createElement('span'); span.textContent = v;
+        label.appendChild(cb); label.appendChild(span);
+        box.appendChild(label);
+      });
+    }
+
+    function valuesFromChecks(cls){
+      return Array.from(document.querySelectorAll(`.${cls}:checked`)).map(el => el.value);
+    }
+
+    function populateSelect(select, options){
+      if(!select) return; select.innerHTML = '';
+      options.forEach(v => { const opt = document.createElement('option'); opt.value = v; opt.textContent = v; select.appendChild(opt); });
+    }
+    function populateMulti(select, options){
+      if(!select) return; select.innerHTML = '';
+      options.forEach(v => { const opt = document.createElement('option'); opt.value = v; opt.textContent = v; select.appendChild(opt); });
+    }
+    function valuesFromMulti(select){
+      return select ? Array.from(select.selectedOptions).map(o=>o.value).filter(Boolean) : [];
+    }
+
+    // === Gestione chips (selezioni multiple con menu a tendina) ===
+    let selRoles = [], selCities = [], selCerts = [], selSkills = [];
+
+    function renderChips(containerId, arr, type){
+      const box = document.getElementById(containerId);
+      if(!box) return; box.innerHTML = '';
+      arr.forEach(v => {
+        const chip = document.createElement('span');
+        chip.className = 'chip';
+        chip.innerHTML = `<span>${v}</span><button type="button" aria-label="Rimuovi">×</button>`;
+        chip.querySelector('button').addEventListener('click', ()=> removeChoice(type, v));
+        box.appendChild(chip);
+      });
+    }
+
+    function populateSelectFiltered(select, options, selected){
+      if(!select) return; select.innerHTML = '<option value="">— Scegli —</option>';
+      options.filter(v => !selected.includes(v)).forEach(v => {
+        const opt = document.createElement('option');
+        opt.value = v; opt.textContent = v; select.appendChild(opt);
+      });
+    }
+
+    function addChoice(type, value, max=3){
+      if(!value) return;
+      const map = {
+        role: { arr: selRoles, selId: 'w_role_sel', chipsId: 'w_role_chips', opts: ROLE_OPTIONS },
+        city: { arr: selCities, selId: 'w_city_sel', chipsId: 'w_city_chips', opts: CITY_OPTIONS },
+        cert: { arr: selCerts, selId: 'w_certs_sel', chipsId: 'w_certs_chips', opts: CERT_OPTIONS },
+        skill:{ arr: selSkills, selId: 'w_skills_sel', chipsId: 'w_skills_chips', opts: SKILL_OPTIONS }
+      };
+      const m = map[type]; if(!m) return;
+      if(m.arr.includes(value)) return;
+      if(m.arr.length >= max){ toast(`Puoi selezionare al massimo ${max}`); return; }
+      m.arr.push(value);
+      renderChips(m.chipsId, m.arr, type);
+      populateSelectFiltered(document.getElementById(m.selId), m.opts, m.arr);
+    }
+
+    function removeChoice(type, value){
+      const map = {
+        role: { arr: selRoles, selId: 'w_role_sel', chipsId: 'w_role_chips', opts: ROLE_OPTIONS },
+        city: { arr: selCities, selId: 'w_city_sel', chipsId: 'w_city_chips', opts: CITY_OPTIONS },
+        cert: { arr: selCerts, selId: 'w_certs_sel', chipsId: 'w_certs_chips', opts: CERT_OPTIONS },
+        skill:{ arr: selSkills, selId: 'w_skills_sel', chipsId: 'w_skills_chips', opts: SKILL_OPTIONS }
+      };
+      const m = map[type]; if(!m) return;
+      m.arr = m.arr.filter(x => x !== value);
+      if(type==='role') selRoles = m.arr;
+      if(type==='city') selCities = m.arr;
+      if(type==='cert') selCerts = m.arr;
+      if(type==='skill') selSkills = m.arr;
+      renderChips(m.chipsId, m.arr, type);
+      populateSelectFiltered(document.getElementById(m.selId), m.opts, m.arr);
+    }
+
+    function initWorkerFormSelects(){
+      selRoles = []; selCities = []; selCerts = []; selSkills = [];
+      renderChips('w_role_chips', selRoles, 'role');
+      renderChips('w_city_chips', selCities, 'city');
+      renderChips('w_certs_chips', selCerts, 'cert');
+      renderChips('w_skills_chips', selSkills, 'skill');
+
+      populateSelectFiltered(document.getElementById('w_role_sel'), ROLE_OPTIONS, selRoles);
+      populateSelectFiltered(document.getElementById('w_city_sel'), CITY_OPTIONS, selCities);
+      populateSelectFiltered(document.getElementById('w_certs_sel'), CERT_OPTIONS, selCerts);
+      populateSelectFiltered(document.getElementById('w_skills_sel'), SKILL_OPTIONS, selSkills);
+
+      const roleSel  = document.getElementById('w_role_sel');
+      const citySel  = document.getElementById('w_city_sel');
+      const certSel  = document.getElementById('w_certs_sel');
+      const skillSel = document.getElementById('w_skills_sel');
+
+      roleSel?.addEventListener('change', e=>{ addChoice('role', e.target.value, 3); e.target.value=''; });
+      citySel?.addEventListener('change', e=>{ addChoice('city', e.target.value, 3); e.target.value=''; });
+      certSel?.addEventListener('change', e=>{ addChoice('cert', e.target.value, 3); e.target.value=''; });
+      skillSel?.addEventListener('change', e=>{ addChoice('skill', e.target.value, 3); e.target.value=''; });
+    }
+    document.addEventListener('DOMContentLoaded', initWorkerFormSelects);
+
+    async function updateKPI() {
+      // Set loading state
+      const kpiIds = [
+        'kpiWorkers',
+        'kpiProjects',
+        'kpiActiveProjects',
+        'kpiActiveWorkers',
+        'kpiDocs'
+      ];
+      kpiIds.forEach(id => {
+        const el = document.getElementById(id);
+        if (el) el.textContent = '···';
+      });
+      let attempt = 0;
+      let lastError = null;
+      while (attempt < 3) {
+        try {
+          const d = await fetchJSON('/api/dashboard/summary');
+          // Check for validity: at least one field should be > 0 or not null/undefined
+          const hasValid =
+            d &&
+            (
+              (typeof d.operai === 'number' && d.operai > 0) ||
+              (typeof d.cantieri === 'number' && d.cantieri > 0) ||
+              (typeof d.cantieri_attivi === 'number' && d.cantieri_attivi > 0) ||
+              (typeof d.operai_attivi === 'number' && d.operai_attivi > 0) ||
+              (typeof d.documenti_azienda === 'number' && d.documenti_azienda > 0)
+            );
+          // Accept 0 as valid only if all fields are present and at least one is not null/undefined
+          if (hasValid || attempt === 2) {
+            document.getElementById('kpiWorkers').textContent = d.operai ?? 0;
+            document.getElementById('kpiProjects').textContent = d.cantieri ?? 0;
+            document.getElementById('kpiActiveProjects').textContent = d.cantieri_attivi ?? 0;
+            document.getElementById('kpiActiveWorkers').textContent = d.operai_attivi ?? 0;
+            document.getElementById('kpiDocs').textContent = d.documenti_azienda ?? '—';
+            return;
+          }
+        } catch (err) {
+          lastError = err;
+        }
+        attempt++;
+        // Wait a bit before retrying (except after last attempt)
+        if (attempt < 3) {
+          await new Promise(res => setTimeout(res, 400));
+        }
+      }
+      // fallback visivo
+      document.getElementById('kpiWorkers').textContent = '—';
+      document.getElementById('kpiProjects').textContent = '—';
+      document.getElementById('kpiActiveProjects').textContent = '—';
+      document.getElementById('kpiActiveWorkers').textContent = '—';
+      document.getElementById('kpiDocs').textContent = '—';
+      if (lastError) {
+        console.error('Errore KPI:', lastError);
+      }
+      toast('Impossibile caricare i KPI dal server');
     }
 
     function renderProjectSelect(){
@@ -522,39 +783,53 @@
       });
 
       /* Submit: Nuovo operaio */
-      $('#addWorkerForm').addEventListener('submit', e=>{
+      $('#addWorkerForm').addEventListener('submit', async (e)=>{
         e.preventDefault();
-        const typedId = $('#w_id').value.trim();
-        let id = typedId || `W-${++state.workerSeq}`;
-        if (typedId && state.workers.some(w => w.id === typedId)) { toast('ID già esistente.'); return; }
-        const worker = {
-          id,
-          name: $('#w_name').value.trim(),
-          role: $('#w_role').value.trim(),
-          hourly_rate: parseFloat($('#w_rate').value||0),
-          home_city: $('#w_city').value.trim(),
-          certifications: ($('#w_certs').value||'').split(',').map(s=>s.trim()).filter(Boolean),
-          skills: ($('#w_skills').value||'').split(',').map(s=>s.trim()).filter(Boolean),
-          available: $('#w_available').checked
+        const primaryRole = selRoles[0] || '';
+        const otherRoles  = selRoles.slice(1);
+        const baseCity    = selCities[0] || '';
+        const moreCities  = selCities.slice(1);
+
+        const payload = {
+          name: document.getElementById('w_name').value.trim(),
+          role: primaryRole,
+          hourly_rate: parseFloat((document.getElementById('w_rate').value)||0),
+          home_city: baseCity,
+          certifications: selCerts,
+          skills: selSkills,
+          is_active: document.getElementById('w_available').checked,
+          other_roles_csv: otherRoles.join(', ') || undefined,
+          mobility_cities_csv: moreCities.join(', ') || undefined
         };
-        state.workers.push(worker);
-        updateKPI();
-        closeModal('#addWorkerModal');
-        toast(`Operaio aggiunto: ${worker.name} (ID: ${worker.id})`);
-        e.target.reset();
+        if(!payload.role){ toast('Seleziona almeno un ruolo'); return; }
+        if(!payload.home_city){ toast('Seleziona almeno una città'); return; }
+        try {
+          await fetchJSON('/api/workers', { method: 'POST', body: JSON.stringify(payload) });
+          await updateKPI();
+          closeModal('#addWorkerModal');
+          toast(`Operaio salvato: ${payload.name}`);
+          e.target.reset();
+        } catch(err){
+          console.error(err);
+          toast('Errore nel salvataggio operaio');
+        }
       });
 
       /* Submit: Rimuovi operaio */
-      $('#removeWorkerForm').addEventListener('submit', e=>{
+      $('#removeWorkerForm').addEventListener('submit', async (e)=>{
         e.preventDefault();
         const id = $('#remove_id').value.trim();
-        const idx = state.workers.findIndex(w => w.id === id);
-        if(idx === -1){ toast('ID non trovato'); return; }
-        const removed = state.workers.splice(idx,1)[0];
-        updateKPI();
-        closeModal('#removeWorkerModal');
-        toast(`Operaio rimosso: ${removed.name} (${removed.id})`);
-        e.target.reset();
+        if(!id){ toast('Inserisci un ObjectId valido'); return; }
+        try{
+          await fetchJSON(`/api/workers/${id}`, { method: 'DELETE' });
+          await updateKPI();
+          closeModal('#removeWorkerModal');
+          toast('Operaio rimosso');
+          e.target.reset();
+        } catch(err){
+          console.error(err);
+          toast('Errore nella rimozione (controlla l\'ID)');
+        }
       });
 
       /* Submit: Assegna operaio a cantiere */
@@ -578,24 +853,25 @@
       });
 
       /* Submit: Crea cantiere */
-      $('#projectForm').addEventListener('submit', e=>{
+      $('#projectForm').addEventListener('submit', async (e)=>{
         e.preventDefault();
-        const nome = $('#projName').value.trim();
-        const citta = $('#projCity').value.trim();
-        const start = $('#projStart').value;
-        const end = $('#projEnd').value;
-        const stato = $('#projStatus').value; // Preventivo / Confermato
-        const id = `p${++state.projectSeq}`;
-        state.projects.push({ id, nome, citta, stato, start, end });
-        closeModal(projectModalSel);
-        toast(`Cantiere creato: ${nome}`);
-        e.target.reset();
-        renderProjectSelect();
-        renderSitesList();
-        updateKPI();
-        if($('#tabCantieri').classList.contains('active')){
-          state.selectedProjectId = id;
-          applySiteSelection();
+        const payload = {
+          name: $('#projName').value.trim(),
+          city: $('#projCity').value.trim(),
+          start: $('#projStart').value || null,
+          end: $('#projEnd').value || null,
+          status: $('#projStatus').value // "Preventivo" | "Confermato"
+        };
+        if(!payload.name){ toast('Il nome è obbligatorio'); return; }
+        try{
+          await fetchJSON('/api/projects', { method: 'POST', body: JSON.stringify(payload) });
+          await updateKPI();
+          closeModal('#projectModal');
+          toast(`Cantiere creato: ${payload.name}`);
+          e.target.reset();
+        } catch(err){
+          console.error(err);
+          toast('Errore nel creare il cantiere');
         }
       });
 
@@ -627,7 +903,7 @@
 
       /* Chat aziendale (backend) */
       async function apiChat(message, meta={}){
-        const res = await fetch('/api/chat', {
+        const res = await fetch(apiURL('/api/chat'), {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ message, ...meta })
@@ -688,7 +964,12 @@
       /* Init */
       renderProjectSelect();
       renderSitesList();
-      updateKPI();
+      updateKPI(); // ora legge dal DB tramite /api/dashboard/summary
+
+      // Refresh KPI when tab becomes visible again
+      document.addEventListener('visibilitychange', ()=>{
+        if(!document.hidden) updateKPI();
+      });
     });
   </script>
 </body>

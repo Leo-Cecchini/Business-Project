@@ -155,6 +155,14 @@ def create_app(config_class=Config) -> Flask:
     @app.after_request
     def _after(resp):
         resp.headers["X-Request-ID"] = getattr(g, "request_id", "-")
+        # Disable caching for API endpoints to prevent stale KPI values
+        try:
+            if request.path.startswith("/api/"):
+                resp.headers["Cache-Control"] = "no-store, no-cache, must-revalidate, max-age=0"
+                resp.headers["Pragma"] = "no-cache"
+                resp.headers["Expires"] = "0"
+        except Exception:
+            pass
         return resp
 
 
@@ -206,6 +214,123 @@ def create_app(config_class=Config) -> Flask:
             tot, att = 0, 0
         return jsonify({"total": int(tot), "active": int(att)}), 200
 
+    # --- Dashboard summary + CRUD per bottoni ---
+    @app.get("/api/dashboard/summary")
+    def dashboard_summary():
+        """Ritorna conteggi reali da MongoDB per popolare i riquadri KPI."""
+        try:
+            from models_mongo.worker import WorkerDoc
+            from models_mongo.project import ProjectDoc
+            operai = WorkerDoc.objects.count()
+            operai_attivi = WorkerDoc.objects(available=True).count()
+            cantieri = ProjectDoc.objects.count()
+            cantieri_attivi = ProjectDoc.objects(status__iexact="Confermato").count()
+        except Exception as e:
+            app.logger.warning("dashboard_summary fallback: %s", e)
+            operai = operai_attivi = cantieri = cantieri_attivi = 0
+        return jsonify({
+            "operai": int(operai),
+            "operai_attivi": int(operai_attivi),
+            "cantieri": int(cantieri),
+            "cantieri_attivi": int(cantieri_attivi),
+            "documenti_azienda": 0
+        }), 200
+    def _next_worker_id():
+        """Genera un ID univoco sequenziale in formato W-#### basato sui record esistenti."""
+        try:
+            from models_mongo.worker import WorkerDoc
+            max_n = 0
+            for code in WorkerDoc.objects.only('id').scalar('id'):
+                if isinstance(code, str) and code.startswith('W-'):
+                    try:
+                        n = int(code.split('W-')[1])
+                        if n > max_n:
+                            max_n = n
+                    except Exception:
+                        continue
+            return f"W-{max_n+1}"
+        except Exception:
+            # fallback sicuro
+            return f"W-{str(uuid.uuid4())[:8]}"
+
+    @app.post("/api/workers")
+    def api_create_worker():
+        """Crea un operaio in MongoDB. Mappa is_active -> available."""
+        data = request.get_json(force=True) or {}
+        app.logger.info("/api/workers payload=%s", data)
+
+        name = (data.get("name") or "").strip()
+        if not name:
+            return jsonify({"error": "name è obbligatorio"}), 400
+
+        role = (data.get("role") or "operaio").strip()
+        is_active = bool(data.get("is_active", True))
+
+        # Genera sempre un ID univoco stile W-####
+        wid = _next_worker_id()
+
+        def _as_list(v):
+            if isinstance(v, list):
+                return [str(x).strip() for x in v if str(x).strip()]
+            if isinstance(v, str):
+                return [s.strip() for s in v.split(',') if s.strip()]
+            return []
+
+        hourly_rate = data.get("hourly_rate")
+        try:
+            hourly_rate = float(hourly_rate) if hourly_rate is not None else None
+        except Exception:
+            hourly_rate = None
+
+        skills = _as_list(data.get("skills"))
+        certs  = _as_list(data.get("certifications"))
+
+        try:
+            from models_mongo.worker import WorkerDoc
+            w = WorkerDoc(
+                id=wid,                     # PK custom generata lato server
+                name=name,
+                role=role,
+                available=is_active,
+                home_city=data.get("home_city"),
+                hourly_rate=hourly_rate,
+                skills=skills if skills else None,
+                certifications=certs if certs else None,
+            )
+            w.save()
+            return jsonify({"ok": True, "id": str(w.id)}), 200
+        except Exception as e:
+            app.logger.exception("create_worker error")
+            return jsonify({"ok": False, "error": str(e)}), 400
+    
+    @app.delete("/api/workers/<worker_id>")
+    def api_delete_worker(worker_id: str):
+        """Elimina un operaio per ID custom (es. W-1048)."""
+        try:
+            from models_mongo.worker import WorkerDoc
+            obj = WorkerDoc.objects.get(id=worker_id)
+            obj.delete()
+            return jsonify({"ok": True}), 200
+        except Exception as e:
+            return jsonify({"ok": False, "error": str(e)}), 404
+
+    @app.post("/api/projects")
+    def api_create_project():
+        """Crea un cantiere in MongoDB."""
+        data = request.get_json(force=True) or {}
+        name = (data.get("name") or "").strip()
+        if not name:
+            return jsonify({"error": "name è obbligatorio"}), 400
+        status = (data.get("status") or "Preventivo").strip()
+        try:
+            from models_mongo.project import ProjectDoc
+            p = ProjectDoc(name=name, status=status)
+            p.save()
+            return jsonify({"ok": True, "id": str(p.id)}), 200
+        except Exception as e:
+            app.logger.exception("create_project error")
+            return jsonify({"ok": False, "error": str(e)}), 400
+
     # Error handler (mantiene le HTTPException originali)
     @app.errorhandler(Exception)
     def _handle_error(e):
@@ -232,8 +357,6 @@ def create_app(config_class=Config) -> Flask:
     from routes.estimate import estimate_bp
     from routes.chat import chat_bp
     from routes.company import company_bp
-    from routes.projects import projects_bp
-    from routes.workers import workers_bp
 
     app.register_blueprint(views_bp)                    # pagine HTML
     app.register_blueprint(api_bp, url_prefix="/api")   # API legacy/varie
@@ -242,8 +365,6 @@ def create_app(config_class=Config) -> Flask:
     app.register_blueprint(estimate_bp)                 # /api/estimate
     app.register_blueprint(chat_bp)                     # /api/chat
     app.register_blueprint(company_bp)
-    app.register_blueprint(projects_bp)
-    app.register_blueprint(workers_bp)
 
     # Log mappa delle rotte esposte (utile per verificare i prefix)
     try:
