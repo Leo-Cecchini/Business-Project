@@ -2,6 +2,10 @@
 import os
 import uuid
 import logging
+import re
+import requests
+from functools import lru_cache
+from datetime import datetime
 from typing import Dict, Any
 
 from flask import Flask, g, jsonify, request, send_from_directory
@@ -253,6 +257,68 @@ def create_app(config_class=Config) -> Flask:
             # fallback sicuro
             return f"W-{str(uuid.uuid4())[:8]}"
 
+    def _parse_date(s: str):
+        if not s:
+            return None
+        try:
+            return datetime.strptime(s, "%Y-%m-%d")
+        except Exception:
+            return None
+
+    def _next_project_id() -> str:
+        """Genera un ID sequenziale in formato P-#### basato sui record esistenti."""
+        try:
+            from models_mongo.project import ProjectDoc
+            max_n = 1000
+            import re as _re
+            rx = _re.compile(r"^P-(\d{3,})$")
+            for code in ProjectDoc.objects.only('id').scalar('id'):
+                if isinstance(code, str):
+                    m = rx.match(code)
+                    if m:
+                        try:
+                            n = int(m.group(1))
+                            if n > max_n:
+                                max_n = n
+                        except Exception:
+                            continue
+            return f"P-{max_n+1}"
+        except Exception:
+            return f"P-{str(uuid.uuid4())[:8]}"
+
+    def _normalize_min_address(addr_payload: dict | None):
+        """Return a minimal normalized address dict or None.
+        Expected keys (any may be missing):
+          formatted, street, street_number, city, state, postal_code
+        """
+        if not addr_payload or not isinstance(addr_payload, dict):
+            return None
+        street = (addr_payload.get("street") or "").strip()
+        number = (addr_payload.get("street_number") or addr_payload.get("number") or "").strip()
+        city   = (addr_payload.get("city") or "").strip()
+        state  = (addr_payload.get("state") or addr_payload.get("country") or "").strip()
+        zipc   = (addr_payload.get("postal_code") or addr_payload.get("zip") or "").strip()
+        formatted = (addr_payload.get("formatted") or "").strip()
+        if not formatted:
+            parts = []
+            line1 = " ".join([p for p in [street, number] if p])
+            if line1:
+                parts.append(line1)
+            line2 = " ".join([p for p in [zipc, city] if p])
+            if line2:
+                parts.append(line2)
+            if state:
+                parts.append(state)
+            formatted = ", ".join([p for p in parts if p])
+        return {
+            "formatted": formatted or None,
+            "street": street or None,
+            "street_number": number or None,
+            "city": city or None,
+            "state": state or None,
+            "postal_code": zipc or None,
+        }
+
     @app.post("/api/workers")
     def api_create_worker():
         """Crea un operaio in MongoDB. Mappa is_active -> available."""
@@ -316,22 +382,684 @@ def create_app(config_class=Config) -> Flask:
 
     @app.post("/api/projects")
     def api_create_project():
-        """Crea un cantiere in MongoDB."""
+        """Crea un cantiere. Le date inserite al create sono sempre STIME; se status=Confermato sono obbligatorie."""
         data = request.get_json(force=True) or {}
+
         name = (data.get("name") or "").strip()
         if not name:
             return jsonify({"error": "name è obbligatorio"}), 400
+
         status = (data.get("status") or "Preventivo").strip()
+        if status not in ("Preventivo", "Confermato"):
+            return jsonify({"error": "status deve essere 'Preventivo' o 'Confermato'"}), 400
+
+        # Import modello e leggi l'elenco dei campi disponibili
         try:
             from models_mongo.project import ProjectDoc
-            p = ProjectDoc(name=name, status=status)
+        except Exception as e:
+            app.logger.exception("ProjectDoc import error")
+            return jsonify({"ok": False, "error": f"Modello ProjectDoc non disponibile: {e}"}), 500
+
+        model_fields = set(ProjectDoc._fields.keys())
+
+        # Leggi la città (potrebbe essere usata nei controlli di unicità)
+        city = (data.get("city") or data.get("citta") or "").strip()
+
+        # --- Address normalization and city fallback ---
+        addr_in = data.get("address") if isinstance(data, dict) else None
+        addr_norm = _normalize_min_address(addr_in) if addr_in else None
+        if not city and addr_norm and addr_norm.get("city"):
+            city = addr_norm.get("city")
+
+        # Unicità: (name, city) oppure (name, citta) se il campo esiste
+        try:
+            if "city" in model_fields:
+                exists = ProjectDoc.objects(name=name, city=(city or None)).first()
+            elif "citta" in model_fields:
+                exists = ProjectDoc.objects(name=name, citta=(city or None)).first()
+            else:
+                # fallback: se non esiste il campo città nel modello, usiamo solo name
+                exists = ProjectDoc.objects(name=name).first()
+            if exists:
+                return jsonify({"error": "Esiste già un cantiere con lo stesso nome nella stessa città"}), 409
+        except Exception:
+            pass
+
+        # ID: accetta quello passato se libero, altrimenti genera P-####
+        wanted_id = (data.get("id") or "").strip()
+        if wanted_id and ProjectDoc.objects(id=wanted_id).first():
+            return jsonify({"error": "ID già esistente"}), 409
+        pid = wanted_id or _next_project_id()
+
+        # Raccogli le date inserite nel form (sempre come STIME)
+        # Accettiamo alias dal frontend: start/end oppure start_date_estimated/end_date_estimated
+        start_str = (data.get("start") or data.get("projStart") or data.get("start_date_estimated") or "").strip()
+        end_str   = (data.get("end")   or data.get("projEnd")   or data.get("end_date_estimated")   or "").strip()
+
+        # Se Confermato → le STIME sono OBBLIGATORIE
+        if status == "Confermato" and (not start_str or not end_str):
+            return jsonify({"error": "Per 'Confermato' sono obbligatorie le stime di inizio e fine (start/end)"}), 400
+
+        # Validazione ordine date stima: fine >= inizio (vale per entrambi gli status)
+        if start_str and end_str:
+            try:
+                s = datetime.strptime(start_str, "%Y-%m-%d")
+                e = datetime.strptime(end_str,   "%Y-%m-%d")
+                if e < s:
+                    return jsonify({"error": "La data di fine (stima) non può essere antecedente alla data di inizio (stima)"}), 400
+            except ValueError:
+                # in caso di formato non valido, lascia che eventuali altri controlli gestiscano
+                pass
+
+        # Prepara kwargs SOLO con i campi che esistono nel modello
+        doc_kwargs = {"id": pid}
+        if "name" in model_fields:
+            doc_kwargs["name"] = name
+        if "status" in model_fields:
+            doc_kwargs["status"] = status
+
+        # city/citta opzionale (usa quello che esiste nel modello)
+        if "city" in model_fields:
+            doc_kwargs["city"] = city or None
+        elif "citta" in model_fields:
+            doc_kwargs["citta"] = city or None
+
+        # project_address / addresses (indirizzo minimale)
+        if addr_norm:
+            if "project_address" in model_fields and addr_norm.get("formatted"):
+                doc_kwargs["project_address"] = addr_norm.get("formatted")
+            if "addresses" in model_fields:
+                doc_kwargs["addresses"] = [addr_norm]
+
+        # Salva sempre le STIME in meta_extra (senza cambiare lo schema)
+        if "meta_extra" in model_fields:
+            m = {}
+            m["created_at"] = datetime.utcnow().strftime("%Y-%m-%d")
+            if start_str or end_str:
+                m["estimate"] = {"start": (start_str or None), "end": (end_str or None)}
+            doc_kwargs["meta_extra"] = m
+
+        try:
+            p = ProjectDoc(**doc_kwargs)
             p.save()
-            return jsonify({"ok": True, "id": str(p.id)}), 200
+            # Risposta: ritorna solo i campi realmente presenti
+            resp = {"ok": True}
+            for f in ("id", "name", "status", "city", "citta", "project_address", "addresses", "meta_extra"):
+                if f in model_fields:
+                    resp[f] = getattr(p, f, None)
+            return jsonify(resp), 201
         except Exception as e:
             app.logger.exception("create_project error")
             return jsonify({"ok": False, "error": str(e)}), 400
 
+    @app.patch("/api/projects/<pid>/address")
+    @app.post("/api/projects/<pid>/address")
+    def api_upsert_project_address(pid: str):
+        """Imposta o aggiunge un indirizzo minimale su un progetto.
+        Body accetta:
+          - address: { formatted?, street?, street_number?, city?, state?, postal_code? }
+          - make_primary: bool (default True) -> se True l'indirizzo diventa primario
+        Aggiorna anche city (per unicità name+city) e project_address se presenti nel modello.
+        """
+        try:
+            from models_mongo.project import ProjectDoc
+        except Exception as e:
+            app.logger.exception("ProjectDoc import error")
+            return jsonify({"ok": False, "error": f"Modello ProjectDoc non disponibile: {e}"}), 500
+
+        data = request.get_json(force=True) or {}
+        addr_in = data.get("address") if isinstance(data, dict) else None
+        make_primary = bool(data.get("make_primary", True))
+        addr_norm = _normalize_min_address(addr_in) if addr_in else None
+        if not addr_norm or not any(addr_norm.values()):
+            return jsonify({"error": "address mancante o non valido"}), 400
+
+        # carica progetto
+        obj = ProjectDoc.objects(id=pid).first()
+        if not obj:
+            return jsonify({"error": "Progetto non trovato"}), 404
+
+        model_fields = set(ProjectDoc._fields.keys())
+
+        # calcola la nuova city da salvare (se disponibile)
+        new_city = addr_norm.get("city") or getattr(obj, "city", None)
+
+        # Verifica unicità name+city se il modello ha la city
+        try:
+            if "city" in model_fields and new_city:
+                dup = ProjectDoc.objects(id__ne=pid, name=obj.name, city=new_city).first()
+                if dup:
+                    return jsonify({"error": "Esiste già un cantiere con lo stesso nome nella stessa città"}), 409
+            elif "citta" in model_fields and new_city:
+                dup = ProjectDoc.objects(id__ne=pid, name=obj.name, citta=new_city).first()
+                if dup:
+                    return jsonify({"error": "Esiste già un cantiere con lo stesso nome nella stessa città"}), 409
+        except Exception:
+            pass
+
+        # aggiorna fields indirizzo
+        try:
+            # addresses
+            if "addresses" in model_fields:
+                current = list(getattr(obj, "addresses", []) or [])
+                if make_primary:
+                    # rimuovi eventuali duplicati (stessa formatted+city)
+                    current = [a for a in current if not (
+                        (a.get("formatted") == addr_norm.get("formatted")) and (a.get("city") == addr_norm.get("city"))
+                    )]
+                    obj.addresses = [addr_norm] + current
+                else:
+                    # evita doppioni in coda
+                    exists = any((a.get("formatted") == addr_norm.get("formatted")) and (a.get("city") == addr_norm.get("city")) for a in current)
+                    if not exists:
+                        current.append(addr_norm)
+                    obj.addresses = current
+
+            # project_address (stringa primaria)
+            if "project_address" in model_fields and addr_norm.get("formatted") and make_primary:
+                obj.project_address = addr_norm.get("formatted")
+
+            # city/citta
+            if new_city:
+                if "city" in model_fields:
+                    obj.city = new_city
+                elif "citta" in model_fields:
+                    obj.citta = new_city
+
+            obj.save()
+            return jsonify({
+                "ok": True,
+                "id": str(obj.id),
+                "name": getattr(obj, "name", None),
+                "city": getattr(obj, "city", None) if "city" in model_fields else getattr(obj, "citta", None),
+                "project_address": getattr(obj, "project_address", None) if "project_address" in model_fields else None,
+                "addresses": getattr(obj, "addresses", None) if "addresses" in model_fields else None,
+            }), 200
+        except Exception as e:
+            app.logger.exception("upsert_project_address error")
+            return jsonify({"ok": False, "error": str(e)}), 400
+
+    # === Projects: helpers & listing ===
+    def _project_to_dict_safe(obj):
+        if obj is None:
+            return {}
+        if hasattr(obj, "to_mongo"):
+            try:
+                data = obj.to_mongo().to_dict()
+                data["id"] = str(getattr(obj, "id", data.get("id") or data.get("_id") or ""))
+            except Exception:
+                data = {k: getattr(obj, k, None) for k in ("id","name","nome","city","citta","status","stato","project_address","address","addresses")}
+        elif isinstance(obj, dict):
+            data = obj
+        else:
+            data = {}
+        return {
+            "id": str(data.get("id") or data.get("_id") or ""),
+            "name": data.get("name") or data.get("nome") or "",
+            "city": data.get("city") or data.get("citta") or "",
+            "status": data.get("status") or data.get("stato") or "Preventivo",
+            "project_address": data.get("project_address") or data.get("address") or None,
+        }
+
+    @app.get("/api/projects/<pid>")
+    def api_get_project(pid: str):
+        try:
+            from models_mongo.project import ProjectDoc
+            obj = ProjectDoc.objects(id=pid).first()
+            if obj:
+                return jsonify(_project_to_dict_safe(obj)), 200
+        except Exception as e:
+            app.logger.warning(f"api_get_project: fallback raw due to {e}")
+        try:
+            from mongoengine.connection import get_db
+            db = get_db()
+            raw = db["projects"].find_one({"id": pid}) or db["projects"].find_one({"_id": pid})
+            if not raw:
+                return jsonify({"error": "Progetto non trovato"}), 404
+            return jsonify(_project_to_dict_safe(raw)), 200
+        except Exception as ee:
+            app.logger.exception("api_get_project raw error")
+            return jsonify({"ok": False, "error": str(ee)}), 500
+
+    @app.get("/api/projects/list")
+    def api_list_projects():
+        def _norm(p: dict) -> dict:
+            me = (p.get("meta_extra") or {})
+            est = me.get("estimate") or {}
+            prog = me.get("progress") or {}
+            return {
+                "id": str(p.get("id") or p.get("_id") or ""),
+                "name": p.get("name") or p.get("nome") or "",
+                "city": p.get("city") or p.get("citta") or "",
+                "status": p.get("status") or p.get("stato") or "Preventivo",
+                "project_address": p.get("project_address") or p.get("address") or None,
+                "start_date_estimated": p.get("start_date_estimated") or est.get("start"),
+                "end_date_estimated": p.get("end_date_estimated") or est.get("end"),
+                "progress_percent": prog.get("percent"),
+            }
+        try:
+            from models_mongo.project import ProjectDoc
+            docs = list(ProjectDoc.objects)
+            items = []
+            for d in docs:
+                try:
+                    m = d.to_mongo().to_dict()
+                    m["id"] = str(getattr(d, "id", m.get("id") or m.get("_id") or ""))
+                except Exception:
+                    m = {k: getattr(d, k, None) for k in ("id","name","nome","city","citta","status","stato","project_address","address","addresses")}
+                # Ensure meta_extra is a dict for _norm
+                if not isinstance(m.get("meta_extra"), dict):
+                    m["meta_extra"] = {}
+                items.append(_norm(m))
+            items_sorted = sorted(items, key=lambda x: (x.get("name") or "").lower())
+            return jsonify({"items": items_sorted, "total": len(items_sorted)}), 200
+        except Exception as e:
+            app.logger.warning(f"api_list_projects: fallback raw due to {e}")
+        try:
+            from mongoengine.connection import get_db
+            db = get_db()
+            cur = db["projects"].find({}, {
+                "_id":1,"id":1,"name":1,"nome":1,"city":1,"citta":1,"status":1,"stato":1,
+                "project_address":1,"address":1,
+                "start_date_estimated":1,"end_date_estimated":1,
+                "meta_extra":1
+            })
+            items = [_norm(doc) for doc in cur]
+            items_sorted = sorted(items, key=lambda x: (x.get("name") or "").lower())
+            return jsonify({"items": items_sorted, "total": len(items_sorted)}), 200
+        except Exception as ee:
+            app.logger.exception("api_list_projects raw error")
+            return jsonify({"ok": False, "error": str(ee)}), 500
+
+    @app.patch("/api/projects/<pid>/confirm")
+    def api_confirm_project(pid: str):
+        """
+        Conferma un progetto: richiede start_date_estimated & end_date_estimated,
+        valida che end >= start (YYYY-MM-DD), imposta status=Confermato.
+        Non permette il revert a Preventivo (questo endpoint solo conferma).
+        """
+        data = request.get_json(force=True) or {}
+        start_str = (data.get("start_date_estimated") or data.get("start") or "").strip()
+        end_str   = (data.get("end_date_estimated")   or data.get("end")   or "").strip()
+        if not start_str or not end_str:
+            return jsonify({"error": "start_date_estimated ed end_date_estimated sono obbligatorie"}), 400
+        # valida formato e ordine
+        try:
+            s = datetime.strptime(start_str, "%Y-%m-%d")
+            e = datetime.strptime(end_str,   "%Y-%m-%d")
+            if e < s:
+                return jsonify({"error": "La data di fine (stima) non può precedere la data di inizio (stima)"}), 400
+        except ValueError:
+            return jsonify({"error": "Formato data non valido. Usa YYYY-MM-DD"}), 400
+
+        # 1) Prova con MongoEngine
+        try:
+            from models_mongo.project import ProjectDoc
+            obj = ProjectDoc.objects(id=pid).first()
+            if not obj:
+                return jsonify({"error": "Progetto non trovato"}), 404
+
+            fields = set(getattr(ProjectDoc, "_fields", {}).keys())
+            # status
+            if "status" in fields:
+                obj.status = "Confermato"
+            elif "stato" in fields:
+                obj.stato = "Confermato"
+
+            # date stima: salva sui campi se esistono, altrimenti in meta_extra
+            if "start_date_estimated" in fields:
+                obj.start_date_estimated = start_str
+            else:
+                if hasattr(obj, "meta_extra"):
+                    me = dict(obj.meta_extra or {})
+                    est = dict(me.get("estimate") or {})
+                    est["start"] = start_str
+                    me["estimate"] = est
+                    obj.meta_extra = me
+
+            if "end_date_estimated" in fields:
+                obj.end_date_estimated = end_str
+            else:
+                if hasattr(obj, "meta_extra"):
+                    me = dict(obj.meta_extra or {})
+                    est = dict(me.get("estimate") or {})
+                    est["end"] = end_str
+                    me["estimate"] = est
+                    obj.meta_extra = me
+
+            obj.save()
+            return jsonify({"ok": True, "id": str(obj.id), "status": "Confermato", "start_date_estimated": start_str, "end_date_estimated": end_str}), 200
+        except Exception as me_err:
+            app.logger.warning("api_confirm_project: ME failed, fallback raw: %s", me_err)
+
+        # 2) Fallback PyMongo
+        try:
+            from mongoengine.connection import get_db
+            db = get_db()
+            # tenta update per id
+            q = {"id": pid}
+            upd = {"$set": {"status": "Confermato", "start_date_estimated": start_str, "end_date_estimated": end_str}}
+            doc = db["projects"].find_one_and_update(q, upd, return_document=True)
+            if not doc:
+                # prova con _id
+                q2 = {"_id": pid}
+                doc = db["projects"].find_one_and_update(q2, upd, return_document=True)
+            if not doc:
+                return jsonify({"error": "Progetto non trovato"}), 404
+            return jsonify({"ok": True, "id": str(doc.get("id") or doc.get("_id")), "status": "Confermato", "start_date_estimated": start_str, "end_date_estimated": end_str}), 200
+        except Exception as ee:
+            app.logger.exception("api_confirm_project raw error")
+            return jsonify({"ok": False, "error": str(ee)}), 500
+
+    @app.patch("/api/projects/<pid>/progress")
+    def api_update_project_progress(pid: str):
+        """Aggiorna l'avanzamento lavori del cantiere (0..100), opzionale nota.
+        Scrive in meta_extra.progress { percent, note?, updated_at } e aggiunge storico in meta_extra.progress_history.
+        Consentito solo se status == "Confermato".
+        """
+        data = request.get_json(force=True) or {}
+        try:
+            percent = int(data.get("percent"))
+        except Exception:
+            return jsonify({"error": "percent deve essere un intero"}), 400
+        if percent < 0 or percent > 100:
+            return jsonify({"error": "percent deve essere tra 0 e 100"}), 400
+        note = (data.get("note") or "").strip() or None
+        now_iso = datetime.utcnow().isoformat(timespec="seconds")
+
+        # 1) MongoEngine branch
+        try:
+            from models_mongo.project import ProjectDoc
+            obj = ProjectDoc.objects(id=pid).first()
+            if not obj:
+                return jsonify({"error": "Progetto non trovato"}), 404
+            current_status = getattr(obj, "status", None) or getattr(obj, "stato", None) or "Preventivo"
+            if str(current_status) != "Confermato":
+                return jsonify({"error": "Aggiornamento consentito solo per cantieri Confermati"}), 409
+
+            me = dict(getattr(obj, "meta_extra", {}) or {})
+            me_progress = dict(me.get("progress") or {})
+            me_progress["percent"] = percent
+            if note:
+                me_progress["note"] = note
+            me_progress["updated_at"] = now_iso
+            me["progress"] = me_progress
+
+            # append history (mantieni ultimi 50)
+            hist = list(me.get("progress_history") or [])
+            hist.append({"percent": percent, "note": note, "at": now_iso})
+            if len(hist) > 50:
+                hist = hist[-50:]
+            me["progress_history"] = hist
+
+            obj.meta_extra = me
+            obj.save()
+            return jsonify({"ok": True, "id": str(obj.id), "percent": percent, "note": note}), 200
+        except Exception as me_err:
+            app.logger.warning("api_update_project_progress: ME failed, fallback raw: %s", me_err)
+
+        # 2) PyMongo fallback
+        try:
+            from mongoengine.connection import get_db
+            db = get_db()
+            # Leggi documento
+            doc = db["projects"].find_one({"id": pid}) or db["projects"].find_one({"_id": pid})
+            if not doc:
+                return jsonify({"error": "Progetto non trovato"}), 404
+            status = doc.get("status") or doc.get("stato") or "Preventivo"
+            if str(status) != "Confermato":
+                return jsonify({"error": "Aggiornamento consentito solo per cantieri Confermati"}), 409
+
+            me = dict(doc.get("meta_extra") or {})
+            me_progress = dict((me.get("progress") or {}))
+            me_progress["percent"] = percent
+            if note:
+                me_progress["note"] = note
+            me_progress["updated_at"] = now_iso
+            me["progress"] = me_progress
+            hist = list(me.get("progress_history") or [])
+            hist.append({"percent": percent, "note": note, "at": now_iso})
+            if len(hist) > 50:
+                hist = hist[-50:]
+            me["progress_history"] = hist
+
+            upd = {"$set": {"meta_extra": me}}
+            target = {"id": pid} if doc.get("id") == pid else {"_id": pid}
+            db["projects"].update_one(target, upd)
+            return jsonify({"ok": True, "id": str(doc.get("id") or doc.get("_id")), "percent": percent, "note": note}), 200
+        except Exception as ee:
+            app.logger.exception("api_update_project_progress raw error")
+            return jsonify({"ok": False, "error": str(ee)}), 500
+
+    @app.patch("/api/projects/<pid>/progress/note")
+    def api_add_progress_note(pid: str):
+        """
+        Aggiunge una nota di avanzamento (testo libero) nello storico del cantiere.
+        Consentito solo se status == "Confermato".
+        Non modifica la percentuale: verrà aggiornata da un'assistente/automazione separata.
+        Body: { "text": "..." }
+        """
+        data = request.get_json(force=True) or {}
+        text = (data.get("text") or "").strip()
+        if not text:
+            return jsonify({"error": "text è obbligatorio"}), 400
+        now_iso = datetime.utcnow().isoformat(timespec="seconds")
+
+        # 1) MongoEngine branch
+        try:
+            from models_mongo.project import ProjectDoc
+            obj = ProjectDoc.objects(id=pid).first()
+            if not obj:
+                return jsonify({"error": "Progetto non trovato"}), 404
+            status = getattr(obj, "status", None) or getattr(obj, "stato", None) or "Preventivo"
+            if str(status) != "Confermato":
+                return jsonify({"error": "Aggiornamento consentito solo per cantieri Confermati"}), 409
+
+            me = dict(getattr(obj, "meta_extra", {}) or {})
+            hist = list(me.get("progress_history") or [])
+            hist.append({"note": text, "at": now_iso, "by": "user"})
+            if len(hist) > 200:
+                hist = hist[-200:]
+            me["progress_history"] = hist
+            obj.meta_extra = me
+            obj.save()
+            return jsonify({"ok": True, "id": str(obj.id), "note": text, "at": now_iso}), 200
+        except Exception as me_err:
+            app.logger.warning("api_add_progress_note: ME failed, fallback raw: %s", me_err)
+
+        # 2) PyMongo fallback
+        try:
+            from mongoengine.connection import get_db
+            db = get_db()
+            doc = db["projects"].find_one({"id": pid}) or db["projects"].find_one({"_id": pid})
+            if not doc:
+                return jsonify({"error": "Progetto non trovato"}), 404
+            status = doc.get("status") or doc.get("stato") or "Preventivo"
+            if str(status) != "Confermato":
+                return jsonify({"error": "Aggiornamento consentito solo per cantieri Confermati"}), 409
+
+            me = dict(doc.get("meta_extra") or {})
+            hist = list(me.get("progress_history") or [])
+            hist.append({"note": text, "at": now_iso, "by": "user"})
+            if len(hist) > 200:
+                hist = hist[-200:]
+            me["progress_history"] = hist
+
+            upd = {"$set": {"meta_extra": me}}
+            target = {"id": pid} if doc.get("id") == pid else {"_id": pid}
+            db["projects"].update_one(target, upd)
+            return jsonify({"ok": True, "id": str(doc.get("id") or doc.get("_id")), "note": text, "at": now_iso}), 200
+        except Exception as ee:
+            app.logger.exception("api_add_progress_note raw error")
+            return jsonify({"ok": False, "error": str(ee)}), 500
+        
+    @app.post("/api/projects/<pid>/auto-assign")
+    def api_auto_assign(pid: str):
+        """
+        Auto-assegna operai al cantiere (regole base, AI-ready).
+        Disponibile solo per cantieri Confermati.
+        """
+        data = request.get_json(force=True) or {}
+        strategy = (data.get("strategy") or "basic").lower()
+
+        # 1) Recupera progetto
+        try:
+            from models_mongo.project import ProjectDoc
+            proj = ProjectDoc.objects(id=pid).first()
+        except Exception:
+            proj = None
+
+        if not proj:
+            return jsonify({"error": "Progetto non trovato"}), 404
+
+        status = getattr(proj, "status", None) or getattr(proj, "stato", None) or "Preventivo"
+        if status != "Confermato":
+            return jsonify({"error": "Disponibile solo per cantieri Confermati"}), 409
+
+        works = list(getattr(proj, "works", []) or [])
+
+        # 2) Recupera operai liberi
+        try:
+            from models_mongo.worker import WorkerDoc
+            free_workers = list(WorkerDoc.objects(available=True))
+            by_role = {}
+            for w in free_workers:
+                role = (getattr(w, "role", None) or "Operaio edile").lower()
+                by_role.setdefault(role, []).append(w)
+        except Exception:
+            from mongoengine.connection import get_db
+            db = get_db()
+            free_workers = list(db["workers"].find({"available": True}))
+            by_role = {}
+            for w in free_workers:
+                role = (w.get("role") or "Operaio edile").lower()
+                by_role.setdefault(role, []).append(w)
+
+        # 3) Mapping parole chiave → ruoli
+        ROLE_BY_KEYWORD = {
+            "elettric": "elettricista",
+            "cablagg":  "elettricista",
+            "impianto elettrico": "elettricista",
+            "mur": "muratore",
+            "parete": "muratore",
+            "intonac": "muratore",
+            "paviment": "piastrellista",
+            "piastrell": "piastrellista",
+            "idraulic": "idraulico",
+            "tubo": "idraulico",
+            "cartongesso": "cartongessista"
+        }
+
+        def infer_role(work_name: str) -> str:
+            n = (work_name or "").lower()
+            for kw, role in ROLE_BY_KEYWORD.items():
+                if kw in n:
+                    return role
+            return "operaio edile"
+
+        # 4) Assegnazioni
+        assigned = []
+        for w in works:
+            role_needed = infer_role(w.get("work_name", ""))
+            candidates = by_role.get(role_needed, []) or by_role.get(role_needed.capitalize(), []) or []
+            if not candidates:
+                continue
+            chosen = candidates.pop(0)
+            cid = getattr(chosen, "id", None) or chosen.get("id") or chosen.get("_id")
+            cname = getattr(chosen, "name", None) or chosen.get("name")
+            assigned.append({
+                "worker_id": str(cid),
+                "worker_name": cname,
+                "role": role_needed,
+                "work_name": w.get("work_name"),
+                "start": w.get("start_date_planned") or w.get("start"),
+                "end": w.get("end_date_planned") or w.get("end"),
+            })
+
+        # 5) Persistenza
+        try:
+            me = dict(getattr(proj, "meta_extra", {}) or {})
+            curr = list(me.get("assignments") or [])
+            curr.extend(assigned)
+            me["assignments"] = curr
+            proj.meta_extra = me
+            proj.save()
+
+            from models_mongo.worker import WorkerDoc
+            for a in assigned:
+                WorkerDoc.objects(id=a["worker_id"]).update_one(set__available=False)
+        except Exception as e:
+            app.logger.warning(f"Persistenza assegnazioni fallita: {e}")
+
+        msg = "Nessun lavoro da assegnare" if not works else (f"Assegnazioni create: {len(assigned)}" if assigned else "Nessun operaio compatibile disponibile")
+        return jsonify({"ok": True, "assigned": assigned, "message": msg}), 200
+
+    @app.delete("/api/projects/<pid>")
+    def api_delete_project(pid: str):
+        """Elimina definitivamente un cantiere dal database.
+        Rimuove il documento per id (o _id) usando MongoEngine, con fallback PyMongo.
+        """
+        # 1) Prova con MongoEngine
+        try:
+            from models_mongo.project import ProjectDoc
+            obj = ProjectDoc.objects(id=pid).first()
+            if obj:
+                obj.delete()
+                return jsonify({"ok": True}), 200
+        except Exception as me_err:
+            app.logger.warning("api_delete_project: ME failed, fallback raw: %s", me_err)
+
+        # 2) Fallback PyMongo
+        try:
+            from mongoengine.connection import get_db
+            db = get_db()
+            res = db["projects"].delete_one({"id": pid})
+            if res.deleted_count == 0:
+                res = db["projects"].delete_one({"_id": pid})
+            if res.deleted_count == 0:
+                return jsonify({"ok": False, "error": "Progetto non trovato"}), 404
+            return jsonify({"ok": True}), 200
+        except Exception as ee:
+            app.logger.exception("api_delete_project raw error")
+            return jsonify({"ok": False, "error": str(ee)}), 500
+
     # Error handler (mantiene le HTTPException originali)
+    # --- Geoapify proxy (facoltativo: evita di esporre la chiave al client) ---
+    @lru_cache(maxsize=256)
+    def _geo_autocomplete_cached(q: str, lang: str = "it", limit: int = 7):
+        key = app.config.get("GEOAPIFY_KEY", "")
+        if not key or not q:
+            return {"features": []}
+        url = "https://api.geoapify.com/v1/geocode/autocomplete"
+        params = {"text": q, "lang": lang or "it", "limit": str(limit or 7), "apiKey": key}
+        r = requests.get(url, params=params, timeout=6)
+        r.raise_for_status()
+        return r.json()
+
+    @app.get("/api/geo/autocomplete")
+    def geo_autocomplete():
+        q = (request.args.get("text") or "").strip()
+        if len(q) < 3:
+            return jsonify({"features": []})
+        lang = (request.args.get("lang") or "it").strip() or "it"
+        try:
+            data = _geo_autocomplete_cached(q, lang, int(request.args.get("limit", 7)))
+            # Minimizza e normalizza i campi utili al frontend
+            feats = []
+            for f in data.get("features", []):
+                p = f.get("properties", {})
+                feats.append({
+                    "formatted": p.get("formatted"),
+                    "street": p.get("street") or p.get("name"),
+                    "housenumber": p.get("housenumber"),
+                    "city": p.get("city") or p.get("town") or p.get("village") or p.get("county"),
+                    "state": p.get("country") or p.get("state"),
+                    "postcode": p.get("postcode"),
+                })
+            return jsonify({"features": feats})
+        except requests.HTTPError as e:
+            app.logger.warning("Geoapify proxy error: %s", e)
+            return jsonify({"features": [], "error": str(e)}), 502
     @app.errorhandler(Exception)
     def _handle_error(e):
         if isinstance(e, HTTPException):
@@ -366,20 +1094,11 @@ def create_app(config_class=Config) -> Flask:
     app.register_blueprint(chat_bp)                     # /api/chat
     app.register_blueprint(company_bp)
 
-    # Log mappa delle rotte esposte (utile per verificare i prefix)
+    
+    # Log delle rotte per debug
     try:
         for rule in app.url_map.iter_rules():
             log.info("ROUTE: %s → endpoint=%s methods=%s", rule, rule.endpoint, ",".join(sorted(rule.methods)))
     except Exception:
         pass
-
     return app
-
-
-# ---------------------------------------------------------------------
-# Entrypoint
-# ---------------------------------------------------------------------
-if __name__ == "__main__":
-    app = create_app()
-    port = int(os.getenv("PORT", "5001"))
-    app.run(host="0.0.0.0", port=port, debug=app.config.get("DEBUG", False))

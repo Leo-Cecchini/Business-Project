@@ -11,6 +11,9 @@ class Config:
     # API Key Google
     GOOGLE_API_KEY = os.getenv('GOOGLE_API_KEY')
     
+    # Geoapify API Key (opzionale, per autocomplete indirizzi)
+    GEOAPIFY_KEY = os.getenv('GEOAPIFY_KEY')
+    
     # Qdrant (vector store locale)
     QDRANT_PATH = os.getenv('QDRANT_PATH', './qdrant_data')
     QDRANT_COLLECTION = 'documents'

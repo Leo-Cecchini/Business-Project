@@ -5,6 +5,10 @@
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>🤖 Virtual Assistant</title>
   <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+  <script>
+    // Inietta la chiave Geoapify dal server (config.py → Config.GEOAPIFY_KEY)
+    window.GEOAPIFY_KEY = "{{ config.get('GEOAPIFY_KEY', '') }}";
+  </script>
   <style>
     :root{--brand:#3b5bfd;--bg:#f6f7fb;--border:#e5e7eb;--muted:#6b7280;}
     *{box-sizing:border-box}
@@ -69,6 +73,7 @@
     .chip button{all:unset;cursor:pointer;font-weight:700;opacity:.6}
     .chip button:hover{opacity:1}
     .actions-end{display:flex;justify-content:flex-end;gap:8px;margin-top:14px}
+    .req-badge{color:#b91c1c;font-weight:600;margin-left:6px}
 
     /* Toggle switch */
     .switch{position:relative;display:inline-block;width:48px;height:28px}
@@ -115,6 +120,15 @@
     /* Toast */
     .toast{position:fixed;bottom:20px;right:20px;background:#111827;color:#fff;padding:10px 12px;border-radius:10px;opacity:.95;display:none}
     .toast.show{display:block}
+
+    /* Autocomplete (Geoapify) */
+    .suggestions{position:relative}
+    .suggestions ul{
+      position:absolute; z-index:10; list-style:none; margin:4px 0 0; padding:0;
+      width:100%; max-height:200px; overflow:auto; background:#fff; border:1px solid var(--border); border-radius:8px;
+    }
+    .suggestions li{padding:8px 10px; cursor:pointer}
+    .suggestions li:hover{background:#f5f5f5}
   </style>
 </head>
 <body>
@@ -204,12 +218,14 @@
               </div>
               <div class="site-toolbar">
                 <button id="btnClearSite" class="btn ghost" disabled>Deseleziona</button>
-                <button id="btnAssignWorker" class="btn" disabled>Assegna operaio</button>
+                <button id="btnAssignWorker" class="btn" style="display:none">Assegna operai</button>
+                <button id="btnUpdateProgress" class="btn" style="display:none">Aggiorna lavori</button>
                 <button id="btnToggleStatus" class="btn" style="display:none">Segna come Confermato</button>
                 <button id="btnDeleteProject" class="btn danger" style="display:none">Elimina cantiere</button>
                 <button id="btnCreateProjectTop" class="btn ghost">+ Crea cantiere</button>
               </div>
             </div>
+            <div id="siteDates" class="muted" style="display:none;font-size:12px;margin-top:6px">Date stima: —</div>
           </div>
 
           <!-- LISTA DESTRA (sticky) -->
@@ -328,9 +344,18 @@
       <form id="projectForm">
         <div class="form-grid">
           <div class="field"><label for="projName">Nome</label><input id="projName" required></div>
-          <div class="field"><label for="projCity">Città</label><input id="projCity"></div>
-          <div class="field"><label for="projStart">Inizio</label><input id="projStart" type="date"></div>
-          <div class="field"><label for="projEnd">Fine</label><input id="projEnd" type="date"></div>
+          <div class="field">
+            <label for="addrSearch">Cerca indirizzo (Geoapify)</label>
+            <input id="addrSearch" placeholder="Es. Via Dante 20, Firenze">
+            <div id="addrSuggest" class="suggestions"></div>
+          </div>
+          <div class="field"><label for="addrStreet">Via</label><input id="addrStreet" placeholder="Es. Via Dante"></div>
+          <div class="field"><label for="addrNumber">N. civico</label><input id="addrNumber" placeholder="Es. 20"></div>
+          <div class="field"><label for="addrCity">Città</label><input id="addrCity" placeholder="Es. Firenze"></div>
+          <div class="field"><label for="addrState">Stato</label><input id="addrState" placeholder="Es. Italia"></div>
+          <div class="field"><label for="addrZip">CAP</label><input id="addrZip" placeholder="Es. 50122"></div>
+          <div class="field"><label for="projStart">Inizio (stima)</label><input id="projStart" type="date"></div>
+          <div class="field"><label for="projEnd">Fine (stima)</label><input id="projEnd" type="date"></div>
           <div class="field"><label for="projStatus">Stato</label>
             <select id="projStatus">
               <option value="Preventivo">Preventivo</option>
@@ -346,23 +371,54 @@
     </div>
   </div>
 
+  <!-- MODALE: CONFERMA CANTIERE -->
+<div id="confirmModal" class="modal" aria-hidden="true">
+  <div class="modal-card" role="dialog" aria-modal="true">
+    <h3>Conferma cantiere</h3>
+    <form id="confirmForm">
+      <div class="form-grid">
+        <div class="field">
+          <label for="confStart">Inizio (stima)</label>
+          <input id="confStart" type="date" required>
+        </div>
+        <div class="field">
+          <label for="confEnd">Fine (stima)</label>
+          <input id="confEnd" type="date" required>
+        </div>
+      </div>
+      <div class="actions-end">
+        <button type="button" class="btn" data-close="#confirmModal">Annulla</button>
+        <button type="submit" class="btn primary">Conferma</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<div id="workNoteModal" class="modal" aria-hidden="true">
+  <div class="modal-card" role="dialog" aria-modal="true">
+    <h3>Aggiorna lavori</h3>
+    <p>Scrivi cosa è stato fatto (es: "posa pavimento effettuata", "cablaggio cavi elettrici completato").</p>
+    <textarea id="workNoteText" rows="4" placeholder="Scrivi l'aggiornamento..." style="width:100%"></textarea>
+    <div class="modal-actions" style="margin-top:12px;display:flex;gap:8px;justify-content:flex-end;">
+      <button id="workNoteCancel" class="btn btn-light" type="button">Annulla</button>
+      <button id="workNoteSend" class="btn" type="button">Invia</button>
+    </div>
+  </div>
+</div>
+
   <!-- Toast -->
   <div id="toast" class="toast"></div>
 
   <script>
     /* ====== STATO (demo) ====== */
     const state = {
-      workerSeq: 1000,
       workers: [],
-      projectSeq: 3,
-      projects: [
-        { id: 'p1', nome: 'Residenza Verdi', citta: 'Milano', stato: 'Preventivo' },
-        { id: 'p2', nome: 'Capannone Alfa', citta: 'Modena', stato: 'Preventivo' },
-        { id: 'p3', nome: 'Ristrutturazione Centro', citta: 'Roma', stato: 'Confermato' },
-      ],
       selectedProjectId: '',
       projectDocs: {},
-      assignments: []
+      assignments: [],
+      // cache runtime
+      projectsCache: [], // array di {id,nome,citta,stato}
+      recentProjectIds: [] // ultimi 5 cliccati
     };
 
     /* ====== UTIL ====== */
@@ -378,27 +434,173 @@
       return base.replace(/\/$/, '') + path;
     }
 
-  async function fetchJSON(url, opts = {}){
-    // base assoluta
-    const base = apiURL(url);
-    // cache-buster
-    const full = base + (base.includes('?') ? '&' : '?') + '_ts=' + Date.now();
+    async function fetchJSON(url, opts = {}){
+      // base assoluta
+      const base = apiURL(url);
+      // cache-buster
+      const full = base + (base.includes('?') ? '&' : '?') + '_ts=' + Date.now();
 
-    const res = await fetch(full, {
-      cache: 'no-store',
-      headers: {
-        'Content-Type': 'application/json',
-        'Cache-Control': 'no-cache'
-      },
-      credentials: 'same-origin',
-      ...opts
-    });
+      const res = await fetch(full, {
+        cache: 'no-store',
+        headers: {
+          'Content-Type': 'application/json',
+          'Cache-Control': 'no-cache'
+        },
+        credentials: 'same-origin',
+        ...opts
+      });
 
-    const text = await res.text();
-    let data; try { data = text ? JSON.parse(text) : {}; } catch { data = { raw: text }; }
-    if(!res.ok){ throw new Error(data?.error || text || `HTTP ${res.status}`); }
-    return data;
-  }
+      const text = await res.text();
+      let data; try { data = text ? JSON.parse(text) : {}; } catch { data = { raw: text }; }
+      if(!res.ok){ throw new Error(data?.error || text || `HTTP ${res.status}`); }
+      return data;
+    }
+
+    // ==== Progetti: normalizzazione e recenti ====
+    function normalizeProject(p){
+      // backend: {id, name, city, status}
+      return {
+        id: p.id,
+        nome: p.name || p.nome || '',
+        citta: p.city || p.citta || '',
+        stato: p.status || p.stato || 'Preventivo',
+        start_date_estimated: p.start_date_estimated || (p.meta_extra && p.meta_extra.estimate && p.meta_extra.estimate.start) || null,
+        end_date_estimated:   p.end_date_estimated   || (p.meta_extra && p.meta_extra.estimate && p.meta_extra.estimate.end)   || null
+      };
+    }
+
+    function loadRecents(){
+      try{ state.recentProjectIds = JSON.parse(localStorage.getItem('recent_projects')||'[]'); }
+      catch{ state.recentProjectIds = []; }
+    }
+    function saveRecents(){
+      localStorage.setItem('recent_projects', JSON.stringify(state.recentProjectIds||[]));
+    }
+    function pushRecent(pid){
+      if(!pid) return;
+      state.recentProjectIds = [pid, ...state.recentProjectIds.filter(id=>id!==pid)].slice(0,5);
+      saveRecents();
+    }
+
+    async function loadProjectsList(){
+      const res = await fetchJSON('/api/projects/list');
+      const items = Array.isArray(res.items) ? res.items : [];
+      state.projectsCache = items.map(normalizeProject);
+      if(state.selectedProjectId && !state.projectsCache.find(p=>p.id===state.selectedProjectId)){
+        state.selectedProjectId = '';
+      }
+      if(state.selectedProjectId){ try{ applySiteSelection(); } catch(_){} }
+    }
+
+    // ===== Geoapify Autocomplete (facoltativo) =====
+    const GEOAPIFY_KEY = window.GEOAPIFY_KEY || ""; // inserisci la tua API key per abilitare i suggerimenti
+    if(!GEOAPIFY_KEY){ console.warn('[Geoapify] Autocomplete disabilitato: imposta window.GEOAPIFY_KEY per abilitarlo.'); }
+
+    function debounce(fn, ms=300){ let t; return (...args)=>{ clearTimeout(t); t=setTimeout(()=>fn(...args), ms); }; }
+
+    async function geoapifyAutocomplete(q){
+      if(!q) return [];
+      // 1) Prova il proxy backend (non espone la chiave al client)
+      try{
+        const pr = await fetch(apiURL(`/api/geo/autocomplete?text=${encodeURIComponent(q)}&limit=7&lang=it`), { cache: 'no-store' });
+        if(pr.ok){
+          const pd = await pr.json();
+          // il proxy restituisce già un array normalizzato di oggetti {formatted, street, housenumber, city, state, postcode}
+          return pd.features || [];
+        }
+      }catch(_){ /* ignora e prova fallback */ }
+
+      // 2) Fallback diretto verso Geoapify se è impostata la chiave lato client
+      if(!GEOAPIFY_KEY) return [];
+      const url = `https://api.geoapify.com/v1/geocode/autocomplete?text=${encodeURIComponent(q)}&limit=7&lang=it&apiKey=${GEOAPIFY_KEY}`;
+      try{
+        const res = await fetch(url);
+        if(!res.ok) return [];
+        const data = await res.json();
+        return (data.features || []).map(f=>f.properties || {});
+      }catch(_){ return []; }
+    }
+
+    function fillAddressFields(props){
+      const street = props.street || props.name || "";
+      const number = props.housenumber || "";
+      const city   = props.city || props.county || props.town || props.village || "";
+      const state  = props.country || props.state || "";
+      const zip    = props.postcode || "";
+
+      document.getElementById('addrStreet').value = street;
+      document.getElementById('addrNumber').value = number;
+      document.getElementById('addrCity').value   = city;
+      document.getElementById('addrState').value  = state;
+      document.getElementById('addrZip').value    = zip;
+
+      const formatted = props.formatted || [ [street, number].filter(Boolean).join(' '), [zip, city].filter(Boolean).join(' '), state ].filter(Boolean).join(', ');
+      let hidden = document.getElementById('addrFormatted');
+      if(!hidden){ hidden = document.createElement('input'); hidden.type='hidden'; hidden.id='addrFormatted'; document.getElementById('projectForm').appendChild(hidden); }
+      hidden.value = formatted;
+    }
+
+    function setupGeoapifyAutocomplete(){
+      const input = document.getElementById('addrSearch');
+      const box   = document.getElementById('addrSuggest');
+      if(!input || !box) return;
+
+      const render = (items)=>{
+        if(!items.length){ box.innerHTML = ""; return; }
+        const ul = document.createElement('ul');
+        items.forEach(p=>{
+          const li = document.createElement('li');
+          li.textContent = p.formatted || [p.street, p.housenumber, p.postcode, p.city, p.country].filter(Boolean).join(' ');
+          li.addEventListener('click', ()=>{ fillAddressFields(p); box.innerHTML=''; input.value = li.textContent; });
+          ul.appendChild(li);
+        });
+        box.innerHTML = ""; box.appendChild(ul);
+      };
+
+      input.addEventListener('input', debounce(async ()=>{
+        const q = input.value.trim();
+        if(q.length < 3){ box.innerHTML = ""; return; }
+        try{ const items = await geoapifyAutocomplete(q); render(items); }
+        catch(e){ console.warn(e); box.innerHTML = ""; }
+      }, 300));
+
+      input.addEventListener('blur', ()=> setTimeout(()=> box.innerHTML = "", 200));
+    }
+
+    function buildAddressFromForm(){
+      const street = document.getElementById('addrStreet').value.trim();
+      const number = document.getElementById('addrNumber').value.trim();
+      const city   = document.getElementById('addrCity').value.trim();
+      const state  = document.getElementById('addrState').value.trim();
+      const zip    = document.getElementById('addrZip').value.trim();
+      const formattedHidden = document.getElementById('addrFormatted')?.value.trim();
+      const formatted = formattedHidden || [ [street, number].filter(Boolean).join(' '), [zip, city].filter(Boolean).join(' '), state ].filter(Boolean).join(', ');
+      return {
+        formatted: formatted || (city || ''),
+        street: street || null,
+        street_number: number || null,
+        city: city || null,
+        state: state || null,
+        postal_code: zip || null
+      };
+    }
+
+    // Prepara il modale di conferma (default date e vincoli)
+    function prepareConfirmModal(){
+      const s = document.getElementById('confStart');
+      const e = document.getElementById('confEnd');
+      if(!s || !e) return;
+      const today = new Date().toISOString().slice(0,10);
+      if(!s.value) s.value = today;
+      s.min = today;                 // non permettere date passate per l'inizio
+      e.min = s.value;               // fine non può precedere inizio
+      if(!e.value || e.value < s.value) { e.value = s.value; }
+      if(e.value && e.value < today) { e.value = s.value; } // allinea se era nel passato
+      s.onchange = ()=>{
+        e.min = s.value;
+        if(!e.value || e.value < s.value){ e.value = s.value; }
+      };
+    }
 
     // === Opzioni per tendine (ruolo, città, certificazioni, competenze) ===
     const ROLE_OPTIONS = [
@@ -622,8 +824,9 @@
 
     function renderProjectSelect(){
       const sel = $("#projectSelect");
+      const items = [...state.projectsCache].sort((a,b)=> (a.nome||'').localeCompare(b.nome||'', 'it', {sensitivity:'base'}));
       sel.innerHTML = '<option value="">— Nessuno —</option>' +
-        state.projects.map(p => `<option value="${p.id}">${p.nome}</option>`).join('');
+        items.map(p => `<option value="${p.id}">${p.nome}</option>`).join('');
       sel.value = state.selectedProjectId || '';
     }
 
@@ -632,14 +835,18 @@
 
     function renderSitesList(){
       const list = $("#sitesList");
-      list.innerHTML = state.projects.map(p => `
+      if(!state.projectsCache.length){ list.innerHTML = '<div class="muted">Nessun cantiere</div>'; return; }
+      const map = Object.fromEntries(state.projectsCache.map(p=>[p.id,p]));
+      const ids = (state.recentProjectIds && state.recentProjectIds.length) ? state.recentProjectIds : state.projectsCache.slice(0,5).map(p=>p.id);
+      const cards = ids.map(id=> map[id]).filter(Boolean);
+      list.innerHTML = cards.map(p => `
         <div class="site-item ${p.id===state.selectedProjectId?'active':''}" data-id="${p.id}">
           <div style="font-weight:600">${p.nome}</div>
           <div class="muted" style="font-size:12px">${p.citta} — ${prettyStatus(p.stato)}</div>
         </div>
       `).join('');
       list.querySelectorAll('.site-item').forEach(el=>{
-        el.addEventListener('click',()=>{ state.selectedProjectId = el.dataset.id; applySiteSelection(); });
+        el.addEventListener('click',()=>{ state.selectedProjectId = el.dataset.id; pushRecent(state.selectedProjectId); applySiteSelection(); });
       });
     }
 
@@ -651,22 +858,92 @@
     function updateStatusControls(p){
       const btn = document.getElementById('btnToggleStatus');
       const badge = document.getElementById('siteStatusBadge');
+      const btnProgress = document.getElementById('btnUpdateProgress');
+      const btnAssign = document.getElementById('btnAssignWorker');
+
       if(!p){
         btn.style.display = 'none';
         badge.style.display = 'none';
+        btnProgress.style.display = 'none';
+        if (btnAssign) btnAssign.style.display = 'none';
         return;
       }
-      btn.style.display = 'inline-flex';
-      btn.textContent = isConfirmed(p) ? 'Segna come Da approvare' : 'Segna come Confermato';
+
+      if (p.stato === 'Confermato') {
+        btn.style.display = 'none';
+        btnProgress.style.display = 'inline-flex';
+        if (btnAssign) btnAssign.style.display = 'inline-flex';
+      } else {
+        btn.style.display = 'inline-flex';
+        btn.textContent = 'Segna come Confermato';
+        btnProgress.style.display = 'none';
+        if (btnAssign) btnAssign.style.display = 'none';
+      }
 
       badge.style.display = 'inline-flex';
       badge.textContent = prettyStatus(p.stato);
       badge.classList.remove('badge-confirmed','badge-pending');
-      badge.classList.add(isConfirmed(p) ? 'badge-confirmed' : 'badge-pending');
+      badge.classList.add(p.stato === 'Confermato' ? 'badge-confirmed' : 'badge-pending');
+    }
+
+    function renderSiteDates(p){
+      const el = document.getElementById('siteDates');
+      if(!el) return;
+      const s = p?.start_est || p?.start_date_estimated || null;
+      const e = p?.end_est   || p?.end_date_estimated   || null;
+      if (s && e){
+        el.style.display = 'block';
+        el.textContent = `Date stima: ${s} → ${e}`;
+      } else {
+        el.style.display = 'none';
+        el.textContent = '';
+      }
+    }
+
+    function renderProgress(p) {
+      const wrapId = 'siteProgressContainer';
+      let container = document.getElementById(wrapId);
+
+      // Se non c'è un cantiere selezionato o non è Confermato → nascondi barra
+      if (!p || p.stato !== 'Confermato') {
+        if (container) container.style.display = 'none';
+        return;
+      }
+
+      // Calcolo percentuale (default 0)
+      let progress = 0;
+      if (p.meta_extra && p.meta_extra.progress && typeof p.meta_extra.progress.percent === 'number') {
+        progress = p.meta_extra.progress.percent;
+      } else if (p.progress_percent != null) {
+        progress = p.progress_percent;
+      }
+
+      // Assicura il contenitore solo per cantieri Confermati
+      if (!container) {
+        const head = document.querySelector('.site-head');
+        if (!head) return;
+        container = document.createElement('div');
+        container.id = wrapId;
+        container.style.marginTop = '8px';
+        container.innerHTML = `
+          <div style="font-size:13px;margin-bottom:4px;">Avanzamento lavori: <span id="progressLabel">0%</span></div>
+          <div style="background:#e5e7eb;border-radius:8px;overflow:hidden;height:12px;">
+            <div id="progressBar" style="height:12px;background:var(--brand);width:0%;transition:width .3s;"></div>
+          </div>
+        `;
+        head.appendChild(container);
+      }
+
+      // Mostra e aggiorna i valori
+      container.style.display = 'block';
+      const labelEl = document.getElementById('progressLabel');
+      const barEl = document.getElementById('progressBar');
+      if (labelEl) labelEl.textContent = progress + '%';
+      if (barEl) barEl.style.width = progress + '%';
     }
 
     function recalcActiveProjectsKPI(){
-      const attivi = state.projects.filter(p => p.stato === 'Confermato').length;
+      const attivi = state.projectsCache.filter(p => p.stato === 'Confermato').length;
       document.getElementById('kpiActiveProjects').textContent = attivi;
     }
 
@@ -678,7 +955,7 @@
     }
 
     function applySiteSelection(){
-      const p = state.projects.find(x=>x.id===state.selectedProjectId);
+      const p = state.projectsCache.find(x=>x.id===state.selectedProjectId);
 
       // Header & meta
       $('#siteHeader').textContent = p ? p.nome : 'Nessun cantiere selezionato';
@@ -693,6 +970,8 @@
         $('#siteMessages').innerHTML = '';
       }
       updateStatusControls(p);
+      renderSiteDates(p);
+      renderProgress(p);
 
       // Abilitazioni
       $('#siteUploadBtn').disabled   = !p;
@@ -713,6 +992,7 @@
 
     /* ====== ROUTER (tabs) ====== */
     document.addEventListener('DOMContentLoaded', () => {
+      setupGeoapifyAutocomplete();
       const tabA = $('#tabAzienda'), tabC = $('#tabCantieri');
       const viewA = $('#viewAzienda');
       const viewDocs = $('#viewDocs');
@@ -738,6 +1018,7 @@
       /* Topbar select -> selezione/deselezione */
       $('#projectSelect').addEventListener('change', e=>{
         state.selectedProjectId = e.target.value; // "" = nessuno
+        if(state.selectedProjectId) pushRecent(state.selectedProjectId);
         if(tabC.classList.contains('active')) applySiteSelection();
       });
 
@@ -750,30 +1031,56 @@
       $('#btnCreateProjectTop').addEventListener('click', ()=> openModal(projectModalSel));    // in Cantieri (nessuna selezione)
       $('#btnClearSite').addEventListener('click', clearSiteSelection);
 
-      // Toggle stato cantiere
+      // Toggle stato cantiere (solo conferma)
       document.getElementById('btnToggleStatus').addEventListener('click', ()=>{
-        const p = state.projects.find(x=>x.id===state.selectedProjectId);
+        const p = state.projectsCache.find(x=>x.id===state.selectedProjectId);
         if(!p) return;
-        p.stato = isConfirmed(p) ? 'Preventivo' : 'Confermato';
-        updateStatusControls(p);
-        recalcActiveProjectsKPI();
-        renderSitesList();
-        toast(`Stato aggiornato: ${prettyStatus(p.stato)}`);
+        if (p.stato === 'Confermato') return; // già confermato
+        prepareConfirmModal();
+        openModal('#confirmModal');
       });
 
-      // Elimina cantiere
-      $('#btnDeleteProject').addEventListener('click', ()=>{
-        const p = state.projects.find(x=>x.id===state.selectedProjectId);
+      // Elimina cantiere (DB + UI)
+      $('#btnDeleteProject').addEventListener('click', async ()=>{
+        const p = state.projectsCache.find(x=>x.id===state.selectedProjectId);
         if(!p) return;
-        if(confirm(`Eliminare il cantiere "${p.nome}"?`)){
-          state.projects = state.projects.filter(x=>x.id!==p.id);
-          delete state.projectDocs[p.id];
-          state.assignments = state.assignments.filter(a=>a.project_id!==p.id);
+        if(!confirm(`Eliminare DEFINITIVAMENTE il cantiere "${p.nome}"?`)) return;
+        try {
+          await fetchJSON(`/api/projects/${p.id}`, { method: 'DELETE' });
+          // rimuovi da recenti e dalla cache
+          state.recentProjectIds = state.recentProjectIds.filter(id => id !== p.id);
+          state.projectsCache = state.projectsCache.filter(x => x.id !== p.id);
+          saveRecents();
           clearSiteSelection();
           renderProjectSelect();
           renderSitesList();
-          updateKPI();
+          await updateKPI();
           toast('Cantiere eliminato');
+        } catch(err){
+          console.error(err);
+          toast('Errore nell’eliminazione');
+        }
+      });
+
+      // Auto-assegnazione operai (regole base; IA in futuro)
+      document.getElementById('btnAssignWorker').addEventListener('click', async ()=>{
+        const p = state.projectsCache.find(x=>x.id===state.selectedProjectId);
+        if(!p){ toast('Seleziona un cantiere'); return; }
+        if(p.stato !== 'Confermato'){ toast('Disponibile solo per cantieri Confermati'); return; }
+
+        try{
+          const res = await fetchJSON(`/api/projects/${p.id}/auto-assign`, {
+            method: 'POST',
+            body: JSON.stringify({ strategy: 'basic' })
+          });
+          if (Array.isArray(res.assigned) && res.assigned.length){
+            toast(`Assegnati ${res.assigned.length} operai`);
+          } else {
+            toast(res.message || 'Pianificazione registrata');
+          }
+        }catch(err){
+          console.error(err);
+          toast('Errore auto-assegnazione');
         }
       });
 
@@ -819,7 +1126,7 @@
       $('#removeWorkerForm').addEventListener('submit', async (e)=>{
         e.preventDefault();
         const id = $('#remove_id').value.trim();
-        if(!id){ toast('Inserisci un ObjectId valido'); return; }
+        if(!id){ toast('Inserisci un ID operaio valido'); return; }
         try{
           await fetchJSON(`/api/workers/${id}`, { method: 'DELETE' });
           await updateKPI();
@@ -853,22 +1160,170 @@
       });
 
       /* Submit: Crea cantiere */
-      $('#projectForm').addEventListener('submit', async (e)=>{
+      function updateProjectDateRequirements(){
+        const statusEl = document.getElementById('projStatus');
+        const startEl = document.getElementById('projStart');
+        const endEl = document.getElementById('projEnd');
+        const isConfirmed = statusEl && statusEl.value === 'Confermato';
+
+        if(startEl) startEl.required = !!isConfirmed;
+        if(endEl)   endEl.required   = !!isConfirmed;
+
+        // Gestione badge “(obbligatorio)” sulle label
+        const lblStart = document.querySelector('label[for="projStart"]');
+        const lblEnd   = document.querySelector('label[for="projEnd"]');
+
+        function ensureBadge(labelEl){
+          if(!labelEl) return null;
+          let badge = labelEl.querySelector('.req-badge');
+          if(!badge){
+            badge = document.createElement('span');
+            badge.className = 'req-badge';
+            badge.textContent = ' (obbligatorio)';
+            labelEl.appendChild(badge);
+          }
+          return badge;
+        }
+
+        const bStart = ensureBadge(lblStart);
+        const bEnd   = ensureBadge(lblEnd);
+
+        if(bStart) bStart.style.display = isConfirmed ? 'inline' : 'none';
+        if(bEnd)   bEnd.style.display   = isConfirmed ? 'inline' : 'none';
+      }
+
+
+      // Submit: conferma cantiere
+      document.getElementById('confirmForm')?.addEventListener('submit', async (e)=>{
         e.preventDefault();
+        const pid = state.selectedProjectId;
+        const p = state.projectsCache.find(x=>x.id===pid);
+        if(!pid || !p){ toast('Seleziona un cantiere'); return; }
+
+        const start = document.getElementById('confStart').value;
+        const end   = document.getElementById('confEnd').value;
+        if(!start || !end){ toast('Inserisci entrambe le date'); return; }
+        if(new Date(end) < new Date(start)){
+          toast('La data di fine (stima) non può precedere quella di inizio');
+          return;
+        }
+
+        try{
+          await fetchJSON(`/api/projects/${pid}/confirm`, {
+            method: 'PATCH',
+            body: JSON.stringify({ start_date_estimated: start, end_date_estimated: end })
+          });
+          p.stato = 'Confermato';
+          p.start_est = start;
+          p.end_est = end;
+          closeModal('#confirmModal');
+          updateStatusControls(p);
+          renderSiteDates(p);
+          recalcActiveProjectsKPI();
+          renderSitesList();
+          toast('Cantiere confermato');
+        }catch(err){
+          console.error(err);
+          toast('Errore nella conferma');
+        }
+      });
+
+      // Apri modale "Aggiorna lavori" (solo cantieri Confermati)
+      document.getElementById('btnUpdateProgress').addEventListener('click', ()=>{
+        const p = state.projectsCache.find(x=>x.id===state.selectedProjectId);
+        if(!p){ toast('Seleziona un cantiere'); return; }
+        if(p.stato !== 'Confermato'){ toast('Disponibile solo per cantieri Confermati'); return; }
+        const ta = document.getElementById('workNoteText');
+        if (ta) ta.value = '';
+        if (typeof openModal === 'function') {
+          openModal('#workNoteModal');
+        } else {
+          const m = document.getElementById('workNoteModal');
+          if (m) m.style.display = 'block';
+        }
+      });
+
+      // Chiudi modale nota lavori
+      document.getElementById('workNoteCancel').addEventListener('click', ()=>{
+        if (typeof closeModal === 'function') closeModal('#workNoteModal');
+        else { const m = document.getElementById('workNoteModal'); if (m) m.style.display = 'none'; }
+      });
+
+      // Invia nota lavori → PATCH /api/projects/<pid>/progress/note
+      document.getElementById('workNoteSend').addEventListener('click', async ()=>{
+        const p = state.projectsCache.find(x=>x.id===state.selectedProjectId);
+        if(!p){ toast('Seleziona un cantiere'); return; }
+        const text = (document.getElementById('workNoteText').value || '').trim();
+        if(!text){ toast('Scrivi qualcosa'); return; }
+        try{
+          await fetchJSON(`/api/projects/${p.id}/progress/note`, {
+            method: 'PATCH',
+            body: JSON.stringify({ text })
+          });
+          // aggiorna storico locale (opzionale)
+          if(!p.meta_extra) p.meta_extra = {};
+          const hist = (p.meta_extra.progress_history ||= []);
+          hist.push({ at: new Date().toISOString(), note: text, by: 'user' });
+
+          if (typeof closeModal === 'function') closeModal('#workNoteModal');
+          else { const m = document.getElementById('workNoteModal'); if (m) m.style.display = 'none'; }
+
+          toast('Aggiornamento registrato');
+          // La barra resta invariata: la aggiornerà l'assistente invocando /progress con la % calcolata
+        }catch(err){
+          console.error(err);
+          toast('Errore durante il salvataggio');
+        }
+      });
+      // inizializza il requisito in base allo stato attuale
+      updateProjectDateRequirements();
+      document.getElementById('projStatus')?.addEventListener('change', updateProjectDateRequirements);
+
+      document.getElementById('projectForm')?.addEventListener('submit', async (e)=>{
+        e.preventDefault();
+
+        const name   = document.getElementById('projName').value.trim();
+        const status = document.getElementById('projStatus').value; // "Preventivo" | "Confermato"
+        const start  = document.getElementById('projStart').value || null;
+        const end    = document.getElementById('projEnd').value   || null;
+        const address = buildAddressFromForm();
+
+        if(!name){ toast('Il nome è obbligatorio'); return; }
+        if(status === 'Confermato' && (!start || !end)){
+          toast('Per un cantiere Confermato, inizio e fine sono obbligatori');
+          return;
+        }
+
+        // Validazione ordine date stima: fine >= inizio
+        if (start && end) {
+          const s = new Date(start);
+          const eDate = new Date(end);
+          if (isFinite(s) && isFinite(eDate) && eDate < s) {
+            toast("La data di fine (stima) non può precedere quella di inizio (stima)");
+            return; // blocca invio
+          }
+        }
+
+        // inviamo sempre STIME; il backend richiede start/end se status === 'Confermato'
         const payload = {
-          name: $('#projName').value.trim(),
-          city: $('#projCity').value.trim(),
-          start: $('#projStart').value || null,
-          end: $('#projEnd').value || null,
-          status: $('#projStatus').value // "Preventivo" | "Confermato"
+          name,
+          status,
+          // city inviato per il controllo di unicità lato server
+          city: (address.city || undefined),
+          // indirizzo minimale (compatibile col template e backend)
+          address,
+          // le date inviate sono sempre STIME
+          start_date_estimated: start || null,
+          end_date_estimated:   end   || null
         };
-        if(!payload.name){ toast('Il nome è obbligatorio'); return; }
+
         try{
           await fetchJSON('/api/projects', { method: 'POST', body: JSON.stringify(payload) });
           await updateKPI();
           closeModal('#projectModal');
-          toast(`Cantiere creato: ${payload.name}`);
+          toast(`Cantiere creato: ${name}`);
           e.target.reset();
+          updateProjectDateRequirements();
         } catch(err){
           console.error(err);
           toast('Errore nel creare il cantiere');
@@ -942,7 +1397,7 @@
         e.preventDefault();
         const pid = state.selectedProjectId;
         if(!pid){ toast('Seleziona un cantiere'); return; }
-        const p = state.projects.find(x=>x.id===pid);
+        const p = state.projectsCache.find(x=>x.id===pid);
         const txt = $('#siteMessageInput').value.trim(); if(!txt) return;
         const box = $('#siteMessages');
         box.insertAdjacentHTML('beforeend', `<div class="msg"><div class="who">Tu</div><div>${txt}</div></div>`);
@@ -962,13 +1417,30 @@
       });
 
       /* Init */
-      renderProjectSelect();
-      renderSitesList();
-      updateKPI(); // ora legge dal DB tramite /api/dashboard/summary
+      loadRecents();
+      (async () => {
+        try { await loadProjectsList(); } catch(e){ console.warn('Impossibile caricare lista cantieri', e); }
+        renderProjectSelect();
+        renderSitesList();
+        updateKPI();
+      })();
 
       // Refresh KPI when tab becomes visible again
       document.addEventListener('visibilitychange', ()=>{
         if(!document.hidden) updateKPI();
+      });
+      // Chiudi modale con ESC
+      document.addEventListener('keydown', (ev)=>{
+        if(ev.key === 'Escape'){
+          document.querySelectorAll('.modal.open').forEach(m => m.classList.remove('open'));
+        }
+      });
+      // Chiudi cliccando sul backdrop
+      document.addEventListener('click', (ev)=>{
+        const el = ev.target;
+        if(el && el.classList && el.classList.contains('modal') && el.classList.contains('open')){
+          el.classList.remove('open');
+        }
       });
     });
   </script>
