@@ -242,6 +242,48 @@
             <div id="siteDocumentsList" style="margin-top:8px"><p class="muted">—</p></div>
           </div>
 
+          <div class="card site-computo" id="computoCard" style="padding:14px; display:none">
+            <h3>Computo e Pianificazione</h3>
+            <p class="section-sub">Carica, genera o pianifica il computo metrico del cantiere.</p>
+            
+            <div class="form-grid" style="grid-template-columns: 1fr 1fr; align-items: start; gap: 16px; margin-top: 12px;">
+              
+              <div class="field">
+                <label for="computo-file-input"><b>1a. Carica Computo da PDF</b></label>
+                <input type="file" id="computo-file-input" accept=".pdf">
+                <button id="upload-computo-btn" class="btn" style="margin-top: 8px;">Carica e Analizza PDF</button>
+              </div>
+
+              <div class="field">
+                <label for="computo-prompt-input"><b>1b. Genera Computo da Testo</b></label>
+                <textarea id="computo-prompt-input" rows="3" placeholder="Es: Ristrutturazione bagno 6mq, rimozione piastrelle, rifacimento impianti..."></textarea>
+                <button id="generate-computo-btn" class="btn primary" style="margin-top: 8px;">Genera Computo e PDF</button>
+              </div>
+
+            </div>
+
+            <div style="border-top: 1px solid var(--border); margin-top: 16px; padding-top: 16px;">
+              <div class="field">
+                <label for="start-date-input"><b>2. Pianifica Sequenza Lavori</b></label>
+                <p class="section-sub" id="lavori-help-text" style="font-size: 13px;">(Attivo solo dopo aver caricato o generato un computo)</p>
+                
+                <div style="display: flex; gap: 10px; margin-top: 8px;">
+                  <input type="date" id="start-date-input" style="flex-basis: 180px;">
+                  <button id="generate-lavori-btn" class="btn" disabled>Genera Sequenza Lavori</button>
+                </div>
+              </div>
+            </div>
+
+            <div id="download-pdf-section" style="display:none; margin-top: 16px; border-top: 1px solid var(--border); padding-top: 16px;">
+              <label><b>3. Download PDF</b></label>
+              <br>
+              <a id="download-pdf-link" href="#" class="btn ghost" target="_blank" style="margin-top: 8px;">
+                Scarica PDF Generato
+              </a>
+            </div>
+
+          </div>
+
           <!-- CHAT CANTIERE -->
           <div class="chat-card site-chat" id="siteChatCard" style="display:none">
             <div class="chat-wrap">
@@ -957,18 +999,29 @@
     function applySiteSelection(){
       const p = state.projectsCache.find(x=>x.id===state.selectedProjectId);
 
+      // Elementi card
+      const docsCard = $('#siteDocsCard');
+      const chatCard = $('#siteChatCard');
+      const computoCard = $('#computoCard'); // <-- 1. RIFERIMENTO ALLA NUOVA CARD
+
       // Header & meta
       $('#siteHeader').textContent = p ? p.nome : 'Nessun cantiere selezionato';
       $('#siteChatMeta').textContent = p ? `Contesto: cantiere (${p.nome})` : '';
+      
       if (p) {
         $('#siteChatTitle').textContent = `Chat cantiere — ${p.nome}`;
-        $('#siteChatCard').style.display = 'block';
-        $('#siteDocsCard').style.display = 'block';
+        // Mostra le card specifiche del cantiere
+        if (chatCard) chatCard.style.display = 'block';
+        if (docsCard) docsCard.style.display = 'block';
+        if (computoCard) computoCard.style.display = 'block'; // <-- 2. MOSTRA LA CARD
       } else {
-        $('#siteChatCard').style.display = 'none';
-        $('#siteDocsCard').style.display = 'none';
+        // Nascondi le card specifiche
+        if (chatCard) chatCard.style.display = 'none';
+        if (docsCard) docsCard.style.display = 'none';
+        if (computoCard) computoCard.style.display = 'none'; // <-- 3. NASCONDI LA CARD
         $('#siteMessages').innerHTML = '';
       }
+      
       updateStatusControls(p);
       renderSiteDates(p);
       renderProgress(p);
@@ -988,6 +1041,16 @@
 
       renderSiteDocs();
       renderSitesList();
+
+      // --- 4. RESET STATO CARD COMPUTO QUANDO CAMBI PROGETTO ---
+      if (computoCard) {
+          $('#generate-lavori-btn').disabled = true;
+          $('#lavori-help-text').style.display = 'block';
+          $('#download-pdf-section').style.display = 'none';
+          $('#download-pdf-link').href = '#';
+          $('#computo-file-input').value = '';
+          $('#computo-prompt-input').value = '';
+      }
     }
 
     /* ====== ROUTER (tabs) ====== */
@@ -1389,6 +1452,153 @@
       });
       $('#resetChatBtn').addEventListener('click', ()=>{
         $('#messagesContainer').innerHTML = '<div class="msg"><div class="who">Assistant</div><div>Chat aziendale resettata.</div></div>';
+      });
+
+      // =================================================================
+      // ===== INIZIO NUOVI LISTENER PER CARD COMPUTO ====================
+      // =================================================================
+      
+      // Riferimenti ai nuovi elementi
+      const btnUploadComputo = $('#upload-computo-btn');
+      const btnGenerateComputo = $('#generate-computo-btn');
+      const btnGenerateLavori = $('#generate-lavori-btn');
+      
+      const fileInputComputo = $('#computo-file-input');
+      const promptInputComputo = $('#computo-prompt-input');
+      const dateInputLavori = $('#start-date-input');
+      
+      const downloadSection = $('#download-pdf-section');
+      const downloadLink = $('#download-pdf-link');
+      const lavoriHelpText = $('#lavori-help-text');
+
+      // --- Evento 1: Carica Computo PDF ---
+      btnUploadComputo.addEventListener('click', async () => {
+          const pid = state.selectedProjectId;
+          if (!pid) { toast("Errore: Nessun progetto selezionato."); return; }
+          
+          const file = fileInputComputo.files[0];
+          if (!file) { toast("Per favore, seleziona un file PDF."); return; }
+
+          const formData = new FormData();
+          formData.append('file', file);
+          
+          btnUploadComputo.disabled = true;
+          btnUploadComputo.textContent = 'Analisi PDF in corso...';
+
+          try {
+              const response = await fetch(apiURL(`/api/projects/${pid}/computo/upload`), {
+                  method: 'POST',
+                  body: formData, // Non serve Content-Type, il browser lo imposta con FormData
+              });
+
+              const data = await response.json();
+              if (!response.ok) { throw new Error(data.error || 'Errore del server'); }
+
+              console.log("Computo estratto:", data);
+              toast("Computo metrico caricato e analizzato!");
+              
+              // Attiva il pulsante per generare i lavori
+              btnGenerateLavori.disabled = false;
+              lavoriHelpText.style.display = 'none';
+              downloadSection.style.display = 'none'; // Nasconde link PDF (non generato qui)
+
+          } catch (error) {
+              console.error("Errore caricamento computo:", error);
+              toast(`Errore: ${error.message}`);
+          } finally {
+              btnUploadComputo.disabled = false;
+              btnUploadComputo.textContent = 'Carica e Analizza PDF';
+          }
+      });
+
+      // --- Evento 2: Genera Computo da Testo ---
+      btnGenerateComputo.addEventListener('click', async () => {
+          const pid = state.selectedProjectId;
+          if (!pid) { toast("Errore: Nessun progetto selezionato."); return; }
+
+          const promptText = promptInputComputo.value.trim();
+          if (promptText.length < 10) {
+              toast("Per favore, inserisci una descrizione di almeno 10 caratteri.");
+              return;
+          }
+
+          btnGenerateComputo.disabled = true;
+          btnGenerateComputo.textContent = 'Generazione in corso...';
+
+          try {
+              const response = await fetch(apiURL(`/api/projects/${pid}/computo/generate`), {
+                  method: 'POST',
+                  headers: { 'Content-Type': 'application/json' },
+                  body: JSON.stringify({ description: promptText }),
+              });
+
+              const data = await response.json(); // Risposta = { computo: {...}, pdf_report_url: "..." }
+              if (!response.ok) { throw new Error(data.error || 'Errore del server'); }
+
+              console.log("Computo generato:", data.computo);
+              toast("Computo metrico e PDF generati!");
+
+              // Attiva il pulsante per generare i lavori
+              btnGenerateLavori.disabled = false;
+              lavoriHelpText.style.display = 'none';
+              
+              // Mostra il link per il download del PDF
+              downloadLink.href = apiURL(data.pdf_report_url);
+              downloadSection.style.display = 'block';
+
+          } catch (error) {
+              console.error("Errore generazione computo:", error);
+              toast(`Errore: ${error.message}`);
+          } finally {
+              btnGenerateComputo.disabled = false;
+              btnGenerateComputo.textContent = 'Genera Computo e PDF';
+          }
+      });
+
+      // --- Evento 3: Genera Sequenza Lavori ---
+      btnGenerateLavori.addEventListener('click', async () => {
+          const pid = state.selectedProjectId;
+          if (!pid) { toast("Errore: Nessun progetto selezionato."); return; }
+          
+          const startDate = dateInputLavori.value;
+          if (!startDate) {
+              toast("Per favore, seleziona una data di inizio lavori.");
+              return;
+          }
+
+          btnGenerateLavori.disabled = true;
+          btnGenerateLavori.textContent = 'Pianificazione in corso...';
+
+          try {
+              const response = await fetch(apiURL(`/api/projects/${pid}/lavori/generate`), {
+                  method: 'POST',
+                  headers: { 'Content-Type': 'application/json' },
+                  body: JSON.stringify({ start_date: startDate }),
+              });
+
+              const updatedProject = await response.json(); // Risposta = Progetto aggiornato
+              if (!response.ok) { throw new Error(updatedProject.error || 'Errore del server'); }
+
+              console.log("Progetto aggiornato con la pipeline lavori:", updatedProject);
+              
+              // --- CRUCIALE: Aggiorna la cache locale del progetto ---
+              const p_idx = state.projectsCache.findIndex(x => x.id === pid);
+              if (p_idx > -1) {
+                  // Normalizza e sostituisci il progetto nella cache
+                  state.projectsCache[p_idx] = normalizeProject(updatedProject);
+              }
+              // --- Fine aggiornamento cache ---
+
+              toast(`Sequenza lavori generata! ${updatedProject.works.length} voci create.`);
+
+          } catch (error) {
+              console.error("Errore generazione lavori:", error);
+              toast(`Errore: ${error.message}`);
+          } finally {
+              // Manteniamo il pulsante attivo, l'utente potrebbe voler rigenerare
+              btnGenerateLavori.disabled = false; 
+              btnGenerateLavori.textContent = 'Genera Sequenza Lavori';
+          }
       });
 
       /* Chat cantiere (backend) */

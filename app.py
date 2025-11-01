@@ -1085,7 +1085,8 @@ def create_app(config_class=Config) -> Flask:
     from routes.estimate import estimate_bp
     from routes.chat import chat_bp
     from routes.company import company_bp
-
+    from routes.computo import computo_bp
+    
     app.register_blueprint(views_bp)                    # pagine HTML
     app.register_blueprint(api_bp, url_prefix="/api")   # API legacy/varie
     app.register_blueprint(materials_bp)
@@ -1093,6 +1094,7 @@ def create_app(config_class=Config) -> Flask:
     app.register_blueprint(estimate_bp)                 # /api/estimate
     app.register_blueprint(chat_bp)                     # /api/chat
     app.register_blueprint(company_bp)
+    app.register_blueprint(computo_bp)
 
     
     # Log delle rotte per debug
