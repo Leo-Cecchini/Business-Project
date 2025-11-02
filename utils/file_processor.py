@@ -3,7 +3,7 @@
 import PyPDF2
 import io, csv
 from io import BytesIO
-from typing import List, Tuple
+from typing import List, Tuple, Optional
 from langchain_text_splitters import RecursiveCharacterTextSplitter
 
 class FileProcessor:
@@ -95,10 +95,14 @@ class FileProcessor:
     # -----------------------
     # ENTRYPOINT
     # -----------------------
-    def process_file(self, file_data: bytes, filename: str) -> Tuple[List[str], List[dict]]:
+    def process_file(self, file_data: bytes, filename: str, project_id: Optional[str] = None) -> Tuple[List[str], List[dict]]:
         """
         Process uploaded file and return chunks with metadata.
         Supporta: .pdf, .csv, .txt/.md (fallback).
+        Parametri:
+        - file_data: contenuto del file in bytes
+        - filename: nome del file originale
+        - project_id: opzionale; usare "GLOBAL" per asset aziendali o l'ID del cantiere per asset di cantiere
         """
         ext = filename.lower().rsplit(".", 1)[-1] if "." in filename else ""
 
@@ -118,12 +122,13 @@ class FileProcessor:
         # Split into chunks
         chunks = self.text_splitter.split_text(text)
 
-        # Metadata: manteniamo source e tipo file
+        # Metadata: includiamo source, tipo file, chunk_id e project_id per abilitare filtri per cantiere/GLOBAL
         metadatas = [
             {
                 "source": filename,
                 "type": meta_type,
-                "chunk_id": i
+                "chunk_id": i,
+                "project_id": project_id,
             }
             for i in range(len(chunks))
         ]

@@ -10,8 +10,9 @@ from langchain_core.output_parsers import JsonOutputParser
 # Modelli Pydantic esistenti
 from models.intents import RoutedIntent, StaffIntent
 
-
-# ---------------- Normalizzatore ruoli ----------------
+# ==========================
+# Normalizzazione & Alias
+# ==========================
 ROLE_ALIASES = {
     "elettricista": ["elettricista", "elettrici", "elettrico", "elettricisti"],
     "idraulico": ["idraulico", "idraulici", "impiantista idrico", "impianto idrico"],
@@ -54,11 +55,9 @@ def _coerce_float(v: Any, default: float) -> float:
         return default
 
 
-# ------------------------------------------------------------------
-# Heuristics: STIMA / STAFF / DOCUMENT
-# ------------------------------------------------------------------
-
-# Trigger forti per STIMA
+# ==========================
+# Heuristics STIMA / STAFF / DOCUMENT
+# ==========================
 _STRONG_ESTIMATE = [
     "stima", "preventivo", "computo", "computo metrico", "offerta",
     "capitolato", "bozza di preventivo", "stima rapida", "costi di ristrutturazione",
@@ -66,7 +65,6 @@ _STRONG_ESTIMATE = [
     "ristrutturazione", "ristrutturare", "analisi prezzi",
 ]
 
-# Lessico lavori/finiture/impianti (con quantità → STIMA)
 _WEAK_WORKWORDS = [
     "appartamento", "casa", "unità", "immobile",
     "pavimento", "piastrella", "gres", "massetto", "sottofondo",
@@ -79,13 +77,11 @@ _WEAK_WORKWORDS = [
     "bagno", "bagni", "sanitari", "doccia", "piatto doccia", "vasca",
 ]
 
-# Pattern quantità
 _RE_MQ = re.compile(r"\b(\d{1,4}(?:[.,]\d{1,2})?)\s*(mq|m2|m²)\b", re.IGNORECASE)
 _RE_COUNTS = re.compile(r"\b(\d{1,4})\s*(bagni?|punti(?:\s+luce)?|prese)\b", re.IGNORECASE)
-_RE_TILE = re.compile(r"\b(\d{2,3})\s*[x×]\s*(\d{2,3})\b")  # 60x60, 60×120
+_RE_TILE = re.compile(r"\b(\d{2,3})\s*[x×]\s*(\d{2,3})\b")
 _RE_GENERIC_NUM = re.compile(r"\b\d{1,4}\b")
 
-# Frasi tipiche STAFF
 _STAFF_PHRASES = [
     "quanti dipendenti", "quanti operai", "che ruoli", "quali ruoli",
     "elettricisti disponibili", "muratori disponibili", "lista dipendenti",
@@ -94,7 +90,6 @@ _STAFF_PHRASES = [
     "turni", "disponibilità", "non assegnati", "liberi",
 ]
 
-# Frasi/document markers per DOCUMENT
 _DOC_MARKERS = [
     "pdf", "allegato", "documento", "documenti", "file", "excel", "xlsx", "xls",
     "confronta", "confrontare", "comparare", "comparazione",
@@ -109,38 +104,26 @@ def _looks_like_staff_query(text: str) -> bool:
 
 def _looks_like_document_query(text: str) -> bool:
     q = (text or "").lower()
-    # Marker documento + verbi confronto/analisi/estrazione → DOCUMENT
     return any(m in q for m in _DOC_MARKERS) and any(v in q for v in [
         "confronta", "confrontare", "analizza", "analizzare", "estrai", "estrarre", "confronto", "estrazione", "analisi"
     ])
 
 def _looks_like_estimate_query(text: str) -> bool:
-    """
-    Regole STIMA:
-    - Se richiesta STAFF → False.
-    - Se richiesta DOCUMENT (analizza/confronta/estrai) → False (priorità a DOCUMENT).
-    - Trigger forte 'preventivo/stima/budget...' → True.
-    - Oppure lessico lavori + quantità (mq/bagni/punti luce/formati) → True.
-    """
     q = (text or "").lower()
-
     if _looks_like_staff_query(q):
         return False
     if _looks_like_document_query(q):
         return False
-
     if any(k in q for k in _STRONG_ESTIMATE):
         return True
-
     has_workword = any(w in q for w in _WEAK_WORKWORDS)
     has_qty = bool(_RE_MQ.search(q) or _RE_COUNTS.search(q) or _RE_TILE.search(q))
     if has_workword and (has_qty or _RE_GENERIC_NUM.search(q)):
         return True
-
     return False
 
 
-# ======= ESTIMATE ENTITY EXTRACTOR (elettrico/idrico/pavimenti) =======
+# ======= ESTIMATE ENTITY EXTRACTOR =======
 _RE_INT = re.compile(r"\d+")
 def _to_int(s, default=0):
     try:
@@ -155,17 +138,9 @@ def _to_float_num(s, default=0.0):
         return default
 
 def extract_estimate_entities(text: str) -> dict:
-    """
-    Estrae entità strutturate utili per la stima:
-    - qty/unit (mq→m2)
-    - pavimenti: formato piastrella (60x60, 60x120), 'voce_lavoro'
-    - elettrico: punti_luce, punti_prese, punti_dati, punti_tv, metri_tracce
-    - idrico: n_bagni, punti_idrici_extra
-    """
     q = (text or "").lower()
     ent: Dict[str, Any] = {"voce_lavoro": None}
 
-    # voce_lavoro (macro)
     if any(k in q for k in ("gres", "piastrell", "paviment")):
         ent["voce_lavoro"] = "pavimento gres"
     elif "cartongesso" in q:
@@ -179,24 +154,20 @@ def extract_estimate_entities(text: str) -> dict:
     elif "impianto idrico" in q or "bagno" in q or "bagni" in q:
         ent["voce_lavoro"] = "impianto idrico"
 
-    # formato piastrelle (60x120, 60x60, 30x60, ...)
     m_fmt = re.search(r"(\d{2,3})\s*[x×]\s*(\d{2,3})", q)
     if m_fmt:
         ent["dimensioni"] = [f"{m_fmt.group(1)}x{m_fmt.group(2)}"]
 
-    # spessore mm/cm
     m_th = re.search(r"(\d{1,3})\s*(mm|cm)\b", q)
     if m_th:
         val = _to_float_num(m_th.group(1), 0.0)
         ent["spessori_mm"] = int(round(val * 10)) if m_th.group(2) == "cm" else int(round(val))
 
-    # metri quadri
     m_mq = re.search(r"(\d{1,4})(?:[.,]\d+)?\s*(mq|m2|m²)\b", q)
     if m_mq:
         ent["qty"] = _to_float_num(m_mq.group(1))
         ent["unit"] = "m2"
 
-    # elettrico: punti
     m_pl = re.search(r"(\d{1,4})\s*punti?\s*luce", q)
     m_pr = re.search(r"(\d{1,4})\s*(punti?\s*)?prese?", q)
     m_pd = re.search(r"(\d{1,4})\s*(punti?\s*)?(dati|ethernet)", q)
@@ -206,22 +177,71 @@ def extract_estimate_entities(text: str) -> dict:
     if m_pd: ent["punti_dati"]  = _to_int(m_pd.group(1))
     if m_tv: ent["punti_tv"]    = _to_int(m_tv.group(1))
 
-    # metri tracce
     m_tr = re.search(r"(\d{1,4})(?:[.,]\d+)?\s*m(?:etri)?\s*tracc", q)
     if m_tr:
         ent["metri_tracce"] = _to_float_num(m_tr.group(1))
 
-    # idrico: bagni + punti extra
     m_bagni = re.search(r"(\d{1,2})\s*bagni?", q)
     if m_bagni: ent["n_bagni"] = _to_int(m_bagni.group(1))
     m_p_extra = re.search(r"(\d{1,3})\s*punti?\s*(idrici|acqua)", q)
     if m_p_extra: ent["punti_idrici_extra"] = _to_int(m_p_extra.group(1))
 
-    # pulizia
     return {k: v for k, v in ent.items() if v not in (None, "", [])}
 
 
-# ---------------- Prompt LLM (solo per STAFF) ----------------
+# ==========================
+# MATERIALS Heuristics
+# ==========================
+_MATERIAL_TRIGGERS = [
+    r"\bmaterial", r"\bforniture?\b", r"\bmagazzino\b", r"\bsku\b",
+    r"\bcartongesso\b", r"\bpittura\b", r"\bintonaco\b", r"\bcappotto\b",
+    r"\bmalta\b", r"\bcemento\b", r"\badesivo\b", r"\bvernice\b", r"\bmp\b",
+]
+_UNIT_RE = re.compile(r"\b(kg|m2|m3|pz|lt|m)\b", re.IGNORECASE)
+_CAT_RE  = re.compile(r"categoria[:\\s]*([a-zA-Z0-9\\s_-]+)")
+_SUB_RE  = re.compile(r"sotto\\s*categoria[:\\s]*([a-zA-Z0-9\\s_-]+)")
+_SKU_RE  = re.compile(r"\bsku[:\\s]*([A-Z0-9._\\-]+)\b", re.IGNORECASE)
+
+def _looks_like_material_query(text: str) -> bool:
+    t = (text or "").lower()
+    return any(re.search(p, t) for p in _MATERIAL_TRIGGERS) or bool(_SKU_RE.search(t))
+
+def extract_material_query(text: str) -> dict:
+    """
+    Ritorna un dict:
+      {
+        "operation": "lookup"|"search",
+        "query": "<testo>",
+        "filters": {"unit":..., "category":..., "subcategory":...} (se presenti),
+        "sku": "..." (se trovato)
+      }
+    """
+    q = (text or "").strip()
+    out: Dict[str, Any] = {"operation": "search", "query": q, "filters": {}}
+
+    m_sku = _SKU_RE.search(q)
+    if m_sku:
+        out["operation"] = "lookup"
+        out["sku"] = m_sku.group(1).upper()
+
+    m_unit = _UNIT_RE.search(q)
+    if m_unit:
+        out["filters"]["unit"] = m_unit.group(1).lower()
+
+    m_cat = _CAT_RE.search(q)
+    if m_cat:
+        out["filters"]["category"] = m_cat.group(1).strip()
+
+    m_sub = _SUB_RE.search(q)
+    if m_sub:
+        out["filters"]["subcategory"] = m_sub.group(1).strip()
+
+    return out
+
+
+# ==========================
+# Prompt LLM (solo per STAFF)
+# ==========================
 _SYSTEM = """Sei un parser di intenti per un assistente aziendale edile.
 Devi restituire SOLO JSON valido, conforme allo schema. Non inventare dati:
 se non capisci, topic="none" e staff=null.
@@ -267,20 +287,27 @@ Rispondi SOLO con JSON:
 def parse_intent_llm(llm, question: str, last_context: dict | None):
     """
     Ritorna dict con:
-      - intent in {"STIMA","STAFF","DOCUMENTO","none"}
+      - intent in {"MATERIALI","STIMA","STAFF","DOCUMENTO","none"}
+      - materials (se MATERIALI)
       - entities (se STIMA)
       - staff (schema StaffIntent per STAFF)
     """
     qtxt = question or ""
 
+    # 0) MATERIALI (priorità altissima se è presente SKU o trigger materiali)
+    if _looks_like_material_query(qtxt):
+        mat = extract_material_query(qtxt)
+        return {"intent": "MATERIALI", "materials": mat, "staff": None, "entities": {}}
+
     # 1) DOCUMENT (priorità alta)
     if _looks_like_document_query(qtxt):
-        return {"intent": "DOCUMENTO", "staff": None, "entities": {}}
+        return {"intent": "DOCUMENTO", "materials": None, "staff": None, "entities": {}}
 
     # 2) STIMA (euristico + entità)
     if _looks_like_estimate_query(qtxt):
         return {
             "intent": "STIMA",
+            "materials": None,
             "staff": None,
             "entities": extract_estimate_entities(qtxt)
         }
@@ -299,6 +326,32 @@ def parse_intent_llm(llm, question: str, last_context: dict | None):
                 "free_hours_threshold": intent.get("free_hours_threshold"),
             },
         }
+
+    # ✅ Se l'LLM non è disponibile, usa un fallback euristico per evitare crash
+    if llm is None:
+        ql = qtxt.lower()
+        staffish = any(k in ql for k in [
+            "dipendenti", "opera", "operai", "staff", "personale", "lavoratori",
+            "impiegati", "organico", "forza lavoro", "ruoli", "ruolo", "liberi",
+            "elettric", "idraulic", "murator", "cartongess", "imbianchin", "serrament",
+            "piastrell", "capocantier", "capo muratore",
+        ])
+        if staffish:
+            return {
+                "intent": "STAFF",
+                "materials": None,
+                "staff": StaffIntent(
+                    topic="staff",
+                    operation="list",
+                    role=_norm_role(None),
+                    free_only=False,
+                    limit=25,
+                    free_hours_threshold=20.0,
+                    reuse_last=False,
+                ),
+                "entities": {}
+            }
+        return {"intent": "none", "materials": None, "staff": None, "entities": {}}
 
     prompt = ChatPromptTemplate.from_messages([
         ("system", _SYSTEM),
@@ -323,6 +376,7 @@ def parse_intent_llm(llm, question: str, last_context: dict | None):
         if staffish:
             return {
                 "intent": "STAFF",
+                "materials": None,
                 "staff": StaffIntent(
                     topic="staff",
                     operation="list",
@@ -334,25 +388,24 @@ def parse_intent_llm(llm, question: str, last_context: dict | None):
                 ),
                 "entities": {}
             }
-        return {"intent": "none", "staff": None, "entities": {}}
+        return {"intent": "none", "materials": None, "staff": None, "entities": {}}
 
-    # Alcuni parser restituiscono già dict, altri stringa JSON
     data = raw
     if isinstance(raw, str):
         try:
             data = json.loads(raw)
         except Exception:
-            return {"intent": "none", "staff": None, "entities": {}}
+            return {"intent": "none", "materials": None, "staff": None, "entities": {}}
 
     topic = (data.get("topic") or "none").strip().lower()
     staff = data.get("staff")
 
     if topic != "staff" or not isinstance(staff, dict):
         if _looks_like_document_query(qtxt):
-            return {"intent": "DOCUMENTO", "staff": None, "entities": {}}
+            return {"intent": "DOCUMENTO", "materials": None, "staff": None, "entities": {}}
         if _looks_like_estimate_query(qtxt):
-            return {"intent": "STIMA", "staff": None, "entities": extract_estimate_entities(qtxt)}
-        return {"intent": "none", "staff": None, "entities": {}}
+            return {"intent": "STIMA", "materials": None, "staff": None, "entities": extract_estimate_entities(qtxt)}
+        return {"intent": "none", "materials": None, "staff": None, "entities": {}}
 
     op = (staff.get("operation") or "list").strip().lower()
     role = _norm_role(staff.get("role"))
@@ -392,14 +445,19 @@ def parse_intent_llm(llm, question: str, last_context: dict | None):
         free_hours_threshold=fht,
         reuse_last=reuse_last,
     )
-    return {"intent": "STAFF", "staff": staff_intent, "entities": {}}
+    return {"intent": "STAFF", "materials": None, "staff": staff_intent, "entities": {}}
 
 
 # ---------------- Convenience router ----------------
 def route(question: str, llm=None, last_context: dict | None = None) -> dict:
     """
     Entry-point usabile da routes/chat.py:
-      ritorna sempre: {"intent": "...", "entities": {...}, "staff": StaffIntent|None}
+      ritorna sempre: {
+        "intent": "...",            # MATERIALI | STIMA | STAFF | DOCUMENTO | none
+        "materials": {...}|None,    # se intent == MATERIALI
+        "entities": {...},          # se intent == STIMA
+        "staff": StaffIntent|None   # se intent == STAFF
+      }
     """
     return parse_intent_llm(llm, question, last_context)
 
@@ -419,7 +477,6 @@ class IntentRouter:
         return parse_intent_llm(self.llm, question, last_context)
 
 
-# (facoltativo, così `from utils.intent_router import *` include i simboli utili)
 __all__ = [
     "IntentRouter",
     "route",

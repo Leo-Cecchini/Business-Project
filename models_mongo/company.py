@@ -8,7 +8,16 @@ class CompanyDoc(Document):
     Poiché il progetto si basa su un'unica azienda edile,
     questa collezione conterrà un solo documento.
     """
-    meta = {"collection": "company"}  # singolare: una sola ditta
+    meta = {
+        "collection": "company",
+        "indexes": [
+            {"fields": ["name"], "name": "c_name"},
+            {"fields": ["vat_number"], "name": "c_vat"},
+            {"fields": ["city"], "name": "c_city"},
+        ],
+        # Disabilita creazione automatica multipla: verrà eseguita una sola volta al bootstrap
+        "auto_create_index": False,
+    }
 
     # ID fisso per evitare duplicati
     id = StringField(primary_key=True, default="COMPANY-001")

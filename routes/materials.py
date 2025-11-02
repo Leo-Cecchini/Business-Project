@@ -42,26 +42,71 @@ def _doc_to_dict(doc: MaterialDoc) -> dict:
 # --------------------------------------------------------------------
 @materials_bp.route("/", methods=["GET"])
 def list_materials():
-    qs = MaterialDoc.objects
+    from mongoengine.queryset.visitor import Q
+    import re
 
+    base = MaterialDoc.objects
+
+    # --- query params ---
     txt = (request.args.get("q") or "").strip()
     cat = (request.args.get("category") or "").strip()
     sub = (request.args.get("subcategory") or "").strip()
     unit = (request.args.get("unit") or "").strip()
+    sku = (request.args.get("sku") or "").strip().upper()
+    fuzzy = int(request.args.get("fuzzy") or 0)
+
     limit = int(request.args.get("limit") or 50)
     limit = min(200, max(1, limit))
 
-    if txt:
-        qs = qs.filter(name__icontains=txt)
+    # --- filtri strutturali a monte (sempre applicati) ---
     if cat:
-        qs = qs.filter(category__icontains=cat)
+        base = base.filter(category__icontains=cat)
     if sub:
-        qs = qs.filter(subcategory__icontains=sub)
+        base = base.filter(subcategory__icontains=sub)
     if unit:
-        qs = qs.filter(unit__iexact=unit)
+        base = base.filter(unit__iexact=unit)
 
-    qs = qs.order_by("category", "name")
-    rows = qs.limit(limit)
+    # ---- 0) SKU first (match diretto) ----
+    if sku:
+        m = base.filter(sku=sku).first()
+        if m:
+            return jsonify([_doc_to_dict(m)]), 200
+
+    # ---- 1..4) pipeline di fallback sul testo ----
+    hits = []
+    if txt:
+        # 1) aliases
+        hits = list(base.filter(aliases__icontains=txt).limit(limit))
+
+        # 2) name
+        if not hits:
+            hits = list(base.filter(name__icontains=txt).limit(limit))
+
+        # 3) text index (richiede indice testuale su materials)
+        if not hits:
+            try:
+                hits = list(
+                    base.search_text(txt)
+                        .order_by("$text_score")
+                        .limit(limit)
+                )
+            except Exception:
+                hits = []
+
+        # 4) fuzzy (regex semplice tollerante su spazi)
+        if not hits and fuzzy:
+            pattern = ".*".join(map(re.escape, txt.split()))
+            hits = list(
+                base.filter(
+                    Q(name__iregex=pattern) | Q(aliases__iregex=pattern)
+                ).limit(limit)
+            )
+
+        rows = hits
+    else:
+        # nessuna query testuale: elenco filtrato e ordinato
+        rows = list(base.order_by("category", "name").limit(limit))
+
     return jsonify([_doc_to_dict(r) for r in rows])
 
 

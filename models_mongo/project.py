@@ -20,12 +20,14 @@ class WorkItem(EmbeddedDocument):
 class ProjectDoc(Document):
     meta = {
         "collection": "projects",
-        # indici: singoli + composto (name, city) per unicità logica
         "indexes": [
-            "name",
-            "status",
-            {"fields": ["name", "city"], "unique": True, "sparse": True},
+            {"fields": ["name"], "name": "p_name"},
+            {"fields": ["status"], "name": "p_status"},
+            {"fields": ["id"], "name": "p_id", "unique": True},
+            {"fields": ["city"], "name": "p_city"},
+            {"fields": ["name", "city"], "name": "p_name_city", "unique": True, "sparse": True},
         ],
+        "auto_create_index": False,  # delegato al bootstrap in app.py
     }
 
     id = StringField(primary_key=True)

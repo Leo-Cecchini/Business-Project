@@ -129,7 +129,29 @@
     }
     .suggestions li{padding:8px 10px; cursor:pointer}
     .suggestions li:hover{background:#f5f5f5}
+</style>
+  <style>
+    /* ---------- Chat visual refinements (non-breaking) ---------- */
+    .chat-messages { scroll-behavior: smooth; background: #fafafa; }
+    .msg { display:flex; align-items:flex-start; gap:8px; margin:8px 0; }
+    .msg .who { font-weight:600; color: var(--muted); min-width:72px; }
+    .msg > div:nth-child(2) { /* message text as bubble */
+      background:#f3f4f6; color:#111827; padding:8px 12px; border-radius:14px; line-height:1.35;
+      box-shadow:0 1px 0 rgba(0,0,0,.04);
+    }
+    .msg.user { flex-direction: row-reverse; }
+    .msg.user .who { text-align:right; }
+    .msg.user > div:nth-child(2) { background:#2563eb; color:#fff; }
+    .sources { margin-top:6px; font-size:12px; color:#374151; }
+    .sources a { color:#2563eb; }
+    .sources .muted { color:#6b7280; }
+    /* sticky day separators if used */
+    .chat-day { position:sticky; top:0; z-index:1; display:inline-block; margin:8px auto 12px; padding:2px 10px; border-radius:999px; background:#eef2ff; font-size:12px; color:#374151; }
+    .assistant-answer p { margin: 0 0 8px; }
+    .loading { display:inline-block; width:1em; height:1em; border:.15em solid rgba(0,0,0,.15); border-top-color: currentColor; border-radius:50%; animation:spin 1s linear infinite; vertical-align:-2px; margin-right:6px; }
+    @keyframes spin { to { transform: rotate(360deg); } }
   </style>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 </head>
 <body>
 
@@ -152,6 +174,7 @@
       <nav class="side-tabs">
         <button id="tabAzienda" class="active">Azienda</button>
         <button id="tabCantieri">Cantieri</button>
+        <button id="tabAnalytics">Statistiche</button>
       </nav>
     </aside>
 
@@ -300,6 +323,57 @@
         </div>
       </div>
       <!-- ====== /VISTA: CANTIERI ====== -->
+
+      <!-- VISTA: ANALYTICS -->
+      <div id="viewAnalytics" class="card" style="display:none">
+        <h2>📊 Statistiche</h2>
+        <p class="muted">KPI ultimi 7 giorni e ultimi report qualità.</p>
+
+        <!-- KPI -->
+        <div class="kpi-grid" style="margin-top:8px">
+          <div class="kpi"><h3>Chat totali</h3><div id="kpiTotalChats" class="val">—</div></div>
+          <div class="kpi"><h3>Ultimi 7 giorni</h3><div id="kpiLast7d" class="val">—</div></div>
+          <div class="kpi"><h3>% errori (7d)</h3><div id="kpiErrorRate" class="val">—</div></div>
+          <div class="kpi"><h3>JSON summary</h3>
+            <div class="actions-row">
+              <a class="btn ghost" href="/analytics/summary?days=7" target="_blank">Apri API</a>
+            </div>
+          </div>
+          <div class="kpi"><h3>Report (API)</h3>
+            <div class="actions-row">
+              <a class="btn ghost" href="/analytics/reports?limit=20" target="_blank">Apri API</a>
+            </div>
+          </div>
+        </div>
+
+        <!-- CHARTS: sotto i KPI -->
+        <div class="grid grid-cols-1 lg:grid-cols-2 gap-4 my-6">
+          <div class="rounded-2xl shadow bg-white p-4" style="height:320px">
+            <h3 class="text-lg font-semibold mb-2">Chat per giorno</h3>
+            <canvas id="chatsPerDay"></canvas>
+          </div>
+          <div class="rounded-2xl shadow bg-white p-4" style="height:320px">
+            <h3 class="text-lg font-semibold mb-2">Top intent</h3>
+            <canvas id="topIntents"></canvas>
+          </div>
+        </div>
+
+        <!-- Report qualità (ultimi) -->
+        <div class="card" style="margin-top:14px">
+          <div style="display:flex;align-items:center;justify-content:space-between;gap:8px">
+            <h3 style="margin:0">Report qualità (ultimi)</h3>
+            <div class="actions-row">
+              <button id="btnRefreshAnalytics" class="btn">Aggiorna</button>
+              <button id="genReport" class="btn primary">Genera report</button>
+              <a class="btn ghost" href="/analytics/reports?limit=20" target="_blank">API JSON</a>
+            </div>
+          </div>
+          <div id="analyticsReports" style="margin-top:8px">
+            <p class="muted">—</p>
+          </div>
+        </div>
+      </div>
+      <!-- /VISTA: ANALYTICS -->
     </section>
   </div>
 
@@ -337,7 +411,7 @@
           </div>
         </div>
         <div class="actions-end">
-          <button type="button" class="btn" data-close="#addWorkerModal">Annulla</button>
+          <button type="button" class="btn" data-close="#addWorkerModal"><span aria-hidden="true">✖︎</span><span>Chiudi</span></button>
           <button type="submit" class="btn primary">Salva operaio</button>
         </div>
       </form>
@@ -354,7 +428,7 @@
           <input id="remove_id" placeholder="ID operaio (es. W-1048)" required>
         </div>
         <div class="actions-end">
-          <button type="button" class="btn" data-close="#removeWorkerModal">Annulla</button>
+          <button type="button" class="btn" data-close="#removeWorkerModal"><span aria-hidden="true">✖︎</span><span>Chiudi</span></button>
           <button type="submit" class="btn danger">Rimuovi</button>
         </div>
       </form>
@@ -372,7 +446,7 @@
           <div class="field"><label for="as_days">Giorni</label><input id="as_days" type="number" min="1" value="1" required></div>
         </div>
         <div class="actions-end">
-          <button type="button" class="btn" data-close="#assignModal">Annulla</button>
+          <button type="button" class="btn" data-close="#assignModal"><span aria-hidden="true">✖︎</span><span>Chiudi</span></button>
           <button type="submit" class="btn primary">Assegna</button>
         </div>
       </form>
@@ -406,7 +480,7 @@
           </div>
         </div>
         <div class="actions-end">
-          <button type="button" class="btn" data-close="#projectModal">Annulla</button>
+          <button type="button" class="btn" data-close="#projectModal"><span aria-hidden="true">✖︎</span><span>Chiudi</span></button>
           <button type="submit" class="btn primary">Crea</button>
         </div>
       </form>
@@ -429,7 +503,7 @@
         </div>
       </div>
       <div class="actions-end">
-        <button type="button" class="btn" data-close="#confirmModal">Annulla</button>
+        <button type="button" class="btn" data-close="#confirmModal"><span aria-hidden="true">✖︎</span><span>Chiudi</span></button>
         <button type="submit" class="btn primary">Conferma</button>
       </div>
     </form>
@@ -442,12 +516,74 @@
     <p>Scrivi cosa è stato fatto (es: "posa pavimento effettuata", "cablaggio cavi elettrici completato").</p>
     <textarea id="workNoteText" rows="4" placeholder="Scrivi l'aggiornamento..." style="width:100%"></textarea>
     <div class="modal-actions" style="margin-top:12px;display:flex;gap:8px;justify-content:flex-end;">
-      <button id="workNoteCancel" class="btn btn-light" type="button">Annulla</button>
+      <button id="workNoteCancel" class="btn btn-light" type="button"><span aria-hidden="true">✖︎</span><span>Chiudi</span></button>
       <button id="workNoteSend" class="btn" type="button">Invia</button>
     </div>
   </div>
 </div>
 
+  <!-- MODALE: REVISIONE LAVORI (bozze) -->
+  <div id="reviewModal" class="modal" aria-hidden="true">
+    <div class="modal-card" role="dialog" aria-modal="true">
+      <h3>Revisione lavori</h3>
+      <p class="muted" id="reviewProjectName" style="margin-top:-6px">—</p>
+
+      <div class="field" style="margin-top:8px">
+        <label for="reviewNotes">Descrizione/Note</label>
+        <textarea id="reviewNotes" rows="3" placeholder="Note per la bozza..." style="width:100%"></textarea>
+      </div>
+
+      <div class="card" style="margin-top:12px">
+        <h4 style="margin:0 0 8px 0">Lavori</h4>
+        <div style="overflow:auto">
+          <table style="width:100%; border-collapse:collapse">
+            <thead>
+              <tr>
+                <th style="text-align:left; border-bottom:1px solid var(--border); padding:8px 6px">Voce</th>
+                <th style="text-align:left; border-bottom:1px solid var(--border); padding:8px 6px">Categoria</th>
+                <th style="text-align:right; border-bottom:1px solid var(--border); padding:8px 6px">Quantità</th>
+                <th style="text-align:left; border-bottom:1px solid var(--border); padding:8px 6px">Unità</th>
+                <th style="text-align:right; border-bottom:1px solid var(--border); padding:8px 6px">Costo unit. (€)</th>
+                <th style="text-align:right; border-bottom:1px solid var(--border); padding:8px 6px">Totale (€)</th>
+                <th style="text-align:center; border-bottom:1px solid var(--border); padding:8px 6px; width:60px">Azioni</th>
+              </tr>
+            </thead>
+            <tbody id="reviewRows">
+              <!-- Righe dinamiche inserite da app.js: { code, descr, category, qty, unit, unit_price } -->
+            </tbody>
+          </table>
+        </div>
+        <div class="actions-end" style="margin-top:10px">
+          <button id="reviewAddRow" class="btn ghost" type="button">+ Aggiungi riga</button>
+        </div>
+      </div>
+
+      <div class="card" style="margin-top:12px">
+        <h4 style="margin:0 0 8px 0">Riepilogo</h4>
+        <div style="display:flex; gap:12px; flex-wrap:wrap">
+          <div class="kpi" style="min-width:160px">
+            <h3>Materiali (€)</h3>
+            <div class="val" id="reviewSumMaterials">0</div>
+          </div>
+          <div class="kpi" style="min-width:160px">
+            <h3>Manodopera (€)</h3>
+            <div class="val" id="reviewSumLabor">0</div>
+          </div>
+          <div class="kpi" style="min-width:160px">
+            <h3>Totale (€)</h3>
+            <div class="val" id="reviewSumTotal">0</div>
+          </div>
+        </div>
+      </div>
+
+      <div class="actions-end">
+        <button type="button" class="btn" data-close="#reviewModal"><span aria-hidden="true">✖︎</span><span>Chiudi</span></button>
+        <button type="button" id="btnDraftDiscard" class="btn">Scarta</button>
+        <button type="button" id="btnDraftSave" class="btn">Salva bozza</button>
+        <button type="button" id="btnDraftCommit" class="btn primary">Conferma</button>
+      </div>
+    </div>
+  </div>
   <!-- Toast -->
   <div id="toast" class="toast"></div>
 
@@ -460,7 +596,8 @@
       assignments: [],
       // cache runtime
       projectsCache: [], // array di {id,nome,citta,stato}
-      recentProjectIds: [] // ultimi 5 cliccati
+      recentProjectIds: [], // ultimi 5 cliccati
+      siteHistory: {} // PID -> array di messaggi {role,text,ts,sources?}
     };
 
     /* ====== UTIL ====== */
@@ -996,6 +1133,137 @@
       list.innerHTML = docs.length ? docs.map(n => `<div class="doc-row">📄 ${n}</div>`).join('') : '<p class="muted">—</p>';
     }
 
+    // ====== Chat CANTIERE: helpers per history PID ======
+    function escapeHtml(str){
+      return String(str)
+        .replace(/&/g,'&amp;')
+        .replace(/</g,'&lt;')
+        .replace(/>/g,'&gt;')
+        .replace(/\"/g,'&quot;')
+        .replace(/'/g,'&#39;');
+    }
+
+    function addSiteMessage(role, text, pid, sources = []){
+      if(!state.siteHistory) state.siteHistory = {};
+      if(!state.siteHistory[pid]) state.siteHistory[pid] = [];
+      const item = { role, text: String(text), ts: Date.now(), sources: Array.isArray(sources)? sources : [] };
+      state.siteHistory[pid].push(item);
+
+      const box = document.getElementById('siteMessages');
+      if (box) {
+        const who = role === 'user' ? 'Tu' : 'Assistant';
+        const srcHtml = (item.sources && item.sources.length)
+          ? `<div class="sources">${item.sources.map((s,i)=>{
+               const t = (s && (s.title || s.source || s.url || 'Fonte'));
+               const sn = (s && (s.snippet || s.text || ''));
+               const url = (s && s.url) ? ` <a href="${escapeHtml(String(s.url))}" target="_blank" rel="noopener">link</a>` : '';
+               return `<div><strong>[${i+1}]</strong> ${escapeHtml(String(t))}${url}${sn ? ' — <span class=\"muted\">'+escapeHtml(String(sn))+'</span>' : ''}</div>`;
+             }).join('')}</div>`
+          : '';
+        box.insertAdjacentHTML('beforeend', `<div class="msg ${role}"><div class="who">${who}</div><div>${escapeHtml(item.text)}</div>${srcHtml}</div>`);
+        box.scrollTop = box.scrollHeight;
+      }
+    }
+
+    function saveSiteHistory(pid){
+      try { localStorage.setItem(`site_chat_${pid}`, JSON.stringify(state.siteHistory?.[pid] || [])); } catch(_) {}
+    }
+
+    function loadSiteHistory(pid){
+      if (!pid) return [];
+      try {
+        const raw = localStorage.getItem(`site_chat_${pid}`);
+        if (!raw) return [];
+        // Protezione da blob giganteschi (es. > 2MB) che possono bloccare il parser
+        if (raw.length > 2_000_000) {
+          console.warn('History troppo grande, resetto per pid=', pid, 'sizeMB=', (raw.length/1024/1024).toFixed(1));
+          localStorage.removeItem(`site_chat_${pid}`);
+          return [];
+        }
+        let arr = JSON.parse(raw);
+        if (!Array.isArray(arr)) return [];
+        // Taglia a massimo 600 messaggi prima del render per tenere la UI fluida
+        if (arr.length > 600) arr = arr.slice(-600);
+        return arr;
+      } catch (_) {
+        return [];
+      }
+    }
+
+    function renderSiteHistory(pid){
+      const box = document.getElementById('siteMessages');
+      if(!box) return;
+
+      box.innerHTML = '';
+      if(!state.siteHistory) state.siteHistory = {};
+
+      const items = loadSiteHistory(pid);
+      // Limiti di sicurezza per evitare freeze
+      const MAX_MSG = 200;             // massimo da renderizzare
+      const MAX_SOURCES = 5;           // massimo fonti per messaggio
+      const MAX_TITLE = 120;           // titolo fonte
+      const MAX_SNIPPET = 300;         // snippet fonte
+
+      const recent = Array.isArray(items) ? items.slice(-MAX_MSG) : [];
+      state.siteHistory[pid] = recent;
+
+      if(!recent.length){
+        box.innerHTML = '<div class="msg assistant"><div class="who">Assistant</div><div>Nessun messaggio per questo cantiere.</div></div>';
+        return;
+      }
+
+      let i = 0;
+      const CHUNK = 30; // messaggi per frame
+
+      const renderChunk = () => {
+        const end = Math.min(i + CHUNK, recent.length);
+        const frag = document.createDocumentFragment();
+
+        for (; i < end; i++) {
+          const m = recent[i] || {};
+          const role = m.role === 'user' ? 'user' : 'assistant';
+          const whoLabel = role === 'user' ? 'Tu' : 'Assistant';
+
+          const row = document.createElement('div');
+          row.className = `msg ${role}`;
+
+          const who = document.createElement('div');
+          who.className = 'who';
+          who.textContent = whoLabel;
+          row.appendChild(who);
+
+          const text = document.createElement('div');
+          text.textContent = String(m.text || '');
+          row.appendChild(text);
+
+          const srcs = Array.isArray(m.sources) ? m.sources.slice(0, MAX_SOURCES) : [];
+          if (srcs.length) {
+            const sdiv = document.createElement('div');
+            sdiv.className = 'sources';
+            for (let j = 0; j < srcs.length; j++) {
+              const s = srcs[j] || {};
+              const t = String(s.title || s.source || s.url || 'Fonte').slice(0, MAX_TITLE);
+              const url = s.url ? ` <a href="${escapeHtml(String(s.url))}" target="_blank" rel="noopener">link</a>` : '';
+              const snip = String(s.snippet || s.text || '').slice(0, MAX_SNIPPET);
+              const rowS = document.createElement('div');
+              rowS.innerHTML = `<strong>[${j+1}]</strong> ${escapeHtml(t)}${url}${snip ? ' — <span class="muted">'+escapeHtml(snip)+'</span>' : ''}`;
+              sdiv.appendChild(rowS);
+            }
+            row.appendChild(sdiv);
+          }
+
+          frag.appendChild(row);
+        }
+
+        box.appendChild(frag);
+        box.scrollTop = box.scrollHeight;
+
+        if (i < recent.length) requestAnimationFrame(renderChunk);
+      };
+
+      requestAnimationFrame(renderChunk);
+    }
+
     function applySiteSelection(){
       const p = state.projectsCache.find(x=>x.id===state.selectedProjectId);
 
@@ -1007,33 +1275,32 @@
       // Header & meta
       $('#siteHeader').textContent = p ? p.nome : 'Nessun cantiere selezionato';
       $('#siteChatMeta').textContent = p ? `Contesto: cantiere (${p.nome})` : '';
-      
       if (p) {
         $('#siteChatTitle').textContent = `Chat cantiere — ${p.nome}`;
-        // Mostra le card specifiche del cantiere
-        if (chatCard) chatCard.style.display = 'block';
-        if (docsCard) docsCard.style.display = 'block';
-        if (computoCard) computoCard.style.display = 'block'; // <-- 2. MOSTRA LA CARD
+        $('#siteChatCard').style.display = 'block';
+        $('#siteDocsCard').style.display = 'block';
       } else {
-        // Nascondi le card specifiche
-        if (chatCard) chatCard.style.display = 'none';
-        if (docsCard) docsCard.style.display = 'none';
-        if (computoCard) computoCard.style.display = 'none'; // <-- 3. NASCONDI LA CARD
+        $('#siteChatCard').style.display = 'none';
+        $('#siteDocsCard').style.display = 'none';
         $('#siteMessages').innerHTML = '';
       }
-      
       updateStatusControls(p);
       renderSiteDates(p);
       renderProgress(p);
 
       // Abilitazioni
-      $('#siteUploadBtn').disabled   = !p;
-      $('#btnAssignWorker').disabled = !p;
-      $('#btnClearSite').disabled    = !p;
+      const siteUploadBtn = $('#siteUploadBtn');
+      if (siteUploadBtn) siteUploadBtn.disabled   = !p;
+      const btnAssignWorker = $('#btnAssignWorker');
+      if (btnAssignWorker) btnAssignWorker.disabled = !p;
+      const btnClearSite = $('#btnClearSite');
+      if (btnClearSite) btnClearSite.disabled    = !p;
 
-      // Mostra/Nascondi azioni
-      $('#btnDeleteProject').style.display   = p ? 'inline-flex' : 'none';
-      $('#btnCreateProjectTop').style.display= p ? 'none' : 'inline-flex';
+      // Azioni visibilità
+      const btnDeleteProject = $('#btnDeleteProject');
+      if (btnDeleteProject) btnDeleteProject.style.display   = p ? 'inline-flex' : 'none';
+      const btnCreateProjectTop = $('#btnCreateProjectTop');
+      if (btnCreateProjectTop) btnCreateProjectTop.style.display= p ? 'none' : 'inline-flex';
 
       // Sync select topbar
       const sel = $('#projectSelect');
@@ -1041,42 +1308,142 @@
 
       renderSiteDocs();
       renderSitesList();
-
-      // --- 4. RESET STATO CARD COMPUTO QUANDO CAMBI PROGETTO ---
-      if (computoCard) {
-          $('#generate-lavori-btn').disabled = true;
-          $('#lavori-help-text').style.display = 'block';
-          $('#download-pdf-section').style.display = 'none';
-          $('#download-pdf-link').href = '#';
-          $('#computo-file-input').value = '';
-          $('#computo-prompt-input').value = '';
-      }
     }
 
     /* ====== ROUTER (tabs) ====== */
     document.addEventListener('DOMContentLoaded', () => {
       setupGeoapifyAutocomplete();
-      const tabA = $('#tabAzienda'), tabC = $('#tabCantieri');
+      const tabA = $('#tabAzienda'), tabC = $('#tabCantieri'), tabAn = $('#tabAnalytics');
       const viewA = $('#viewAzienda');
       const viewDocs = $('#viewDocs');
       const companyChat = $('#companyChat');
       const viewSites = $('#viewSites');
+      const viewAnalytics = $('#viewAnalytics');
       const projectModalSel = '#projectModal';
 
+      function hideAllViews(){
+        viewA.style.display='none'; viewDocs.style.display='none'; companyChat.style.display='none';
+        viewSites.style.display='none'; viewAnalytics.style.display='none';
+        tabA.classList.remove('active'); tabC.classList.remove('active'); tabAn.classList.remove('active');
+      }
+
       function showAzienda(){
-        tabA.classList.add('active'); tabC.classList.remove('active');
+        hideAllViews();
+        tabA.classList.add('active');
         viewA.style.display='block'; viewDocs.style.display='block'; companyChat.style.display='block';
-        viewSites.style.display='none';
       }
       function showCantieri(){
-        tabC.classList.add('active'); tabA.classList.remove('active');
-        viewA.style.display='none'; viewDocs.style.display='none'; companyChat.style.display='none';
+        hideAllViews();
+        tabC.classList.add('active');
         viewSites.style.display='block';
         renderSitesList();
         applySiteSelection();
       }
+      async function showAnalytics(){
+        hideAllViews();
+        tabAn.classList.add('active');
+        viewAnalytics.style.display='block';
+        try { await loadAnalyticsSummary(); await loadAnalyticsReports(); }
+        catch(e){ console.warn('Analytics load error', e); }
+      }
+
       tabA.addEventListener('click', showAzienda);
       tabC.addEventListener('click', showCantieri);
+      tabAn.addEventListener('click', showAnalytics);
+      // ===== Analytics: fetchers & renderers =====
+      async function loadAnalyticsSummary(){
+        try{
+          const s = await fetchJSON('/analytics/summary?days=7');
+          const pct = (s.error_rate || 0) * 100;
+          const set = (id, v)=>{ const el=document.getElementById(id); if(el) el.textContent = (v ?? '—'); };
+          set('kpiTotalChats', s.total_chats ?? 0);
+          set('kpiLast7d', s.last_days_chats ?? 0);
+          set('kpiErrorRate', isFinite(pct) ? (Math.round(pct*10)/10)+'%' : '0%');
+        }catch(e){
+          console.warn('summary error', e);
+          ['kpiTotalChats','kpiLast7d','kpiErrorRate'].forEach(id=>{ const el=document.getElementById(id); if(el) el.textContent='—'; });
+        }
+      }
+
+      function renderReportsList(items){
+        const wrap = document.getElementById('analyticsReports');
+        if(!wrap) return;
+        if(!Array.isArray(items) || !items.length){ wrap.innerHTML = '<p class="muted">Nessun report presente. Generane uno con lo script 6C.</p>'; return; }
+        wrap.innerHTML = items.map(r=>{
+          const created = r.created_at || ''; const days = r.period_days || 0; const report = (r.report||'').replace(/</g,'&lt;');
+          const metrics = r.metrics ? `<details class="mt-3"><summary class="cursor-pointer" style="color:var(--brand);">Mostra metriche</summary><pre class="bg-gray-50 p-3 rounded-lg overflow-x-auto" style="font-size:12px">${JSON.stringify(r.metrics,null,2)}</pre></details>` : '';
+          const bads = Array.isArray(r.bad_examples) && r.bad_examples.length ? (`<details class="mt-3"><summary class="cursor-pointer" style="color:var(--brand);">Esempi problematici (${r.bad_examples.length})</summary><ul style="margin:8px 0 0 18px">${r.bad_examples.map(b=>`<li style="margin-bottom:8px"><div style="font-size:13px"><strong>Q:</strong> ${b.q||''}</div><div style="font-size:13px"><strong>A:</strong> ${b.a||''}</div><div class="muted" style="font-size:11px">${b.ts||''}</div></li>`).join('')}</ul></details>`) : '';
+          return `<div class="card" style="margin-top:10px"><div class="muted" style="font-size:12px">Creato: ${created} • Periodo: ${days} giorni</div><div style="margin-top:6px; white-space:pre-wrap">${report}</div>${metrics}${bads}</div>`;
+        }).join('');
+      }
+
+      async function loadAnalyticsReports(){
+        try{
+          const rows = await fetchJSON('/analytics/reports?limit=5');
+          renderReportsList(rows);
+        }catch(e){
+          console.warn('reports error', e);
+          renderReportsList([]);
+        }
+      }
+
+      document.getElementById('btnRefreshAnalytics')?.addEventListener('click', async ()=>{
+        try{ await loadAnalyticsSummary(); await loadAnalyticsReports(); toast('Statistiche aggiornate'); }
+        catch(_){ toast('Errore aggiornando le statistiche'); }
+      });
+
+      // === Genera report qualità ===
+      document.getElementById('genReport')?.addEventListener('click', async ()=> {
+        const btn = document.getElementById('genReport');
+        if(!btn) return;
+        btn.disabled = true;
+        try {
+          await fetch('/analytics/reports/generate', {
+            method:'POST',
+            headers:{'Content-Type':'application/json'},
+            body: JSON.stringify({days:7, limit:500})
+          });
+          // ricarica per mostrare l'ultimo report
+          location.reload();
+        } catch (e) {
+          console.warn('generate report error', e);
+          btn.disabled = false;
+        }
+      });
+
+      // === Chart rendering dai dati dell'ultimo report ===
+      (async function(){
+        try {
+          const res = await fetch('/analytics/reports/latest');
+          const data = await res.json();
+          if (!data.ok || !data.report) return;
+
+          const charts = data.report.charts || {};
+          const d1 = charts.chats_per_day || {labels:[], values:[]};
+          const d2 = charts.top_intents || {labels:[], values:[]};
+
+          const ctx1El = document.getElementById('chatsPerDay');
+          const ctx2El = document.getElementById('topIntents');
+          if (ctx1El) {
+            const ctx1 = ctx1El.getContext('2d');
+            new Chart(ctx1, {
+              type: 'line',
+              data: { labels: d1.labels, datasets: [{ label: 'Chat', data: d1.values }] },
+              options: { responsive: true, maintainAspectRatio: false, scales: { y: { beginAtZero: true } } }
+            });
+          }
+          if (ctx2El) {
+            const ctx2 = ctx2El.getContext('2d');
+            new Chart(ctx2, {
+              type: 'bar',
+              data: { labels: d2.labels, datasets: [{ label: 'Occorrenze', data: d2.values }] },
+              options: { responsive: true, maintainAspectRatio: false, scales: { y: { beginAtZero: true } } }
+            });
+          }
+        } catch (e) {
+          console.warn('analytics charts error', e);
+        }
+      })();
 
       /* Topbar select -> selezione/deselezione */
       $('#projectSelect').addEventListener('change', e=>{
@@ -1419,35 +1786,57 @@
         renderSiteDocs();
       });
 
-      /* Chat aziendale (backend) */
-      async function apiChat(message, meta={}){
-        const res = await fetch(apiURL('/api/chat'), {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ message, ...meta })
-        });
-        const text = await res.text();
-        let data; try { data = JSON.parse(text); } catch (_) {}
-        if(!res.ok){ throw new Error(data?.error || text || `HTTP ${res.status}`); }
-        return data?.answer ?? text ?? '';
-      }
+      /* Chat aziendale e cantiere (backend) */
+async function apiChat(message, meta = {}) {
+  // Normalizza meta
+  const payload = { ...meta };
+  if (payload.project_id && !payload.site_id) payload.site_id = payload.project_id;
+
+  // Scegli endpoint corretto: azienda vs cantiere
+  let url = '/api/chat';
+  let body = { message: message };
+
+  if (payload.scope === 'site' && payload.project_id) {
+    url = `/api/chat/project/${encodeURIComponent(String(payload.project_id))}`;
+    body = { message: message };
+  }
+
+  const res = await fetch(apiURL(url), {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
+    body: JSON.stringify(body),
+  });
+
+  const raw = await res.text();
+  let data = null; try { data = raw ? JSON.parse(raw) : null; } catch (_) { data = null; }
+  if (!res.ok) {
+    const errMsg = (data && (data.error || data.detail || data.message)) || raw || `HTTP ${res.status}`;
+    throw new Error(errMsg);
+  }
+
+  const text = (data && (data.reply || data.answer || data.text)) || raw || '';
+  const sources = (data && (data.sources || data.web_sources || data.local_sources)) || [];
+  return { text, sources: Array.isArray(sources) ? sources : [] };
+}
+    
+        
 
       const chatSubmitBtn = document.querySelector('#chatForm button[type="submit"]');
       $('#chatForm').addEventListener('submit', async (e)=>{
         e.preventDefault();
         const txt = $('#messageInput').value.trim(); if(!txt) return;
         const box = $('#messagesContainer');
-        box.insertAdjacentHTML('beforeend', `<div class="msg"><div class="who">Tu</div><div>${txt}</div></div>`);
+        box.insertAdjacentHTML('beforeend', `<div class="msg"><div class="who">Tu</div><div>${(typeof escapeHtml==='function'? escapeHtml(txt) : txt)}</div></div>`);
         $('#messageInput').value=''; box.scrollTop = box.scrollHeight;
 
         // Chiamata al backend
         try {
           chatSubmitBtn.disabled = true;
-          const answer = await apiChat(txt, { scope: 'company' });
+          const { text: answer } = await apiChat(txt, { scope: 'company' });
           box.insertAdjacentHTML('beforeend', `<div class="msg"><div class="who">Assistant</div><div>${answer || '(nessuna risposta)'} </div></div>`);
         } catch (err){
           console.error(err);
-          box.insertAdjacentHTML('beforeend', `<div class="msg"><div class="who">Assistant</div><div class="error">Errore: ${String(err.message||err)}</div></div>`);
+          box.insertAdjacentHTML('beforeend', `<div class="msg assistant"><div class="who">Assistant</div><div class="error">Errore: ${escapeHtml(String(err.message||err))}</div></div>`);
         } finally { chatSubmitBtn.disabled = false; box.scrollTop = box.scrollHeight; }
       });
       $('#resetChatBtn').addEventListener('click', ()=>{
@@ -1609,21 +1998,32 @@
         if(!pid){ toast('Seleziona un cantiere'); return; }
         const p = state.projectsCache.find(x=>x.id===pid);
         const txt = $('#siteMessageInput').value.trim(); if(!txt) return;
-        const box = $('#siteMessages');
-        box.insertAdjacentHTML('beforeend', `<div class="msg"><div class="who">Tu</div><div>${txt}</div></div>`);
-        $('#siteMessageInput').value=''; box.scrollTop = box.scrollHeight;
+        addSiteMessage('user', txt, pid);
+        $('#siteMessageInput').value='';
+        saveSiteHistory(pid);
 
         try {
           siteChatSubmitBtn.disabled = true;
-          const answer = await apiChat(txt, { scope: 'site', project_id: pid, project_name: p?.nome });
-          box.insertAdjacentHTML('beforeend', `<div class="msg"><div class="who">Assistant</div><div>${answer || '(nessuna risposta)'} </div></div>`);
+          const { text: answer, sources } = await apiChat(txt, { scope: 'site', project_id: pid, site_id: pid, project_name: p?.nome });
+          addSiteMessage('assistant', answer || '(nessuna risposta)', pid, sources);
+          saveSiteHistory(pid);
         } catch (err){
           console.error(err);
-          box.insertAdjacentHTML('beforeend', `<div class="msg"><div class="who">Assistant</div><div class="error">Errore: ${String(err.message||err)}</div></div>`);
-        } finally { siteChatSubmitBtn.disabled = false; box.scrollTop = box.scrollHeight; }
+          addSiteMessage('assistant', `Errore: ${String(err.message||err)}`, pid);
+          saveSiteHistory(pid);
+        } finally {
+          siteChatSubmitBtn.disabled = false;
+          const box = document.getElementById('siteMessages'); if (box) box.scrollTop = box.scrollHeight;
+        }
       });
       $('#siteResetChatBtn').addEventListener('click', ()=>{
-        $('#siteMessages').innerHTML = '';
+        const pid = state.selectedProjectId;
+        if(!pid){ toast('Seleziona un cantiere'); return; }
+        try { localStorage.removeItem(`site_chat_${pid}`); } catch(_) {}
+        if(!state.siteHistory) state.siteHistory = {};
+        state.siteHistory[pid] = [];
+        const box = document.getElementById('siteMessages');
+        if (box) box.innerHTML = '<div class="msg assistant"><div class="who">Assistant</div><div>Chat del cantiere resettata.</div></div>';
       });
 
       /* Init */
@@ -1633,6 +2033,8 @@
         renderProjectSelect();
         renderSitesList();
         updateKPI();
+        // Mantieni la vista di default (Azienda) finché non si clicca su Statistiche
+        // (nessuna azione necessaria qui: showAzienda è già la vista iniziale via class 'active')
       })();
 
       // Refresh KPI when tab becomes visible again
@@ -1651,6 +2053,18 @@
         if(el && el.classList && el.classList.contains('modal') && el.classList.contains('open')){
           el.classList.remove('open');
         }
+      });
+
+      // Error handler globale (debug)
+      window.addEventListener('error', function(e){
+        console.error('JS Error:', e.message, e.error);
+        try {
+          const box = document.getElementById('siteMessages');
+          if (box) {
+            box.insertAdjacentHTML('beforeend',
+              `<div class="msg assistant"><div class="who">Assistant</div><div class="error">Errore JS: ${escapeHtml(String(e.message||''))}</div></div>`);
+          }
+        } catch(_) {}
       });
     });
   </script>

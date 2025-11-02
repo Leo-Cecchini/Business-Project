@@ -15,9 +15,11 @@ from werkzeug.exceptions import HTTPException
 from config import Config
 
 # MongoDB
-from db.mongo import init_mongo, ensure_mongo_indexes
-
-# DB
+from db.mongo import init_mongo
+try:
+    from db.mongo import ensure_indexes_safely as ensure_indexes
+except ImportError:
+    from db.mongo import ensure_mongo_indexes as ensure_indexes
 
 # Componenti RAG
 from models.vector_store import VectorStore
@@ -25,7 +27,6 @@ from models.chat_model import ChatModel
 from utils.file_processor import FileProcessor
 from utils.web_retriever import WebRetriever  # opzionale
 from utils.intent_router import IntentRouter  # opzionale
-
 
 # ---------------------------------------------------------------------
 # Inizializzazione componenti condivisi (vector store, LLM, ecc.)
@@ -93,21 +94,38 @@ def create_app(config_class=Config) -> Flask:
     app.config.from_object(config_class)
     app.secret_key = os.getenv("FLASK_SECRET_KEY", getattr(Config, "SECRET_KEY", "change-me"))
 
-
     # --- MongoDB init ---
     # Inizializza la connessione a Mongo (workers/materials/projects si appoggeranno qui)
     init_mongo()
+    # Esegui la normalizzazione indici una sola volta all'avvio (evita code 85)
     try:
-        ensure_mongo_indexes()
+        from db.mongo import ensure_indexes_safely
+        with app.app_context():
+            ensure_indexes_safely()
+            app.logger.info("Mongo indici normalizzati (una tantum all'avvio)")
     except Exception as e:
-        app.logger.warning(f"Mongo index build skipped: {e}")
+        app.logger.warning("Index normalize skipped: %s", e)
+
+    # Warm-up: trigger collection access to finalize auto-index creation before serving requests
+    try:
+        from mongoengine.connection import get_db
+        _db = get_db()
+        _ = _db["materials"].count_documents({})
+        _ = _db["projects"].count_documents({})
+        _ = _db["workers"].count_documents({})
+        app.logger.info("Mongo warm-up counts ok")
+    except Exception as e:
+        app.logger.warning("Mongo warm-up skipped: %s", e)
 
     # Uploads
     app.config.setdefault("UPLOAD_FOLDER", os.path.join(app.root_path, "uploads"))
     app.config.setdefault("MAX_CONTENT_LENGTH", 64 * 1024 * 1024)  # 64MB
 
     # CORS
-    CORS(app, resources={r"/api/*": {"origins": "*"}})
+    CORS(app, resources={
+        r"/api/*": {"origins": "*"},
+        r"/chat/*": {"origins": "*"},  # compat per rotta legacy senza /api
+    })
 
     # Logging con request_id
     logging.basicConfig(
@@ -192,10 +210,35 @@ def create_app(config_class=Config) -> Flask:
             "web_enabled": app.config.get("ENABLE_WEB_RETRIEVAL", False),
         })
 
+    @app.post("/api/admin/reindex")
+    def admin_reindex():
+        try:
+            ensure_indexes()
+            # Optional warm-up after reindex to stabilize counts
+            from mongoengine.connection import get_db
+            _db = get_db()
+            _ = _db["materials"].count_documents({})
+            _ = _db["projects"].count_documents({})
+            _ = _db["workers"].count_documents({})
+            return jsonify({"ok": True, "message": "Indexes normalized"}), 200
+        except Exception as e:
+            app.logger.exception("admin_reindex error")
+            return jsonify({"ok": False, "error": str(e)}), 500
+
     # Simple ping per verificare wiring UI ⇄ API
     @app.get("/api/ping")
     def api_ping():
         return jsonify({"ok": True, "msg": "pong"}), 200
+
+    @app.get("/api/health")
+    def api_health():
+        # Semplice health sotto /api per test rapidi dal frontend
+        deps = app.extensions.get("deps", {})
+        return jsonify({
+            "ok": bool(deps.get("vector_store")) and bool(deps.get("chat_model")),
+            "vector_store": bool(deps.get("vector_store")),
+            "llm": bool(deps.get("chat_model")),
+        }), 200
 
     # --- Stats helpers (Mongo) ---
     @app.get("/api/stats/workers")
@@ -427,9 +470,13 @@ def create_app(config_class=Config) -> Flask:
 
         # ID: accetta quello passato se libero, altrimenti genera P-####
         wanted_id = (data.get("id") or "").strip()
-        if wanted_id and ProjectDoc.objects(id=wanted_id).first():
-            return jsonify({"error": "ID già esistente"}), 409
+        if wanted_id:
+            # verifica unicità sull'ID richiesto
+            if ProjectDoc.objects(id=wanted_id).first():
+                return jsonify({"error": "ID già esistente"}), 409
         pid = wanted_id or _next_project_id()
+        if not pid:
+            return jsonify({"error": "Impossibile generare ID progetto"}), 500
 
         # Raccogli le date inserite nel form (sempre come STIME)
         # Accettiamo alias dal frontend: start/end oppure start_date_estimated/end_date_estimated
@@ -452,7 +499,12 @@ def create_app(config_class=Config) -> Flask:
                 pass
 
         # Prepara kwargs SOLO con i campi che esistono nel modello
-        doc_kwargs = {"id": pid}
+        doc_kwargs = {}
+        if "id" in model_fields:
+            doc_kwargs["id"] = pid
+        else:
+            # Modello senza field "id": usa la PK nativa
+            doc_kwargs["_id"] = pid
         if "name" in model_fields:
             doc_kwargs["name"] = name
         if "status" in model_fields:
@@ -892,7 +944,206 @@ def create_app(config_class=Config) -> Flask:
         except Exception as ee:
             app.logger.exception("api_add_progress_note raw error")
             return jsonify({"ok": False, "error": str(ee)}), 500
-        
+
+    # === Works drafts & commits ===
+    def _get_project_by_id(pid: str):
+        """Helper: ritorna ProjectDoc (se possibile) oppure raw dict (PyMongo)."""
+        # 1) MongoEngine
+        try:
+            from models_mongo.project import ProjectDoc
+            obj = ProjectDoc.objects(id=pid).first()
+            if obj:
+                return obj
+        except Exception as _:
+            pass
+        # 2) PyMongo
+        try:
+            from mongoengine.connection import get_db
+            db = get_db()
+            raw = db["projects"].find_one({"id": pid}) or db["projects"].find_one({"_id": pid})
+            return raw
+        except Exception:
+            return None
+
+    def _ensure_meta_extra_container(obj, key: str):
+        """Ritorna (meta_extra_dict, changed_bool). Crea i contenitori mancanti."""
+        changed = False
+        me = dict(getattr(obj, "meta_extra", {}) or {}) if not isinstance(obj, dict) else dict(obj.get("meta_extra") or {})
+        if key not in me or not isinstance(me.get(key), (list, dict)):
+            # drafts => dict, works => list
+            me[key] = {} if key == "work_drafts" else []
+            changed = True
+        return me, changed
+
+    def _save_project_obj(obj, me_updated: dict) -> bool:
+        """Scrive meta_extra aggiornato su ProjectDoc o raw dict. Ritorna True se ok."""
+        # MongoEngine branch
+        try:
+            if hasattr(obj, "meta_extra"):
+                obj.meta_extra = me_updated
+                obj.save()
+                return True
+        except Exception:
+            pass
+        # PyMongo branch
+        try:
+            from mongoengine.connection import get_db
+            db = get_db()
+            pid_val = getattr(obj, "id", None) or obj.get("id") or obj.get("_id")
+            q = {"id": pid_val} if obj.get("id") == pid_val or getattr(obj, "id", None) == pid_val else {"_id": pid_val}
+            db["projects"].update_one(q, {"$set": {"meta_extra": me_updated}})
+            return True
+        except Exception:
+            return False
+
+    @app.post("/api/projects/<pid>/works/draft")
+    def api_create_work_draft(pid: str):
+        """Crea una bozza di lavoro dentro meta_extra.work_drafts[draft_id].
+        Body: { item: { scope, materials[], labor[], totals{} } } oppure { scope, materials, ... }
+        Ritorna: { ok, draft_id }
+        """
+        data = request.get_json(force=True) or {}
+        item = data.get("item") if isinstance(data, dict) else None
+        if not item:
+            item = {k: v for k, v in data.items() if k in ("scope","materials","labor","totals")}
+        if not isinstance(item, dict):
+            return jsonify({"error": "payload non valido"}), 400
+
+        obj = _get_project_by_id(pid)
+        if not obj:
+            return jsonify({"error": "Progetto non trovato"}), 404
+
+        draft_id = str(uuid.uuid4())[:8]
+        now_iso = datetime.utcnow().isoformat(timespec="seconds")
+
+        me, _ = _ensure_meta_extra_container(obj, "work_drafts")
+        drafts = dict(me.get("work_drafts") or {})
+        drafts[draft_id] = {
+            "draft_id": draft_id,
+            "status": "draft",
+            "created_at": now_iso,
+            "updated_at": now_iso,
+            "item": item,
+        }
+        me["work_drafts"] = drafts
+
+        if not _save_project_obj(obj, me):
+            return jsonify({"ok": False, "error": "persistenza fallita"}), 500
+        return jsonify({"ok": True, "draft_id": draft_id}), 201
+
+    @app.get("/api/projects/<pid>/works/draft/<draft_id>")
+    def api_get_work_draft(pid: str, draft_id: str):
+        obj = _get_project_by_id(pid)
+        if not obj:
+            return jsonify({"error": "Progetto non trovato"}), 404
+        me = dict(getattr(obj, "meta_extra", {}) or {}) if not isinstance(obj, dict) else dict(obj.get("meta_extra") or {})
+        drafts = dict(me.get("work_drafts") or {})
+        d = drafts.get(draft_id)
+        if not d:
+            return jsonify({"error": "Bozza non trovata"}), 404
+        return jsonify({"ok": True, **d}), 200
+
+    @app.patch("/api/projects/<pid>/works/draft/<draft_id>")
+    def api_update_work_draft(pid: str, draft_id: str):
+        data = request.get_json(force=True) or {}
+        obj = _get_project_by_id(pid)
+        if not obj:
+            return jsonify({"error": "Progetto non trovato"}), 404
+
+        me, _ = _ensure_meta_extra_container(obj, "work_drafts")
+        drafts = dict(me.get("work_drafts") or {})
+        d = drafts.get(draft_id)
+        if not d:
+            return jsonify({"error": "Bozza non trovata"}), 404
+
+        item = data.get("item") if isinstance(data, dict) else None
+        if not item:
+            # supporta patch diretta dei campi dell'item
+            item = d.get("item", {})
+            for k in ("scope","materials","labor","totals"):
+                if k in data:
+                    item[k] = data[k]
+        d["item"] = item
+        d["updated_at"] = datetime.utcnow().isoformat(timespec="seconds")
+        drafts[draft_id] = d
+        me["work_drafts"] = drafts
+
+        if not _save_project_obj(obj, me):
+            return jsonify({"ok": False, "error": "persistenza fallita"}), 500
+        return jsonify({"ok": True, "draft_id": draft_id}), 200
+
+    @app.post("/api/projects/<pid>/works/commit/<draft_id>")
+    def api_commit_work_draft(pid: str, draft_id: str):
+        """Sposta la bozza in `works` (lista) e la rimuove da work_drafts."""
+        obj = _get_project_by_id(pid)
+        if not obj:
+            return jsonify({"error": "Progetto non trovato"}), 404
+
+        # carica containers
+        me, _ = _ensure_meta_extra_container(obj, "work_drafts")
+        drafts = dict(me.get("work_drafts") or {})
+        d = drafts.get(draft_id)
+        if not d:
+            return jsonify({"error": "Bozza non trovata"}), 404
+
+        me, _ = _ensure_meta_extra_container(obj, "works")
+        works_list = list(me.get("works") or [])
+
+        item = d.get("item") or {}
+        work_entry = {
+            "work_id": str(uuid.uuid4())[:8],
+            "work_name": item.get("scope") or item.get("work") or "lavoro",
+            "materials": item.get("materials") or [],
+            "labor": item.get("labor") or [],
+            "totals": item.get("totals") or {},
+            "created_at": datetime.utcnow().isoformat(timespec="seconds"),
+        }
+        works_list.append(work_entry)
+        me["works"] = works_list
+        # rimuovi la bozza
+        drafts.pop(draft_id, None)
+        me["work_drafts"] = drafts
+
+        if not _save_project_obj(obj, me):
+            return jsonify({"ok": False, "error": "persistenza fallita"}), 500
+        return jsonify({"ok": True, "work": work_entry}), 201
+
+    @app.post("/api/projects/<pid>/works/bulk")
+    def api_commit_works_bulk(pid: str):
+        """Aggiunge una o più voci di lavoro direttamente a `works`.
+        Body: { items: [ { scope, materials[], labor[], totals{} }, ... ] }
+        """
+        data = request.get_json(force=True) or {}
+        items = data.get("items") if isinstance(data, dict) else None
+        if not isinstance(items, list) or not items:
+            return jsonify({"error": "items deve essere una lista non vuota"}), 400
+
+        obj = _get_project_by_id(pid)
+        if not obj:
+            return jsonify({"error": "Progetto non trovato"}), 404
+
+        me, _ = _ensure_meta_extra_container(obj, "works")
+        works_list = list(me.get("works") or [])
+
+        created = []
+        for it in items:
+            if not isinstance(it, dict):
+                continue
+            work_entry = {
+                "work_id": str(uuid.uuid4())[:8],
+                "work_name": it.get("scope") or it.get("work") or "lavoro",
+                "materials": it.get("materials") or [],
+                "labor": it.get("labor") or [],
+                "totals": it.get("totals") or {},
+                "created_at": datetime.utcnow().isoformat(timespec="seconds"),
+            }
+            created.append(work_entry)
+            works_list.append(work_entry)
+        me["works"] = works_list
+
+        if not _save_project_obj(obj, me):
+            return jsonify({"ok": False, "error": "persistenza fallita"}), 500
+        return jsonify({"ok": True, "created": created, "count": len(created)}), 201
     @app.post("/api/projects/<pid>/auto-assign")
     def api_auto_assign(pid: str):
         """
@@ -1085,16 +1336,14 @@ def create_app(config_class=Config) -> Flask:
     from routes.estimate import estimate_bp
     from routes.chat import chat_bp
     from routes.company import company_bp
-    from routes.computo import computo_bp
-    
+
     app.register_blueprint(views_bp)                    # pagine HTML
     app.register_blueprint(api_bp, url_prefix="/api")   # API legacy/varie
     app.register_blueprint(materials_bp)
     app.register_blueprint(staff_bp)
-    app.register_blueprint(estimate_bp)                 # /api/estimate
-    app.register_blueprint(chat_bp)                     # /api/chat
+    app.register_blueprint(estimate_bp)                 
+    app.register_blueprint(chat_bp, url_prefix="/api")             
     app.register_blueprint(company_bp)
-    app.register_blueprint(computo_bp)
 
     
     # Log delle rotte per debug

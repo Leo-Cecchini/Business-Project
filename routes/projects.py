@@ -56,7 +56,7 @@ def _doc_to_dict(p: ProjectDoc) -> dict:
         "city": getattr(p, "address", None) or meta.get("city"),
         "start_date": meta.get("start_date"),
         "end_date": meta.get("end_date"),
-        "status": getattr(p, "status", None) or "Preventivo",
+        "status": _normalize_status(getattr(p, "status", None) or meta.get("status")),
     }
 
 
@@ -97,14 +97,21 @@ def get_project(project_id: str):
     if not p:
         return jsonify({"error": "Cantiere non trovato"}), 404
     meta = p.meta_extra or {}
+    # Evita payload eccessivi: limita il numero di works restituiti
+    works = list(meta.get("works") or [])
+    if len(works) > 300:
+        works = works[-300:]
+    status_norm = _normalize_status(getattr(p, "status", None) or meta.get("status"))
     payload = {
         "_id": p.id,
         "name": p.name,
         "project_date": meta.get("project_date"),
         "project_address": getattr(p, "address", None) or meta.get("project_address") or meta.get("city"),
-        "status": p.status or meta.get("status") or "quotation",
+        "status": status_norm,
+        "stato": status_norm,  # alias per compatibilità UI
         "metric_computation_id": meta.get("metric_computation_id", ""),
-        "works": meta.get("works", []),
+        "works": works,
+        "assignments": meta.get("assignments", []),  # per mostrare assegnazioni/booking lato UI
     }
     return jsonify(payload)
 
@@ -157,6 +164,10 @@ def list_projects():
     rows = ProjectDoc.objects.order_by("-id").all()
     return jsonify([_doc_to_dict(p) for p in rows])
 
+@projects_bp.get("/list")
+def list_projects_legacy():
+    """Alias compatibile con le vecchie UI: `/api/projects/list` → stessa risposta di list_projects."""
+    return list_projects()
 
 @projects_bp.post("")
 def create_project():
@@ -170,6 +181,9 @@ def create_project():
 
     # Parametri base (compatibili con la UI attuale)
     proj_id = str(data.get("id") or uuid.uuid4())
+    # Garanzia di unicità dell'ID: se esiste già, rigenera (caso estremamente raro)
+    if ProjectDoc.objects(id=proj_id).first():
+      proj_id = str(uuid.uuid4())
     name = (data.get("name") or "Nuovo cantiere").strip()
     project_address = (data.get("project_address") or data.get("address") or "").strip()
     metric_id = (data.get("metric_computation_id") or "").strip()
@@ -334,7 +348,8 @@ def toggle_status(pid: str):
     p = ProjectDoc.objects(id=str(pid)).first()
     if not p:
         return jsonify({"error": "Cantiere non trovato"}), 404
-    cur = (getattr(p, "status", "") or "").strip().lower()
-    p.status = "Preventivo" if cur == "confermato" else "Confermato"
+
+    cur = _normalize_status(getattr(p, "status", None))
+    p.status = "Preventivo" if cur == "Confermato" else "Confermato"
     p.save()
     return company_overview()

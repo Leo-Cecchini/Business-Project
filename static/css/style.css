@@ -105,10 +105,11 @@ input,select,textarea{
 input:focus,select:focus,textarea:focus{ border-color:var(--primary); box-shadow:0 0 0 3px rgba(37,99,235,.12); }
 
 /* =============== Chat compattata =============== */
-.chat-card .chat-messages{
+.chat-messages, .chat-card .chat-messages{
   border:1px solid var(--border);
   border-radius:10px; background:#fafafa;
   padding:8px; max-height:240px; overflow:auto;
+  scroll-behavior:smooth;
 }
 .composer{ display:flex; gap:8px; margin-top:8px; }
 
@@ -362,13 +363,20 @@ input:focus,select:focus,textarea:focus{ border-color:var(--primary); box-shadow
   padding: 8px 10px;
   flex:1;
 }
+.msg.user{ flex-direction: row-reverse; }
+.msg .who{ min-width:84px; font-weight:700; color: var(--muted); }
+.msg.user .who{ text-align:right; }
+.msg.assistant > div:last-child{ background:#f3f4f6; color:#111827; }
+.msg.user > div:last-child{ background: linear-gradient(180deg, var(--primary), var(--primary-700)); color:#fff; border-color: transparent; }
 
 /* Harmonize messages container */
-#messagesContainer{
+#messagesContainer, #siteMessages{
   border:1px solid var(--border);
   border-radius:10px; background:#fafafa;
   padding:10px; max-height:320px; overflow:auto;
 }
+
+.chat-day{ position:sticky; top:0; z-index:1; display:inline-block; margin:8px auto 12px; padding:2px 10px; border-radius:999px; background:#eef2ff; font-size:12px; color:#374151; }
 
 /* Responsive: su schermi piccoli le bolle si allargano un po' */
 @media (max-width: 640px){
@@ -508,3 +516,35 @@ input:focus,select:focus,textarea:focus{ border-color:var(--primary); box-shadow
 }
 
 /* End of UI DETAIL PACK */
+
+/* ======================= Review Modal (bozze lavori) ======================= */
+.modal{
+  position: fixed; inset: 0; z-index: 10000;
+  display: none; align-items: center; justify-content: center;
+  background: rgba(15, 23, 42, .45); /* backdrop */
+  padding: 16px;
+}
+.modal.open, .modal[aria-hidden="false"]{ display: flex; }
+.modal-card{
+  width: min(920px, 96vw);
+  max-height: 86vh; overflow: auto;
+  background: var(--card); color: var(--text);
+  border: 1px solid var(--border); border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-md);
+  padding: 16px;
+}
+.modal-card h3{ margin: 0 0 6px 0; }
+.modal-card .muted{ color: var(--muted); }
+
+/* Review table inputs */
+#reviewRows input, #reviewRows select{ width: 100%; }
+#reviewRows input[type="number"]{ text-align: right; }
+#reviewRows td{ vertical-align: middle; }
+#reviewRows tr td:nth-child(6){ font-variant-numeric: tabular-nums; }
+
+/* Actions alignment inside modal */
+.actions-end{ display:flex; gap:8px; justify-content:flex-end; margin-top: 12px; }
+
+/* Provide a mild look for .btn-light if present in templates */
+.btn-light{ background:#ffffff; border:1px solid var(--border); color:#111827; }
+.btn-light:hover{ background:#f8fafc; }

@@ -26,7 +26,35 @@ from utils.intent_router import parse_intent_llm
 # Blueprint
 # -----------------------------------------------------------------------------
 
+
 api_bp = Blueprint("api", __name__)
+
+# --- Session scoped helpers (isolare memorie per cantiere) ---
+def _scoped_key(base: str, project_id: Optional[str]) -> str:
+    sid = (project_id or "GLOBAL").strip()
+    return f"{base}::{sid}"
+
+def sess_get(base: str, project_id: Optional[str], default=None):
+    return session.get(_scoped_key(base, project_id), default)
+
+def sess_set(base: str, project_id: Optional[str], value):
+    session[_scoped_key(base, project_id)] = value
+
+# --- Chat session id per cantiere (stabile e leggibile) ---
+def get_or_create_project_session_id(project_id: Optional[str]) -> str:
+    """
+    Restituisce un chat_id stabile per il cantiere (o GLOBAL).
+    Usa una mappa nella sessione Flask: session["sessions_by_project"] = { "<PID>": "<CHAT_ID>" }
+    Scelta: id deterministico leggibile "CHAT-<PID>".
+    """
+    key = (project_id or "GLOBAL").strip()
+    store = session.get("sessions_by_project", {})
+    sid = store.get(key)
+    if not sid:
+        sid = f"CHAT-{key}"
+        store[key] = sid
+        session["sessions_by_project"] = store
+    return sid
 
 # =============================================================================
 # 0) HELPERS ESTIMATE (preventivo/stima lavori)
@@ -155,9 +183,10 @@ def _query_workers(intent: dict):
     return q.order_by("role", "name")
 
 
-def _remember_staff_ctx(intent: dict) -> None:
-    """Memorizza l’ultimo intent staff nel contesto conversazionale."""
-    session["staff_last"] = {
+
+def _remember_staff_ctx(intent: dict, project_id: Optional[str]) -> None:
+    """Memorizza l’ultimo intent staff nel contesto conversazionale (scoped per cantiere)."""
+    sess_set("staff_last", project_id, {
         "topic": "staff",
         "intent": {
             "operation": intent.get("operation", "list"),
@@ -166,10 +195,11 @@ def _remember_staff_ctx(intent: dict) -> None:
             "limit": int(intent.get("limit", 25)),
             "load_threshold_hours": float(intent.get("load_threshold_hours", intent.get("free_hours_threshold", 20.0))),
         },
-    }
+    })
 
 
-def _run_staff_intent(intent: dict) -> dict:
+
+def _run_staff_intent(intent: dict, project_id: Optional[str]) -> dict:
     """
     Esegue l’intent 'staff':
     - operation: "count" | "list" | "where" | "clarify" | "roles"
@@ -178,9 +208,10 @@ def _run_staff_intent(intent: dict) -> dict:
     role = intent.get("role") or None
 
     # Se manca il ruolo ma c’era nel turno precedente, riusalo SOLO se la query è anaforica
-    if not role and session.get("staff_last") and session["staff_last"].get("intent", {}).get("role"):
+    last_staff = sess_get("staff_last", project_id)
+    if not role and last_staff and last_staff.get("intent", {}).get("role"):
         if _looks_like_anaphora(intent.get("question", "")) or intent.get("operation") == "clarify":
-            role = session["staff_last"]["intent"]["role"]
+            role = last_staff["intent"]["role"]
             intent["role"] = role
 
     q = _query_workers(intent)
@@ -190,7 +221,7 @@ def _run_staff_intent(intent: dict) -> dict:
         count = q.count()
         free_part = " liberi" if intent.get("free_only") else ""
         answer = f"Ci sono {count} {role_plural(role)}{free_part}."
-        _remember_staff_ctx(intent)
+        _remember_staff_ctx(intent, project_id)
         return {"handled": True, "answer": answer, "sources_internal": [], "sources_web": [],
                 "staff_intent": intent, "staff_count": count}
 
@@ -201,7 +232,7 @@ def _run_staff_intent(intent: dict) -> dict:
         if not rows:
             free_part = " liberi" if intent.get("free_only") else ""
             answer = f"Non ho trovato {role_plural(role)}{free_part}."
-            _remember_staff_ctx(intent)
+            _remember_staff_ctx(intent, project_id)
             return {"handled": True, "answer": answer, "sources_internal": [], "sources_web": [],
                     "staff_intent": intent, "staff": []}
 
@@ -220,13 +251,13 @@ def _run_staff_intent(intent: dict) -> dict:
                     else (", ".join(sorted(cities)) if cities else "non specificato"))
         free_part = " liberi" if intent.get("free_only") else ""
         answer = f"{np_article_plus_plural(role)}{free_part} si trovano a: {city_str}."
-        _remember_staff_ctx(intent)
+        _remember_staff_ctx(intent, project_id)
         return {"handled": True, "answer": answer, "sources_internal": [], "sources_web": [],
                 "staff_intent": intent, "staff": items}
 
     # CLARIFY (spiega la risposta precedente)
     if op == "clarify":
-        last = session.get("staff_last", {})
+        last = sess_get("staff_last", project_id, {})
         if last.get("topic") == "staff":
             prev = last.get("intent", {})
             role_prev = prev.get("role")
@@ -243,7 +274,7 @@ def _run_staff_intent(intent: dict) -> dict:
                 role_part = f" {role_prev}" if role_prev else ""
                 free_part = " liberi" if prev.get("free_only") else ""
                 answer = f"Mi riferivo al conteggio{role_part}{free_part} richiesto in precedenza."
-            _remember_staff_ctx(prev)
+            _remember_staff_ctx(prev, project_id)
             return {"handled": True, "answer": answer, "sources_internal": [], "sources_web": [],
                     "staff_intent": prev}
 
@@ -262,7 +293,7 @@ def _run_staff_intent(intent: dict) -> dict:
         except Exception as e:
             print(f"[staff roles error] {e}")
             answer = "Errore durante il recupero dei ruoli dal database."
-        _remember_staff_ctx(intent)
+        _remember_staff_ctx(intent, project_id)
         return {"handled": True, "answer": answer, "sources_internal": [], "sources_web": [],
                 "staff_intent": intent}
 
@@ -271,7 +302,7 @@ def _run_staff_intent(intent: dict) -> dict:
     if not rows:
         free_part = " liberi" if intent.get("free_only") else ""
         answer = f"Non ho trovato {role_plural(role)}{free_part}."
-        _remember_staff_ctx(intent)
+        _remember_staff_ctx(intent, project_id)
         return {"handled": True, "answer": answer, "sources_internal": [], "sources_web": [],
                 "staff_intent": intent, "staff": []}
 
@@ -288,7 +319,7 @@ def _run_staff_intent(intent: dict) -> dict:
     names = ", ".join(i["name"] for i in items if i.get("name"))
     free_part = " liberi" if intent.get("free_only") else ""
     answer = f"Ecco i primi {len(items)} {role_plural(role)}{free_part}: {names}."
-    _remember_staff_ctx(intent)
+    _remember_staff_ctx(intent, project_id)
     return {"handled": True, "answer": answer, "sources_internal": [], "sources_web": [],
             "staff_intent": intent, "staff": items}
 
@@ -578,7 +609,9 @@ def upload_files():
         try:
             filename = secure_filename(file.filename)
             file_data = file.read()
-            chunks, metadatas = file_processor.process_file(file_data, filename)
+            # Legge project_id dalla request (usa "GLOBAL" per asset aziendali)
+            project_id = request.form.get("project_id") or request.args.get("project_id")
+            chunks, metadatas = file_processor.process_file(file_data, filename, project_id=project_id)
             vector_store.add_documents(chunks, metadatas)
             processed += 1
         except Exception as e:
@@ -600,8 +633,16 @@ def get_documents():
 # 4) CHAT (routing staff/materiali, RAG, web)
 # =============================================================================
 
-@api_bp.route("/chat", methods=["POST"])
-def chat():
+@api_bp.route("/projects/<project_id>/chat-init", methods=["POST"])
+def chat_init_for_project(project_id):
+    """Inizializza (o restituisce) il chat_id dedicato al cantiere."""
+    pid = (project_id or "").strip() or None
+    chat_id = get_or_create_project_session_id(pid)
+    return jsonify({"project_id": pid or "GLOBAL", "chat_id": chat_id}), 200
+
+
+@api_bp.route("/legacy/chat", methods=["POST"])
+def chat_legacy():
     """
     Chat endpoint con:
     - Routing staff con intent LLM + fallback euristico (short-circuit su DB)
@@ -621,6 +662,14 @@ def chat():
     question = (data.get("question") or data.get("message") or "").strip()
     if not question:
         return jsonify({"error": "Question is required"}), 400
+
+    # Project ID dalla request (headers, querystring, o json body)
+    project_id = (
+        request.headers.get("X-Project-Id")
+        or request.args.get("project_id")
+        or data.get("project_id")
+    )
+    project_id = project_id.strip() if isinstance(project_id, str) else None
 
     # Pre-inizializzazioni sicure per evitare NameError
     local_ctx, web_ctx = [], []
@@ -677,7 +726,7 @@ def chat():
         return jsonify(payload), 200
 
     # ------------------- STAFF ROUTING -------------------
-    last_ctx = session.get("staff_last")
+    last_ctx = sess_get("staff_last", project_id)
     try:
         parsed = parse_intent_llm(chat_model.llm, question, last_ctx)
     except Exception:
@@ -705,7 +754,7 @@ def chat():
                 if not intent.get("role"):
                     intent["role"] = None
         intent.setdefault("operation", "list")
-        result = _run_staff_intent(intent)
+        result = _run_staff_intent(intent, project_id)
         return jsonify(result), 200
 
     # 1b) Fallback euristico staff
@@ -719,7 +768,7 @@ def chat():
     is_ana = _looks_like_anaphora(question)
 
     if is_staffish or is_ana:
-        last = session.get("staff_last", {})
+        last = sess_get("staff_last", project_id, {})
         last_intent = (last.get("intent") or {}) if last.get("topic") == "staff" else {}
 
         # Heuristics base
@@ -765,7 +814,7 @@ def chat():
         if is_ana and not _norm_role_from_text(ql) and last_intent:
             intent.setdefault("operation", "clarify")
 
-        result = _run_staff_intent(intent)
+        result = _run_staff_intent(intent, project_id)
         return jsonify(result), 200
 
     # ---------------- MATERIALS ROUTING (DB-first) ----------------
@@ -775,15 +824,16 @@ def chat():
             name_like = _material_name_guess(question)
 
             # fallback: se la frase è generica, riusa l’ultimo materiale cercato
-            if not name_like and session.get("material_last"):
-                prev = session["material_last"]
-                name_like = prev.get("name_like") or ""
-                unit = unit or prev.get("unit")
+            if not name_like:
+                prev = sess_get("material_last", project_id)
+                if prev:
+                    name_like = prev.get("name_like") or ""
+                    unit = unit or prev.get("unit")
 
             m, matches = _lookup_material_in_db(name_like, unit)
 
             # salva memoria ultimo lookup
-            session["material_last"] = {"topic": "materials", "name_like": name_like, "unit": unit}
+            sess_set("material_last", project_id, {"topic": "materials", "name_like": name_like, "unit": unit})
 
             if not m:
                 unit_part = f" ({unit})" if unit else ""
@@ -887,7 +937,8 @@ def chat():
     # 3a) Retrieval locale
     if pol.allow_local or mode in ("local", "both"):
         try:
-            hits = vector_store.search(question, limit=6)
+            where = {"project_id": {"$in": [project_id, "GLOBAL"]}} if project_id else None
+            hits = vector_store.search(question, limit=6, where=where)
         except Exception:
             hits = []
         local_ctx = [{"text": h.get("text", ""), "metadata": h.get("metadata", {}), "score": h.get("score", 0.0)} for h in hits]
@@ -938,18 +989,19 @@ def chat():
     generic_comparison = build_comparison(question, local_ctx, web_ctx)
 
     # 3e) Generazione risposta con il modello
-    if "session_id" not in session:
-        session["session_id"] = str(uuid.uuid4())
-    session_id = session["session_id"]
+    # Usa chat_id per-cantiere (o GLOBAL) per isolare definitivamente le history
+    session_id = get_or_create_project_session_id(project_id)
 
     try:
         if hasattr(chat_model, "answer_with_contexts"):
-            res = chat_model.answer_with_contexts(session_id, question, local_ctx, web_ctx)
+            # Passa il site_id per namespacizzare la memoria e abilitare il filtro CANTIERE+GLOBAL
+            res = chat_model.answer_with_contexts(session_id, question, local_ctx, web_ctx, site_id=project_id)
             answer = res.get("answer", "")
             sources_internal = res.get("local_sources", [])
             sources_web = res.get("web_sources", [])
         else:
-            response = chat_model.chat(vector_store, session_id, question)
+            # Fallback: usa il metodo chat(...) con site_id
+            response = chat_model.chat(vector_store, session_id, question, site_id=project_id)
             answer = response.get("answer", "")
             source_docs = response.get("source_documents", [])
             sources_internal = [{
@@ -983,23 +1035,60 @@ def chat():
     if generic_comparison:
         payload["comparison"] = generic_comparison
 
-    return jsonify(payload)
+    resp = jsonify(payload)
+    resp.headers["Deprecation"] = "true"
+    resp.headers["Link"] = "</api/chat>; rel=\"successor-version\""
+    return resp
 
 # =============================================================================
 # 5) RESET
 # =============================================================================
 
-@api_bp.route("/reset-chat", methods=["POST"])
-def reset_chat():
+@api_bp.route("/legacy/reset-chat", methods=["POST"])
+def reset_chat_legacy():
     """Reset storico chat e memorie conversazionali."""
     chat_model = getattr(g, "chat_model", None)
     if chat_model is None:
         return jsonify({"error": "Server not initialized"}), 500
-    if "session_id" in session:
-        chat_model.clear_session(session["session_id"])
-        session.pop("session_id", None)
-    session.pop("staff_last", None)
-    session.pop("material_last", None)
+
+    # Identifica il cantiere da resettare (se presente)
+    pid = request.headers.get("X-Project-Id") or request.args.get("project_id")
+    pid = pid.strip() if isinstance(pid, str) else None
+
+    # Pulisci history della/e chat per-cantiere
+    store = session.get("sessions_by_project", {})
+    if pid:
+        chat_id = store.get(pid) or get_or_create_project_session_id(pid)
+        try:
+            chat_model.clear_session(chat_id)
+        except Exception:
+            pass
+        # rimuovi mapping
+        if pid in store:
+            store.pop(pid, None)
+            session["sessions_by_project"] = store
+    else:
+        # reset globale: tutte le chat per cantiere
+        for _pid, chat_id in list(store.items()):
+            try:
+                chat_model.clear_session(chat_id)
+            except Exception:
+                pass
+            store.pop(_pid, None)
+        session["sessions_by_project"] = store
+
+    if pid:
+        session.pop(_scoped_key("staff_last", pid), None)
+        session.pop(_scoped_key("material_last", pid), None)
+    else:
+        # reset globale: elimina tutte le chiavi scoped note
+        for k in list(session.keys()):
+            if k.startswith("staff_last::") or k.startswith("material_last::"):
+                session.pop(k, None)
+        # backward-compat: elimina eventuali chiavi non-scoped
+        session.pop("staff_last", None)
+        session.pop("material_last", None)
+
     return jsonify({"success": True})
 
 
