@@ -1,12 +1,36 @@
 # routes/estimate.py
 from __future__ import annotations
 from math import ceil
+import math
 from dataclasses import dataclass, asdict
+import time
 from typing import Dict, Any, List, Optional
+import os
 from flask import Blueprint, request, jsonify, g, current_app
+
 
 from models_mongo.material import MaterialDoc
 from models_mongo.worker import WorkerDoc
+try:
+    from models_mongo.pricelist import PricelistDoc
+except Exception:
+    PricelistDoc = None
+
+# Fallback raw-PyMongo access (when PricelistDoc is not available)
+try:
+    from mongoengine.connection import get_db  # used only if PricelistDoc is None
+except Exception:
+    get_db = None
+
+# Guarded imports for project/site models
+try:
+    from models_mongo.project import ProjectDoc
+except Exception:
+    ProjectDoc = None
+try:
+    from models_mongo.site import SiteDoc
+except Exception:
+    SiteDoc = None
 
 estimate_bp = Blueprint("estimate", __name__, url_prefix="/api/estimate")
 
@@ -92,6 +116,27 @@ def _db_price(name_tokens: List[str], prefer_unit: Optional[str]=None) -> Option
         "raw": mat_dict,
     }
 
+# -------------------------
+# Margine aziendale (configurabile)
+# -------------------------
+
+def _company_margin_pct() -> float:
+    """Percentuale margine aziendale (env COMPANY_MARGIN_PCT, default 22%)."""
+    try:
+        pct = float(os.getenv("COMPANY_MARGIN_PCT", "22"))
+        if pct < 0: pct = 0.0
+        if pct > 60: pct = 60.0
+        return round(pct, 2)
+    except Exception:
+        return 22.0
+
+def _apply_company_margin(subtotal: float) -> tuple[float, float, float]:
+    """Ritorna (pct, margin_amount, total_with_margin)."""
+    pct = _company_margin_pct()
+    margin = round((subtotal or 0.0) * (pct/100.0), 2)
+    total = round((subtotal or 0.0) + margin, 2)
+    return pct, margin, total
+
 def _price_for(alias_key: str, prefer_unit: Optional[str]=None) -> Optional[Dict[str, Any]]:
     aliases = MATERIAL_ALIASES.get(alias_key, [])
     for label in aliases:
@@ -146,12 +191,80 @@ ELECTRIC_PRODUCTIVITY = {
     "traccia_m": 0.15,   # h/metro di traccia (muratore)
 }
 
+
 HYDRAULIC_PRODUCTIVITY = {
     "bagno_completo": 12.0,     # h/bagno (posa tubi+collegamenti sanitari, senza finiture pregiate)
     "punto_idrico": 2.5,        # h/punto acqua (lavabo, bidet, doccia: media)
     "scarico_m": 0.35,          # h/metro scarico PVC
     "tubo_acqua_m": 0.25,       # h/metro multistrato
 }
+
+# -------------------------
+# Work catalog helpers (crew requirements)
+# -------------------------
+
+# Map simple labels to catalog codes (best-effort)
+WORK_LABEL_TO_CODE = {
+    "posa piastrelle": "FLOOR_TILE",
+    "posa pavimento": "FLOOR_TILE",
+    "piastrelle": "FLOOR_TILE",
+    "battiscopa": "FLOOR_TILE",
+    "smaltimento macerie": "SITE_WASTE",
+    "macerie": "SITE_WASTE",
+    "posa porta": "FIN_DOOR",
+    "porta": "FIN_DOOR",
+    "punto luce": "ELEC_FIXTURE",
+    "punti luce": "ELEC_FIXTURE",
+    "punto presa": "ELEC_FIXTURE",
+    "punti presa": "ELEC_FIXTURE",
+    "impianto idrico bagno": "PLUMB_FIXTURE",
+    "punto idrico": "PLUMB_ROUGH",
+    "punti idrici": "PLUMB_ROUGH",
+}
+
+def _catalog_code_from_label(label: str, unit: str) -> str | None:
+    lab = (label or "").lower()
+    # try direct contains matches in priority order
+    for key, code in WORK_LABEL_TO_CODE.items():
+        if key in lab:
+            # small refinement: if battiscopa explicitly, keep FLOOR_TILE but caller may treat separately
+            return code
+    # heuristics
+    if ("piastrell" in lab or "paviment" in lab) and unit == "m2":
+        return "FLOOR_TILE"
+    if ("porta" in lab and "posa" in lab) and unit == "pz":
+        return "FIN_DOOR"
+    if ("macerie" in lab or "smaltimento" in lab):
+        return "SITE_WASTE"
+    if ("elettric" in lab and ("luce" in lab or "presa" in lab)):
+        return "ELEC_FIXTURE"
+    if ("idric" in lab and ("bagno" in lab or "punto" in lab)):
+        return "PLUMB_FIXTURE"
+    return None
+
+def _crew_requirements_for_code(code: str | None) -> dict:
+    """Fetches crew requirements (min_crew, crew_roles, pairing_rule) from work_catalog.
+    Returns empty dict if not found or DB unavailable.
+    """
+    if not code or get_db is None:
+        return {}
+    try:
+        db = get_db()
+        doc = db["work_catalog"].find_one({"code": code}, {"_id":0, "min_crew":1, "crew_roles":1, "pairing_rule":1})
+        if not doc:
+            return {}
+        # Normalize types
+        out = {}
+        if isinstance(doc.get("min_crew"), (int, float)):
+            out["min_crew"] = int(doc["min_crew"]) if isinstance(doc["min_crew"], int) else int(round(doc["min_crew"]))
+        if isinstance(doc.get("crew_roles"), dict):
+            # ensure ints
+            out["crew_roles"] = {str(k): int(v) for k, v in doc["crew_roles"].items() if isinstance(v, (int, float))}
+        if isinstance(doc.get("pairing_rule"), str):
+            out["pairing_rule"] = doc["pairing_rule"]
+        return out
+    except Exception:
+        return {}
 
 # -------------------------
 # Calcolo manodopera (da DB o default)
@@ -447,6 +560,10 @@ def estimate():
     crew_size = 3
     days = ceil(total_hours / (crew_size * 8.0)) if total_hours > 0 else 0
 
+    # Applica margine aziendale al totale progetto
+    net_total = float(budget.get("total", 0.0))
+    m_pct, m_amt, total_with_margin = _apply_company_margin(net_total)
+
     return jsonify({
         "project": {
             "summary": {
@@ -454,7 +571,12 @@ def estimate():
                 "estimated_days": days,
                 "total_hours": round(total_hours, 1),
             },
-            "budget": budget,
+            "budget": budget,  # materiali/lavoro e totale netto
+            "budget_margin": {
+                "margin_pct": m_pct,
+                "margin_amount": m_amt,
+                "total_with_margin": total_with_margin
+            }
         },
         "chunks": chunks
     }), 200
@@ -462,6 +584,418 @@ def estimate():
 @estimate_bp.route("/ping", methods=["GET"])
 def ping():
     return jsonify({"ok": True})
+
+# ------------------ Helpers comuni (preview) ------------------
+
+UNIT_NORM = {
+    "mq": "m2", "m²": "m2",
+    "mc": "m3", "m³": "m3",
+    "lt": "l",
+    "ore": "h", "ora": "h",
+    "pezzi": "pz", "pezzo": "pz",
+    "ml": "m",
+}
+
+def _unit(u: str) -> str:
+    if not u: return "pz"
+    return UNIT_NORM.get(u.strip().lower(), u.strip().lower())
+
+
+def _line(code: str|None, descr: str, um: str, qta: float, prezzo: float) -> Dict[str, Any]:
+    tot = round(qta * prezzo, 2)
+    return {"code": code, "descr": descr, "um": um, "qta": round(qta, 3), "prezzo": round(prezzo, 2), "totale": tot}
+
+
+def _labor(role: str, ore: float, tariffa: float) -> Dict[str, Any]:
+    return {"ruolo": role, "ore": round(ore, 2), "tariffa": round(tariffa, 2), "totale": round(ore*tariffa, 2)}
+
+
+def _sum(rows: List[Dict[str, Any]], key: str = "totale") -> float:
+    return round(sum((r.get(key) or 0) for r in rows), 2)
+
+
+# ------------------ Listini regionali/città (con fallback) ------------------
+# Usa PricelistDoc se presente: materials, wages, factors (es: {"historic_center":1.05})
+from functools import lru_cache
+
+
+@lru_cache(maxsize=128)
+def _get_pricelist(region: str|None, city: str|None) -> dict:
+    """Ritorna dict {materials, wages, factors}.
+    Ordine di ricerca:
+      1) (region, city)
+      2) solo region (city assente/vuota)
+      3) solo city
+      4) fallback vuoto
+    Supporta sia MongoEngine (PricelistDoc) sia raw PyMongo (db['pricelists']).
+    """
+    out = {"materials": {}, "wages": {}, "factors": {}}
+
+    # 1) MongoEngine (PricelistDoc), se disponibile
+    if PricelistDoc is not None:
+        try:
+            q = None
+            if city and region:
+                q = PricelistDoc.objects(region__iexact=region, city__iexact=city).first()
+            if (q is None) and region:
+                q = (PricelistDoc.objects(region__iexact=region, city__exists=False).first()
+                     or PricelistDoc.objects(region__iexact=region, city__in=[None, ""]).first())
+            if (q is None) and city:
+                q = PricelistDoc.objects(city__iexact=city).first()
+            if q:
+                return {
+                    "materials": dict(getattr(q, "materials", {}) or {}),
+                    "wages": dict(getattr(q, "wages", {}) or {}),
+                    "factors": dict(getattr(q, "factors", {}) or {}),
+                }
+        except Exception:
+            pass
+
+    # 2) Raw PyMongo fallback (coerente con endpoints in work_catalog)
+    if get_db is not None:
+        try:
+            db = get_db()
+            def _find(filter_):
+                return db["pricelists"].find_one(filter_, {"_id": 0}) or {}
+
+            doc = {}
+            if city and region:
+                doc = _find({
+                    "region": {"$regex": f"^{region}$", "$options": "i"},
+                    "city": {"$regex": f"^{city}$", "$options": "i"}
+                })
+            if not doc and region:
+                doc = _find({
+                    "region": {"$regex": f"^{region}$", "$options": "i"},
+                    "$or": [{"city": {"$exists": False}}, {"city": {"$in": [None, ""]}}]
+                })
+            if not doc and city:
+                doc = _find({"city": {"$regex": f"^{city}$", "$options": "i"}})
+
+            if doc:
+                return {
+                    "materials": dict(doc.get("materials") or {}),
+                    "wages": dict(doc.get("wages") or {}),
+                    "factors": dict(doc.get("factors") or {}),
+                }
+        except Exception:
+            pass
+
+    return out
+
+def _apply_factors(base: float, factors: dict, tags: list[str]|None) -> float:
+    if not base:
+        return 0.0
+    mul = 1.0
+    for t in (tags or []):
+        v = factors.get(t)
+        if isinstance(v, (int, float)):
+            mul *= float(v)
+    return round(base * mul, 4)
+
+def price(code: str, default: float = 0.0, *, region: str|None=None, city: str|None=None, tags: list[str]|None=None) -> float:
+    pl = _get_pricelist(region, city)
+    val = None
+    try:
+        val = pl["materials"].get(code)
+    except Exception:
+        val = None
+    if val is None:
+        # fallback: prova a cercare nel DB materiali per code
+        try:
+            if MaterialDoc is not None:
+                m = MaterialDoc.objects(code__iexact=code).first()
+                if m and getattr(m, "unit_price_eur_2025", None) is not None:
+                    val = float(m.unit_price_eur_2025)
+        except Exception:
+            val = None
+    if val is None:
+        val = default
+    return float(_apply_factors(val, pl.get("factors", {}), tags))
+
+def wage(role: str, default: float = 25.0, *, region: str|None=None, city: str|None=None, tags: list[str]|None=None) -> float:
+    pl = _get_pricelist(region, city)
+    val = None
+    try:
+        val = pl["wages"].get(role)
+    except Exception:
+        val = None
+    if val is None:
+        # fallback WorkerDoc -> DEFAULT_WAGE
+        try:
+            w = WorkerDoc.objects(role__icontains=role).first() if WorkerDoc is not None else None
+            if w and getattr(w, "hourly_rate", None) is not None:
+                val = float(w.hourly_rate)
+        except Exception:
+            val = None
+    if val is None:
+        val = DEFAULT_WAGE.get(role, default)
+    return float(_apply_factors(val, pl.get("factors", {}), tags))
+
+# ------------------ Auto-resolve geo & factors ------------------
+
+def _multiply_factors(factors: dict, tags: List[str]|None) -> float:
+    mul = 1.0
+    for t in (tags or []):
+        v = factors.get(t)
+        if isinstance(v, (int, float)):
+            mul *= float(v)
+    return round(mul, 4)
+
+def _resolve_geo_and_tags(data: Dict[str, Any]) -> Dict[str, Any]:
+    """Ritorna {region, city, applied_factors, factor_multiplier}.
+    Precedenze:
+      1) payload.region/city (+ tags opzionali: tags|factor_tags)
+      2) project_id/cantiere_id/site_id -> geo + possibili tag fattori
+      3) fallback: None/[]
+    """
+    region = data.get("region") or data.get("regione")
+    city = data.get("city") or data.get("citta") or data.get("città")
+    tags = list(data.get("tags") or data.get("factor_tags") or [])
+
+    proj_id = data.get("project_id") or data.get("cantiere_id") or data.get("site_id")
+
+    if (not region or not city) and proj_id:
+        try:
+            doc = None
+            if ProjectDoc is not None:
+                doc = ProjectDoc.objects(id=proj_id).first() or ProjectDoc.objects(project_id=proj_id).first()
+            if doc is None and SiteDoc is not None:
+                doc = SiteDoc.objects(id=proj_id).first() or SiteDoc.objects(site_id=proj_id).first()
+            if doc:
+                meta = getattr(doc, "meta", {}) or {}
+                addr = getattr(doc, "address", {}) or getattr(doc, "site_address", {}) or {}
+                region = region or meta.get("region") or meta.get("regione") or addr.get("region") or addr.get("regione")
+                city = city or meta.get("city") or meta.get("citta") or meta.get("città") or addr.get("city") or addr.get("citta") or addr.get("città")
+                maybe_tags = set()
+                for key in ("tags","factor_tags","zone","flags","labels"):
+                    val = getattr(doc, key, None) or meta.get(key)
+                    if isinstance(val, (list, set, tuple)):
+                        maybe_tags |= set(str(x).strip() for x in val if x)
+                    elif isinstance(val, str):
+                        maybe_tags |= set(s.strip() for s in val.split(",") if s.strip())
+                if maybe_tags and not tags:
+                    tags = list(maybe_tags)
+        except Exception:
+            pass
+
+    pl = _get_pricelist(region, city) if (region or city) else {"factors": {}}
+    factor_keys = set((pl.get("factors") or {}).keys())
+    applied_factors = [t for t in (tags or []) if t in factor_keys]
+    factor_multiplier = _multiply_factors(pl.get("factors", {}), applied_factors)
+
+    return {
+        "region": region,
+        "city": city,
+        "applied_factors": applied_factors,
+        "factor_multiplier": factor_multiplier,
+    }
+
+# ------------------ Ricette semplici per le lavorazioni ------------------
+
+def _recipe_from_item(label: str, qty: float, unit: str, region: str|None=None, city: str|None=None, tags: List[str] | None=None, meta: Dict[str, Any] | None=None) -> Dict[str, Any]:
+    lab = (label or "").lower()
+    um = _unit(unit)
+    mats: List[Dict[str, Any]] = []
+    labor: List[Dict[str, Any]] = []
+
+    meta = meta or {}
+    try:
+        avg_m = float(meta.get("avg_distance_m") or 0)
+    except Exception:
+        avg_m = 0.0
+
+    # Resolve catalog code and crew requirements (if present in DB)
+    catalog_code = _catalog_code_from_label(label, um)
+    crew_req = _crew_requirements_for_code(catalog_code)
+
+    def _elec_len_base(avg_m_val: float, factor: float = 1.0) -> float:
+        # andata/ritorno + 10% scorta
+        return round(max(avg_m_val, 0.0) * 2.0 * 1.10 * factor, 2)
+
+    def _tube_len_base(avg_m_val: float, factor: float = 1.0) -> float:
+        # piccola maggiorazione posa
+        return round(max(avg_m_val, 0.0) * 1.05 * factor, 2)
+
+    # 1) Posa piastrelle pavimento (qty in m2)
+    if any(k in lab for k in ("posa piastrelle", "posa pavimento", "piastrelle")) and um == "m2":
+        area = qty
+        sfrido = 1.08  # 8% di sfrido
+        mats.append(_line("FLR-001", "Piastrelle gres 60x60", "m2", area*sfrido, price("FLR-001", region=region, city=city, tags=tags)))
+        # colla ~ 3.5 kg/m2
+        mats.append(_line("ADH-001", "Colla per piastrelle", "kg", area*3.5, price("ADH-001", region=region, city=city, tags=tags)))
+        # stucco ~ 0.15 kg/m2
+        mats.append(_line("STU-001", "Stucco fughe", "kg", area*0.15, price("STU-001", region=region, city=city, tags=tags)))
+        # manodopera ~ 0.7 h/m2
+        labor.append(_labor("piastrellista", area*0.7, wage("piastrellista", region=region, city=city, tags=tags)))
+
+    # 2) Battiscopa (qty in m)
+    elif "battiscopa" in lab and um in ("m",):
+        lung = qty
+        mats.append(_line("BSK-001", "Battiscopa in gres", "m", lung, price("BSK-001", region=region, city=city, tags=tags)))
+        # manodopera ~ 0.15 h/m
+        labor.append(_labor("piastrellista", lung*0.15, wage("piastrellista", region=region, city=city, tags=tags)))
+
+    # 3) Smaltimento macerie (qty in pz/sacchi)
+    elif ("smaltimento" in lab or "macerie" in lab) and um in ("pz",):
+        sacs = qty
+        mats.append(_line("WAS-001", "Sacchi macerie 25kg", "pz", sacs, price("WAS-001", region=region, city=city, tags=tags)))
+        # movimentazione ~ 0.25 h/sacco
+        labor.append(_labor("manovale", sacs*0.25, wage("manovale", region=region, city=city, tags=tags)))
+
+    # 4) Posa porta interna (qty in pz)
+    elif ("porta" in lab and "posa" in lab) and um in ("pz",):
+        pezzi = qty
+        # falegname ~ 1.2 h/porta (solo manodopera in preview)
+        labor.append(_labor("falegname", pezzi*1.2, wage("falegname", region=region, city=city, tags=tags)))
+
+    # 5) Punto luce (qty in pz)
+    elif (("punto luce" in lab) or ("punti luce" in lab) or ("luci" in lab) or (("elettric" in lab) and ("luce" in lab))) and um in ("pz",):
+        punti = qty
+        # materiale puntuale
+        mats.append(_line("EL-PL", "Materiali punto luce", "pz", punti, price("EL-PL", region=region, city=city, tags=tags)))
+        # metraggi se specificata distanza media
+        if avg_m > 0:
+            cavo_m = _elec_len_base(avg_m) * punti
+            tubo_m = _tube_len_base(avg_m) * punti
+            mats.append(_line("EL-CAVO-3G1.5", "Cavo 3G1.5", "m", cavo_m, price("EL-CAVO-3G1.5", region=region, city=city, tags=tags)))
+            mats.append(_line("EL-TUBO-20", "Tubo corrugato Ø20", "m", tubo_m, price("EL-TUBO-20", region=region, city=city, tags=tags)))
+            deriv = math.ceil(punti / 10.0)
+            if deriv > 0:
+                mats.append(_line("EL-SCATOLA-DER", "Scatola derivazione", "pz", deriv, price("EL-SCATOLA-DER", region=region, city=city, tags=tags)))
+        # manodopera
+        labor.append(_labor("elettricista", punti*0.6, wage("elettricista", region=region, city=city, tags=tags)))
+
+    # 6) Punto presa (qty in pz)
+    elif (("punto presa" in lab) or ("punti presa" in lab) or ("prese" in lab) or (("elettric" in lab) and ("presa" in lab))) and um in ("pz",):
+        punti = qty
+        mats.append(_line("EL-PP", "Materiali punto presa", "pz", punti, price("EL-PP", region=region, city=city, tags=tags)))
+        if avg_m > 0:
+            cavo_m = _elec_len_base(avg_m) * punti
+            tubo_m = _tube_len_base(avg_m) * punti
+            mats.append(_line("EL-CAVO-3G2.5", "Cavo 3G2.5", "m", cavo_m, price("EL-CAVO-3G2.5", region=region, city=city, tags=tags)))
+            mats.append(_line("EL-TUBO-20", "Tubo corrugato Ø20", "m", tubo_m, price("EL-TUBO-20", region=region, city=city, tags=tags)))
+            mats.append(_line("EL-SCATOLA-503", "Scatola incasso 503", "pz", punti, price("EL-SCATOLA-503", region=region, city=city, tags=tags)))
+            deriv = math.ceil(punti / 10.0)
+            if deriv > 0:
+                mats.append(_line("EL-SCATOLA-DER", "Scatola derivazione", "pz", deriv, price("EL-SCATOLA-DER", region=region, city=city, tags=tags)))
+        labor.append(_labor("elettricista", punti*0.55, wage("elettricista", region=region, city=city, tags=tags)))
+
+    # 7) Impianto idrico bagno (pacchetto per bagno)
+    elif ("impianto idrico bagno" in lab) and um in ("pz",):
+        bagni = int(qty)
+        mats.append(_line("IDR-BAGNO-PACK", "Kit impianto idrico bagno", "pz", bagni, price("IDR-BAGNO-PACK", region=region, city=city, tags=tags)))
+        labor.append(_labor("idraulico", bagni*12.0, wage("idraulico", region=region, city=city, tags=tags)))
+
+    # 7b) Punti idrici (qty in pz) con distanza opzionale
+    elif ("punto idrico" in lab or "punti idrici" in lab or ("idric" in lab and "punto" in lab)) and um in ("pz",):
+        punti = qty
+        if avg_m > 0:
+            ppr_m = round(avg_m * 2.0 * 1.10 * punti, 2)   # mandata+ritorno + scorta
+            scarico_m = round(avg_m * 0.40 * punti, 2)     # quota default scarico
+            mats.append(_line("IDR-TUBO-PPR-20", "Tubo PPR Ø20", "m", ppr_m, price("IDR-TUBO-PPR-20", region=region, city=city, tags=tags)))
+            mats.append(_line("IDR-SCARICO-HT-50", "Scarico HT Ø50", "m", scarico_m, price("IDR-SCARICO-HT-50", region=region, city=city, tags=tags)))
+            mats.append(_line("IDR-RACCORDI-PACK", "Kit raccordi", "pz", max(1, math.ceil(punti/2)), price("IDR-RACCORDI-PACK", region=region, city=city, tags=tags)))
+        else:
+            # fallback a pacchetto se non abbiamo lunghezze
+            mats.append(_line("IDR-BAGNO-PACK", "Kit impianto idrico punto", "pz", punti, price("IDR-BAGNO-PACK", region=region, city=city, tags=tags)))
+        labor.append(_labor("idraulico", punti * 1.20, wage("idraulico", region=region, city=city, tags=tags)))
+
+    # altri casi → preview vuota, verrà arricchita con listini/regole aggiuntive
+    subtotal = _sum(mats) + _sum(labor)
+    return {
+        "materials": mats,
+        "labor": labor,
+        "subtotal": subtotal,
+        "ready_to_commit": False,
+        "assumptions": None,
+        "work_code": catalog_code,
+        "crew_requirements": crew_req,
+    }
+
+
+# ------------------ Endpoint di preview ------------------
+@estimate_bp.post("/preview")
+def estimate_preview():
+    """Genera anteprima per 1..N voci:
+       Input: { items:[{label, qty, unit}], ... } oppure { parsed_items:[...] }.
+       Output: { items:[{materials[], labor[], subtotal, ready_to_commit}], grand_total }.
+    """
+    data = request.get_json(force=True) or {}
+    _t0 = time.perf_counter()
+    items = data.get("items") or data.get("parsed_items") or []
+    ctx = _resolve_geo_and_tags(data)
+    region = ctx.get("region")
+    city = ctx.get("city")
+    tags = ctx.get("applied_factors") or []
+
+    # Supporto rapido: se arriva solo del testo, prova a usare il parser della chat
+    if not items and data.get("text"):
+        try:
+            from utils.message_parser import parse_multi as _pm
+            items = _pm(data["text"]) or []
+        except Exception:
+            items = []
+
+    if not isinstance(items, list) or not items:
+        return jsonify({"error": "Nessuna voce da stimare"}), 422
+
+    out_items: List[Dict[str, Any]] = []
+    grand = 0.0
+    for it in items:
+        label = (it.get("label") or "voce").strip()
+        qty = float(it.get("qty") or 1.0)
+        unit = _unit(it.get("unit") or "pz")
+        comp = _recipe_from_item(label, qty, unit, region=region, city=city, tags=tags, meta=it.get("meta") or {})
+        comp["label"] = label
+        comp["applied_factors"] = list(tags)
+        # struttura tabelle UI (columns/rows) già pronte per il frontend
+        comp["materials"] = {
+            "columns": ["code", "descr", "um", "qta", "prezzo", "totale"],
+            "rows": comp["materials"],
+        }
+        comp["labor"] = {
+            "columns": ["ruolo", "ore", "tariffa", "totale"],
+            "rows": comp["labor"],
+        }
+        out_items.append(comp)
+        grand += float(comp.get("subtotal") or 0)
+
+    # Calcolo margine aziendale
+    net_subtotal = round(grand, 2)
+    m_pct, m_amt, total_with_margin = _apply_company_margin(net_subtotal)
+
+    ui_tables = {
+        "items": out_items,
+        "subtotal": net_subtotal,
+        "margin_pct": m_pct,
+        "margin_amount": m_amt,
+        "grand_total": total_with_margin,
+        "notes": "Anteprima non vincolante",
+    }
+
+    payload = {
+        "ui_tables": ui_tables,
+        # campi legacy per retro-compatibilità
+        "items": out_items,
+        "grand_total": total_with_margin,
+        "summary": "Anteprima non vincolante",
+        "pricing_context": ctx | {"margin_pct": m_pct},
+    }
+    try:
+        from services.telemetry import log_estimate_quality
+        log_estimate_quality({
+            "region": region, "city": city,
+            "factors": tags,
+            "items_count": len(out_items),
+            "grand_total": total_with_margin,
+            "source": "preview",
+            "latency_ms": int((time.perf_counter()-_t0)*1000) if "_t0" in locals() else None,
+            "parse_ok": True, "had_error": False,
+        })
+    except Exception:
+        pass
+    return jsonify(payload), 200
 
 # -------------------------
 # Parser "frase libera" -> stima

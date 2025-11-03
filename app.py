@@ -106,6 +106,15 @@ def create_app(config_class=Config) -> Flask:
     except Exception as e:
         app.logger.warning("Index normalize skipped: %s", e)
 
+    # Best-effort: crea unique compound index su (region, city) per pricelists
+    try:
+        from mongoengine.connection import get_db
+        _db = get_db()
+        _db["pricelists"].create_index([("region", 1), ("city", 1)], unique=True, name="uniq_region_city")
+        app.logger.info("Index pricelists.uniq_region_city ok")
+    except Exception as ie:
+        app.logger.warning("Index pricelists create skipped: %s", ie)
+
     # Warm-up: trigger collection access to finalize auto-index creation before serving requests
     try:
         from mongoengine.connection import get_db
@@ -113,6 +122,8 @@ def create_app(config_class=Config) -> Flask:
         _ = _db["materials"].count_documents({})
         _ = _db["projects"].count_documents({})
         _ = _db["workers"].count_documents({})
+        _ = _db["pricelists"].count_documents({})
+        _ = _db["work_catalog"].count_documents({})
         app.logger.info("Mongo warm-up counts ok")
     except Exception as e:
         app.logger.warning("Mongo warm-up skipped: %s", e)
@@ -407,10 +418,272 @@ def create_app(config_class=Config) -> Flask:
                 certifications=certs if certs else None,
             )
             w.save()
+            # Best-effort: salva anche campi extra non modellati (es. home_region)
+            try:
+                from mongoengine.connection import get_db
+                db = get_db()
+                extra = {}
+                if data.get("home_region"):
+                    extra["home_region"] = data.get("home_region")
+                if data.get("region"):
+                    extra["region"] = data.get("region")
+                if data.get("available") is not None:
+                    extra["available"] = bool(data.get("available"))
+                if data.get("current_site"):
+                    extra["current_site"] = data.get("current_site")
+                if extra:
+                    db["workers"].update_one({"id": w.id}, {"$set": extra})
+            except Exception:
+                pass
             return jsonify({"ok": True, "id": str(w.id)}), 200
         except Exception as e:
             app.logger.exception("create_worker error")
             return jsonify({"ok": False, "error": str(e)}), 400
+    @app.patch("/api/workers/<worker_id>")
+    def api_patch_worker(worker_id: str):
+        """Aggiorna campi base del lavoratore (safe patch)."""
+        data = request.get_json(force=True) or {}
+        fields = {k: v for k, v in data.items() if k in {"name","role","available","home_city","home_region","hourly_rate","region"}}
+        # Normalizza hourly_rate
+        if "hourly_rate" in fields:
+            try:
+                fields["hourly_rate"] = float(fields["hourly_rate"]) if fields["hourly_rate"] is not None else None
+            except Exception:
+                fields.pop("hourly_rate", None)
+        # 1) MongoEngine
+        try:
+            from models_mongo.worker import WorkerDoc
+            obj = WorkerDoc.objects(id=worker_id).first()
+            if obj:
+                if "name" in fields: obj.name = fields["name"]
+                if "role" in fields: obj.role = fields["role"]
+                if "available" in fields: obj.available = bool(fields["available"])
+                if "home_city" in fields and hasattr(obj, "home_city"): obj.home_city = fields["home_city"]
+                if "hourly_rate" in fields and hasattr(obj, "hourly_rate"): obj.hourly_rate = fields["hourly_rate"]
+                obj.save()
+                # Campi extra non modellati
+                extra = {}
+                for k in ("home_region","region"):
+                    if k in fields:
+                        extra[k] = fields[k]
+                if extra:
+                    try:
+                        from mongoengine.connection import get_db
+                        db = get_db()
+                        db["workers"].update_one({"id": worker_id}, {"$set": extra})
+                    except Exception:
+                        pass
+                return jsonify({"ok": True}), 200
+        except Exception as me_err:
+            app.logger.warning(f"api_patch_worker: ME failed, fallback raw: {me_err}")
+        # 2) PyMongo fallback
+        try:
+            from mongoengine.connection import get_db
+            db = get_db()
+            upd = {"$set": fields}
+            res = db["workers"].update_one({"id": worker_id}, upd)
+            if res.matched_count == 0:
+                res = db["workers"].update_one({"_id": worker_id}, upd)
+                if res.matched_count == 0:
+                    return jsonify({"ok": False, "error": "Worker non trovato"}), 404
+            return jsonify({"ok": True}), 200
+        except Exception as ee:
+            app.logger.exception("api_patch_worker raw error")
+            return jsonify({"ok": False, "error": str(ee)}), 500
+
+    @app.post("/api/workers/<worker_id>/toggle")
+    def api_toggle_worker(worker_id: str):
+        """Inverti lo stato di disponibilità (available)."""
+        # 1) MongoEngine
+        try:
+            from models_mongo.worker import WorkerDoc
+            obj = WorkerDoc.objects(id=worker_id).first()
+            if obj:
+                cur = bool(getattr(obj, "available", True))
+                obj.available = not cur
+                obj.save()
+                return jsonify({"ok": True, "available": bool(obj.available)}), 200
+        except Exception:
+            pass
+        # 2) PyMongo
+        try:
+            from mongoengine.connection import get_db
+            db = get_db()
+            doc = db["workers"].find_one({"id": worker_id}) or db["workers"].find_one({"_id": worker_id})
+            if not doc:
+                return jsonify({"ok": False, "error": "Worker non trovato"}), 404
+            cur = bool(doc.get("available", True))
+            db["workers"].update_one({"id": doc.get("id") or worker_id}, {"$set": {"available": (not cur)}})
+            return jsonify({"ok": True, "available": (not cur)}), 200
+        except Exception as ee:
+            app.logger.exception("api_toggle_worker raw error")
+            return jsonify({"ok": False, "error": str(ee)}), 500
+
+    @app.post("/api/workers/sync_availability")
+    def api_sync_availability():
+        """Inizializza available=True dove mancante o copia da is_active se presente."""
+        try:
+            from mongoengine.connection import get_db
+            db = get_db()
+            # 1) set available=True se il campo manca
+            r1 = db["workers"].update_many({"available": {"$exists": False}}, {"$set": {"available": True}})
+            # 2) allinea a is_active se esiste
+            cur = db["workers"].find({"is_active": {"$exists": True}}, {"id":1,"is_active":1})
+            changed = 0
+            for d in cur:
+                try:
+                    db["workers"].update_one({"id": d.get("id")}, {"$set": {"available": bool(d.get("is_active"))}})
+                    changed += 1
+                except Exception:
+                    continue
+            return jsonify({"ok": True, "set_true_if_missing": getattr(r1, 'modified_count', None), "synced_from_is_active": changed}), 200
+        except Exception as ee:
+            app.logger.exception("api_sync_availability error")
+            return jsonify({"ok": False, "error": str(ee)}), 500
+
+    def _worker_to_dict_safe(obj):
+        """Serialize WorkerDoc or raw dict to a minimal safe dict."""
+        if obj is None:
+            return {}
+        if hasattr(obj, "to_mongo"):
+            try:
+                data = obj.to_mongo().to_dict()
+                data["id"] = str(getattr(obj, "id", data.get("id") or data.get("_id") or ""))
+            except Exception:
+                data = {k: getattr(obj, k, None) for k in ("id","name","role","available","home_city","home_region","hourly_rate")}
+        elif isinstance(obj, dict):
+            data = obj
+        else:
+            data = {}
+        return {
+            "id": str(data.get("id") or data.get("_id") or ""),
+            "name": data.get("name") or "",
+            "role": data.get("role") or "",
+            "available": bool(data.get("available", True)),
+            "home_city": data.get("home_city"),
+            "home_region": data.get("home_region") or data.get("region"),
+            "hourly_rate": data.get("hourly_rate"),
+        }
+
+    def _parse_bool(v):
+        if v is None:
+            return None
+        if isinstance(v, bool):
+            return v
+        s = str(v).strip().lower()
+        if s in ("1","true","t","yes","y","si","sì"):  # support it/yes
+            return True
+        if s in ("0","false","f","no","n"):
+            return False
+        return None
+
+    @app.get("/api/workers/<worker_id>")
+    def api_get_worker(worker_id: str):
+        """Ritorna un lavoratore per id custom (W-####) con fallback PyMongo."""
+        # 1) MongoEngine
+        try:
+            from models_mongo.worker import WorkerDoc
+            obj = WorkerDoc.objects(id=worker_id).first()
+            if obj:
+                return jsonify(_worker_to_dict_safe(obj)), 200
+        except Exception:
+            pass
+        # 2) PyMongo
+        try:
+            from mongoengine.connection import get_db
+            db = get_db()
+            raw = db["workers"].find_one({"id": worker_id}) or db["workers"].find_one({"_id": worker_id})
+            if not raw:
+                return jsonify({"error": "Worker non trovato"}), 404
+            return jsonify(_worker_to_dict_safe(raw)), 200
+        except Exception as ee:
+            app.logger.exception("api_get_worker raw error")
+            return jsonify({"ok": False, "error": str(ee)}), 500
+
+    @app.get("/api/workers")
+    def api_list_workers():
+        """Lista/ricerca lavoratori con filtri opzionali: id, name, role, available, city, region.
+        Esempi:
+          /api/workers?available=true
+          /api/workers?role=piastrellista&available=true
+          /api/workers?name=Mario
+          /api/workers?region=Lombardia
+        """
+        q_id = (request.args.get("id") or "").strip()
+        q_name = (request.args.get("name") or request.args.get("q") or "").strip()
+        q_role = (request.args.get("role") or "").strip()
+        q_city = (request.args.get("city") or "").strip()
+        q_region = (request.args.get("region") or "").strip()
+        q_av = _parse_bool(request.args.get("available"))
+
+        # 1) MongoEngine
+        try:
+            from models_mongo.worker import WorkerDoc
+            qs = WorkerDoc.objects
+            if q_id:
+                qs = qs(id=q_id)
+            if q_name:
+                qs = qs(name__icontains=q_name)
+            if q_role:
+                qs = qs(role__icontains=q_role)
+            if q_av is not None:
+                qs = qs(available=q_av)
+            # region/city se i campi esistono
+            try:
+                if q_city:
+                    qs = qs(home_city__icontains=q_city)
+            except Exception:
+                pass
+            try:
+                if q_region:
+                    # prova home_region poi region
+                    qs = qs(__raw__={"$or": [
+                        {"home_region": {"$regex": q_region, "$options": "i"}},
+                        {"region": {"$regex": q_region, "$options": "i"}}
+                    ]})
+            except Exception:
+                pass
+            items = [_worker_to_dict_safe(x) for x in qs]
+            items_sorted = sorted(items, key=lambda x: (x.get("name") or "").lower())
+            return jsonify({"items": items_sorted, "total": len(items_sorted)}), 200
+        except Exception as me_err:
+            app.logger.warning(f"api_list_workers: ME failed, fallback raw: {me_err}")
+
+        # 2) PyMongo fallback
+        try:
+            from mongoengine.connection import get_db
+            db = get_db()
+            filt = {}
+            if q_id:
+                filt["id"] = q_id
+            if q_name:
+                filt["name"] = {"$regex": q_name, "$options": "i"}
+            if q_role:
+                filt["role"] = {"$regex": q_role, "$options": "i"}
+            if q_av is not None:
+                filt["available"] = bool(q_av)
+            if q_city:
+                filt["home_city"] = {"$regex": q_city, "$options": "i"}
+            if q_region:
+                filt["$or"] = [
+                    {"home_region": {"$regex": q_region, "$options": "i"}},
+                    {"region": {"$regex": q_region, "$options": "i"}}
+                ]
+            cur = db["workers"].find(filt, {"_id":0})
+            items = [_worker_to_dict_safe(doc) for doc in cur]
+            items_sorted = sorted(items, key=lambda x: (x.get("name") or "").lower())
+            return jsonify({"items": items_sorted, "total": len(items_sorted)}), 200
+        except Exception as ee:
+            app.logger.exception("api_list_workers raw error")
+            return jsonify({"ok": False, "error": str(ee)}), 500
+
+    @app.get("/api/workers/free")
+    def api_list_free_workers():
+        """Comodo: restituisce i lavoratori disponibili, con filtri opzionali role/region/city."""
+        args = request.args.to_dict(flat=True)
+        args["available"] = "true"
+        with app.test_request_context(query_string=args):
+            return api_list_workers()
     
     @app.delete("/api/workers/<worker_id>")
     def api_delete_worker(worker_id: str):
@@ -1336,14 +1609,18 @@ def create_app(config_class=Config) -> Flask:
     from routes.estimate import estimate_bp
     from routes.chat import chat_bp
     from routes.company import company_bp
+    from routes.work_catalog import workcat_bp
+    from routes.schedule import schedule_bp
 
     app.register_blueprint(views_bp)                    # pagine HTML
     app.register_blueprint(api_bp, url_prefix="/api")   # API legacy/varie
     app.register_blueprint(materials_bp)
     app.register_blueprint(staff_bp)
-    app.register_blueprint(estimate_bp)                 
-    app.register_blueprint(chat_bp, url_prefix="/api")             
+    app.register_blueprint(estimate_bp)
+    app.register_blueprint(schedule_bp)                 # capacità/overbooking API
+    app.register_blueprint(chat_bp, url_prefix="/api")
     app.register_blueprint(company_bp)
+    app.register_blueprint(workcat_bp)
 
     
     # Log delle rotte per debug
