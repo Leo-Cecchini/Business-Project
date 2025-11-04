@@ -148,6 +148,22 @@ def create_app(config_class=Config) -> Flask:
     except Exception as e:
         app.logger.warning("Mongo warm-up skipped: %s", e)
 
+    # --- (Optional) genera/aggiorna automaticamente i pricelists a partire dai materials ---
+    if os.environ.get("AUTO_GENERATE_PRICELISTS", "1") == "1":
+        try:
+            from scripts.generate_pricelists_from_materials import sync_pricelists_with_materials
+            res = sync_pricelists_with_materials(save_json=True, upsert_db=True)
+            try:
+                # prova a loggare un riassunto se il risultato è un dict
+                if isinstance(res, dict):
+                    app.logger.info("Pricelists sync from materials: added=%s updated=%s regions=%s", res.get("added"), res.get("updated"), res.get("regions"))
+                else:
+                    app.logger.info("Pricelists sync from materials eseguito")
+            except Exception:
+                pass
+        except Exception as e:
+            app.logger.warning("Pricelists sync skipped: %s", e)
+
 
     # Uploads
     app.config.setdefault("UPLOAD_FOLDER", os.path.join(app.root_path, "uploads"))
@@ -255,6 +271,22 @@ def create_app(config_class=Config) -> Flask:
             return jsonify({"ok": True, "message": "Indexes normalized"}), 200
         except Exception as e:
             app.logger.exception("admin_reindex error")
+            return jsonify({"ok": False, "error": str(e)}), 500
+
+    @app.post("/api/admin/sync-pricelists")
+    def admin_sync_pricelists():
+        """Rigenera/aggiorna i listini a partire dai Materials.
+        Scrive su MongoDB e aggiorna anche data/db_seed/pricelists.json.
+        """
+        try:
+            from scripts.generate_pricelists_from_materials import sync_pricelists_with_materials
+            res = sync_pricelists_with_materials(save_json=True, upsert_db=True)
+            # res dovrebbe essere un dict con conteggi; in caso contrario ritorniamo un ok semplice
+            if isinstance(res, dict):
+                return jsonify({"ok": True, **res}), 200
+            return jsonify({"ok": True, "message": "sync completed"}), 200
+        except Exception as e:
+            app.logger.exception("admin_sync_pricelists error")
             return jsonify({"ok": False, "error": str(e)}), 500
 
     @app.post("/api/dev/seed")

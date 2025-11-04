@@ -1461,6 +1461,56 @@ def chat_route():
                     for it in multi_items
                 ]
 
+                # --- Punto 2.A: chiamata server-side a /api/estimate/preview per popolare le tabelle ---
+                try:
+                    # Prova a ricavare regione/città dal testo utente per migliorare il listino
+                    reg_hint, city_hint = _extract_region_city(q)
+                    # Import diretto dell'endpoint Flask e invocazione con test_request_context
+                    from routes.estimate import estimate_preview as _preview_ep
+                    preview_body = {
+                        "items": multi_items,   # [{label, qty, unit, meta?}]
+                    }
+                    if reg_hint:
+                        preview_body["region"] = reg_hint
+                    if city_hint:
+                        preview_body["city"] = city_hint
+
+                    with current_app.test_request_context(json=preview_body):
+                        _resp = _preview_ep()
+
+                    # Normalizza risposta Flask (può essere Response o (Response, status))
+                    def _as_json(resp):
+                        try:
+                            if isinstance(resp, tuple):
+                                resp_obj = resp[0]
+                            else:
+                                resp_obj = resp
+                            if hasattr(resp_obj, "get_json"):
+                                return resp_obj.get_json()
+                            # fallback
+                            txt = resp_obj.get_data(as_text=True)
+                            return json.loads(txt)
+                        except Exception:
+                            return None
+
+                    preview_data = _as_json(_resp) or {}
+                    ui_tables = preview_data.get("ui_tables")
+                    if ui_tables:
+                        # Sostituisci le tabelle stub con quelle valorizzate dal servizio di stima
+                        res["ui_tables"] = ui_tables
+                        # Passa su anche contesto prezzi/margini se presente
+                        if "pricing_context" in preview_data:
+                            res["pricing_context"] = preview_data["pricing_context"]
+                        # Per compatibilità, aggiorna anche i subtotali degli stub calc_multi (se allineabili)
+                        try:
+                            for i, it in enumerate(res.get("calc_multi") or []):
+                                if i < len(ui_tables.get("items", [])):
+                                    it["totals"]["total"] = float(ui_tables["items"][i].get("subtotal") or 0.0)
+                        except Exception:
+                            pass
+                except Exception as _e_preview:
+                    log.warning("Preview preventivo fallita in chat: %s", _e_preview)
+
                 # 3) Pulizia del testo: rimuovi eventuali blocchi ```calc_json da modelli precedenti e aggiungi nota breve
                 text_key = "reply" if res.get("reply") else "answer" if res.get("answer") else "text" if res.get("text") else None
                 if text_key:

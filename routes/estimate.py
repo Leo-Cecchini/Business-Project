@@ -70,6 +70,41 @@ MATERIAL_ALIASES = {
     "collante_pvc": ["collante pvc", "adesivo pvc"],
 }
 
+# Mappa codici-preventivo → possibili SKU/codici materiali nel DB
+CODE_TO_MATERIAL_KEYS = {
+    # Piastrelle / posa
+    "FLR-001": ["GRES60X60", "PIASTRELLE_GRES_60X60", "piastrella gres 60x60"],
+    "ADH-001": ["COLLA_PIASTRELLE", "ADESIVO_C2", "colla per piastrelle"],
+    "STU-001": ["STUCCO_FUGHE", "STUCCO_EPOS", "stucco fughe"],
+    "BSK-001": ["BATTISCOPA_GRES", "battiscopa gres"],
+
+    # Smaltimento
+    "WAS-001": ["SACCHI_MACERIE_25KG", "sacchi macerie 25kg"],
+
+    # Elettrico (esempi)
+    "EL-PL": ["KIT_PUNTO_LUCE", "punto luce kit"],
+    "EL-PP": ["KIT_PUNTO_PRESA", "punto presa kit"],
+    "EL-CAVO-3G1.5": ["CAVO_3G1_5", "N07V-K_1.5", "cavo 3g1.5"],
+    "EL-CAVO-3G2.5": ["CAVO_3G2_5", "N07V-K_2.5", "cavo 3g2.5"],
+    "EL-TUBO-20": ["TUBO_CORR_20", "corrugato 20"],
+    "EL-SCATOLA-503": ["SCATOLA_503"],
+    "EL-SCATOLA-DER": ["SCATOLA_DERIVAZIONE"],
+
+    # Idrico (esempi)
+    "IDR-TUBO-PPR-20": ["TUBO_PPR_20", "tubo ppr 20"],
+    "IDR-SCARICO-HT-50": ["TUBO_HT_50", "scarico 50"],
+    "IDR-RACCORDI-PACK": ["KIT_RACCORDI_PPR", "raccordi ppr"],
+    "IDR-BAGNO-PACK": ["KIT_IDRICO_BAGNO"],
+    "IDR-001": ["TUBO_DN32", "tubo acqua dn32"],
+    "IDR-002": ["TUBO_DN25", "tubo acqua dn25"],
+    "IDR-003": ["TUBO_DN20", "tubo acqua dn20"],
+    "IDR-004": ["RACC_PPR_MISC", "raccordi"],
+    "IDR-005": ["VALVOLA_SFERA", "valvola intercettazione"],
+    "IDR-006": ["SCARICO_PVC_50", "scarico pvc 50"],
+    "IDR-007": ["SCARICO_PVC_100", "scarico pvc 100"],
+    "IDR-008": ["COLLANTE_PVC", "collante pvc"],
+}
+
 # -------------------------
 # Util: ricerca prezzi nel DB
 # -------------------------
@@ -693,43 +728,110 @@ def _apply_factors(base: float, factors: dict, tags: list[str]|None) -> float:
             mul *= float(v)
     return round(base * mul, 4)
 
+def _lookup_material_price_by_code(code: str) -> Optional[float]:
+    """Fallback: risale a un Material in DB partendo dal codice preventivo.
+    Prova in ordine: SKU esatti → code esatti → name contains (tutti i token).
+    Ritorna unit_price_eur_2025 se trovato, altrimenti None.
+    """
+    if not code or MaterialDoc is None:
+        return None
+
+    keys = CODE_TO_MATERIAL_KEYS.get(code, [])
+    if not keys:
+        return None
+
+    # 1) SKU esatti
+    for k in keys:
+        m = MaterialDoc.objects(sku__iexact=k).first()
+        if m and getattr(m, "unit_price_eur_2025", None) is not None:
+            return float(m.unit_price_eur_2025)
+
+    # 2) code esatti
+    for k in keys:
+        m = MaterialDoc.objects(code__iexact=k).first()
+        if m and getattr(m, "unit_price_eur_2025", None) is not None:
+            return float(m.unit_price_eur_2025)
+
+    # 3) name contains (tutti i token)
+    for k in keys:
+        tokens = [t for t in str(k).lower().split() if t]
+        if not tokens:
+            continue
+        q = MaterialDoc.objects
+        for t in tokens:
+            q = q.filter(name__icontains=t)
+        m = q.first()
+        if m and getattr(m, "unit_price_eur_2025", None) is not None:
+            return float(m.unit_price_eur_2025)
+
+    return None
+
 def price(code: str, default: float = 0.0, *, region: str|None=None, city: str|None=None, tags: list[str]|None=None) -> float:
     pl = _get_pricelist(region, city)
     val = None
+    # 1) Pricelist override (treat 0/None as "no override")
     try:
-        val = pl["materials"].get(code)
+        raw = (pl.get("materials") or {}).get(code)
+        if isinstance(raw, (int, float)) and raw > 0:
+            val = float(raw)
     except Exception:
         val = None
+
+    # 2) Fallback via CODE→SKU/name mini-mappa
     if val is None:
-        # fallback: prova a cercare nel DB materiali per code
+        try:
+            mapped = _lookup_material_price_by_code(code)
+            if isinstance(mapped, (int, float)) and mapped > 0:
+                val = float(mapped)
+        except Exception:
+            val = None
+
+    # 3) Ultimo fallback diretto sul catalogo Materials (sku/code/name)
+    if val is None:
         try:
             if MaterialDoc is not None:
-                m = MaterialDoc.objects(code__iexact=code).first()
+                m = (
+                    MaterialDoc.objects(sku__iexact=code).first()
+                    or MaterialDoc.objects(code__iexact=code).first()
+                    or MaterialDoc.objects(name__iexact=code).first()
+                )
                 if m and getattr(m, "unit_price_eur_2025", None) is not None:
                     val = float(m.unit_price_eur_2025)
         except Exception:
             val = None
+
+    # 4) Default
     if val is None:
         val = default
+
+    # 5) Apply territorial factors (only to positive prices)
     return float(_apply_factors(val, pl.get("factors", {}), tags))
 
 def wage(role: str, default: float = 25.0, *, region: str|None=None, city: str|None=None, tags: list[str]|None=None) -> float:
     pl = _get_pricelist(region, city)
     val = None
+    # 1) Pricelist regional wage (treat 0/None as missing)
     try:
-        val = pl["wages"].get(role)
+        raw = (pl.get("wages") or {}).get(role)
+        if isinstance(raw, (int, float)) and raw > 0:
+            val = float(raw)
     except Exception:
         val = None
+
+    # 2) Fallback WorkerDoc → hourly_rate
     if val is None:
-        # fallback WorkerDoc -> DEFAULT_WAGE
         try:
             w = WorkerDoc.objects(role__icontains=role).first() if WorkerDoc is not None else None
             if w and getattr(w, "hourly_rate", None) is not None:
                 val = float(w.hourly_rate)
         except Exception:
             val = None
+
+    # 3) Default wage table
     if val is None:
         val = DEFAULT_WAGE.get(role, default)
+
+    # 4) Apply territorial factors (only to positive wages)
     return float(_apply_factors(val, pl.get("factors", {}), tags))
 
 # ------------------ Auto-resolve geo & factors ------------------
