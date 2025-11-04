@@ -100,10 +100,10 @@ def create_app(config_class=Config) -> Flask:
             if os.environ.get("EXPORT_MISSING_SEED", "0") == "1":
                 # Crea/aggiorna file in data/db_seed/ a partire dal DB corrente (solo se mancano)
                 from scripts.export_db import ensure_seed_files_from_db
-                ensure_seed_files_from_db(("work_catalog", "workers", "pricelists", "materials"))
+                ensure_seed_files_from_db(("work_catalog", "workers", "pricelists", "materials","projects"))
             # Popola il DB con i JSON presenti se la collezione è vuota (idempotente)
             from scripts.seed_db import seed_if_needed
-            seed_if_needed(("work_catalog", "workers", "pricelists", "materials"))
+            seed_if_needed(("work_catalog", "workers", "pricelists", "materials","projects"))
             app.logger.info("DB bootstrap ok (export missing + seed_if_needed)")
         except Exception as e:
             app.logger.warning(f"DB bootstrap skipped: {e}")
