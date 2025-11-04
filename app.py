@@ -94,7 +94,27 @@ def create_app(config_class=Config) -> Flask:
     app.config.from_object(config_class)
     app.secret_key = os.getenv("FLASK_SECRET_KEY", getattr(Config, "SECRET_KEY", "change-me"))
 
-    # --- MongoDB init ---
+    # --- DB bootstrap (export JSON mancanti → seed non distruttivo) PRIMA di connettere Mongo ---
+    if os.environ.get("BOOTSTRAP_DB", "1") == "1":
+        try:
+            if os.environ.get("EXPORT_MISSING_SEED", "0") == "1":
+                # Crea/aggiorna file in data/db_seed/ a partire dal DB corrente (solo se mancano)
+                from scripts.export_db import ensure_seed_files_from_db
+                ensure_seed_files_from_db(("work_catalog", "workers", "pricelists", "materials"))
+            # Popola il DB con i JSON presenti se la collezione è vuota (idempotente)
+            from scripts.seed_db import seed_if_needed
+            seed_if_needed(("work_catalog", "workers", "pricelists", "materials"))
+            app.logger.info("DB bootstrap ok (export missing + seed_if_needed)")
+        except Exception as e:
+            app.logger.warning(f"DB bootstrap skipped: {e}")
+
+    # --- MongoDB init (dopo bootstrap) ---
+    # Disconnessione difensiva dell'alias default (nel caso gli script bootstrap abbiano già aperto la connessione)
+    try:
+        from mongoengine import disconnect
+        disconnect(alias="default")
+    except Exception:
+        pass
     # Inizializza la connessione a Mongo (workers/materials/projects si appoggeranno qui)
     init_mongo()
     # Esegui la normalizzazione indici una sola volta all'avvio (evita code 85)
@@ -127,6 +147,7 @@ def create_app(config_class=Config) -> Flask:
         app.logger.info("Mongo warm-up counts ok")
     except Exception as e:
         app.logger.warning("Mongo warm-up skipped: %s", e)
+
 
     # Uploads
     app.config.setdefault("UPLOAD_FOLDER", os.path.join(app.root_path, "uploads"))
@@ -234,6 +255,20 @@ def create_app(config_class=Config) -> Flask:
             return jsonify({"ok": True, "message": "Indexes normalized"}), 200
         except Exception as e:
             app.logger.exception("admin_reindex error")
+            return jsonify({"ok": False, "error": str(e)}), 500
+
+    @app.post("/api/dev/seed")
+    def api_dev_seed():
+        """
+        (DEV ONLY) Trigger a reseed from data/db_seed/*.json.
+        Uses scripts/seed_db.main(); safe to call multiple times.
+        """
+        try:
+            from scripts.seed_db import main as seed_main
+            res = seed_main()  # expected to return a dict with counts per collection
+            return jsonify({"ok": True, "result": res}), 200
+        except Exception as e:
+            app.logger.exception("api_dev_seed error")
             return jsonify({"ok": False, "error": str(e)}), 500
 
     # Simple ping per verificare wiring UI ⇄ API

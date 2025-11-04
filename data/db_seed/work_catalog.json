@@ -1,0 +1,1093 @@
+[
+  {
+    "code": "ELEC_ROUGH",
+    "max_crew": 3,
+    "min_crew": 1,
+    "name": "Impianto elettrico - tracce/cablaggio",
+    "notes": "Tracciati definiti; accesso ai locali garantito.",
+    "prerequisites": [],
+    "primary_role": "elettricista",
+    "productivity_per_worker_per_hour": 12,
+    "roles_allowed": [
+      "elettricista"
+    ],
+    "synonyms": [
+      "cablaggio",
+      "impianto elettrico",
+      "tracce elettriche",
+      "wiring"
+    ],
+    "unit": "m"
+  },
+  {
+    "code": "PLUMB_ROUGH",
+    "max_crew": 3,
+    "min_crew": 1,
+    "name": "Impianto idraulico - tubazioni",
+    "notes": "Percorsi approvati; materiali disponibili.",
+    "prerequisites": [],
+    "primary_role": "idraulico",
+    "productivity_per_worker_per_hour": 10,
+    "roles_allowed": [
+      "idraulico"
+    ],
+    "synonyms": [
+      "tubazioni",
+      "impianto idraulico",
+      "posa tubi"
+    ],
+    "unit": "m"
+  },
+  {
+    "code": "WALL_BUILD",
+    "max_crew": 4,
+    "min_crew": 1,
+    "name": "Costruzione pareti in muratura",
+    "notes": "Tracciamenti a pavimento completati.",
+    "prerequisites": [],
+    "primary_role": "muratore",
+    "productivity_per_worker_per_hour": 5,
+    "roles_allowed": [
+      "muratore"
+    ],
+    "synonyms": [
+      "alzare muri",
+      "pareti",
+      "muratura",
+      "tramezzi"
+    ],
+    "unit": "m2"
+  },
+  {
+    "code": "PLASTER",
+    "max_crew": 4,
+    "min_crew": 1,
+    "name": "Intonaco / Rasatura",
+    "notes": "Supporti asciutti e puliti.",
+    "prerequisites": [
+      "WALL_BUILD"
+    ],
+    "primary_role": "muratore",
+    "productivity_per_worker_per_hour": 12,
+    "roles_allowed": [
+      "muratore",
+      "cartongessista"
+    ],
+    "synonyms": [
+      "intonaco",
+      "rasatura",
+      "finitura pareti"
+    ],
+    "unit": "m2"
+  },
+  {
+    "code": "FLOOR_TILE",
+    "max_crew": 3,
+    "min_crew": 1,
+    "name": "Posa pavimento (Piastrelle/Gres)",
+    "notes": "Massetto pronto e asciutto; locali sgombri.",
+    "prerequisites": [
+      "STRU_SCREED",
+      "PLASTER"
+    ],
+    "primary_role": "piastrellista",
+    "productivity_per_worker_per_hour": 8,
+    "roles_allowed": [
+      "piastrellista",
+      "muratore"
+    ],
+    "synonyms": [
+      "posa piastrelle",
+      "piastrellatura",
+      "pavimentazione gres"
+    ],
+    "unit": "m2"
+  },
+  {
+    "code": "PAINT",
+    "max_crew": 3,
+    "min_crew": 1,
+    "name": "Tinteggiatura",
+    "notes": "Superfici asciutte; protezioni posate.",
+    "prerequisites": [
+      "PLASTER",
+      "WALL_DRY_FINISH"
+    ],
+    "primary_role": "imbianchino",
+    "productivity_per_worker_per_hour": 20,
+    "roles_allowed": [
+      "imbianchino"
+    ],
+    "synonyms": [
+      "imbiancatura",
+      "verniciatura",
+      "pittura pareti"
+    ],
+    "unit": "m2"
+  },
+  {
+    "code": "DEM_WALL",
+    "max_crew": 3,
+    "min_crew": 1,
+    "name": "Demolizione tramezzi",
+    "notes": "Verificare assenza impianti; protezione aree.",
+    "prerequisites": [],
+    "primary_role": "muratore",
+    "productivity_per_worker_per_hour": 8,
+    "roles_allowed": [
+      "muratore",
+      "operaio"
+    ],
+    "synonyms": [
+      "demolizione",
+      "rimozione muri",
+      "buttare giù muro",
+      "demolizioni"
+    ],
+    "unit": "m2"
+  },
+  {
+    "code": "DEM_FLOOR",
+    "max_crew": 3,
+    "min_crew": 1,
+    "name": "Rimozione pavimentazione esistente",
+    "notes": "Attenzione a non danneggiare il massetto sottostante, se da conservare.",
+    "prerequisites": [],
+    "primary_role": "muratore",
+    "productivity_per_worker_per_hour": 10,
+    "roles_allowed": [
+      "muratore",
+      "operaio",
+      "piastrellista"
+    ],
+    "synonyms": [
+      "rimozione piastrelle",
+      "togliere pavimento",
+      "demolizione pavimento"
+    ],
+    "unit": "m2"
+  },
+  {
+    "code": "DEM_PLUMB",
+    "max_crew": 2,
+    "min_crew": 1,
+    "name": "Rimozione vecchi impianti idraulici",
+    "notes": "Acqua chiusa e impianto scaricato.",
+    "prerequisites": [],
+    "primary_role": "idraulico",
+    "productivity_per_worker_per_hour": 2,
+    "roles_allowed": [
+      "idraulico",
+      "muratore"
+    ],
+    "synonyms": [
+      "sfilaggio tubi",
+      "rimozione sanitari",
+      "demolizione bagno"
+    ],
+    "unit": "pz"
+  },
+  {
+    "code": "WALL_DRY_FRAME",
+    "max_crew": 2,
+    "min_crew": 1,
+    "name": "Posa struttura cartongesso",
+    "notes": "Tracciamento a laser o filo.",
+    "prerequisites": [],
+    "primary_role": "cartongessista",
+    "productivity_per_worker_per_hour": 10,
+    "roles_allowed": [
+      "cartongessista",
+      "muratore"
+    ],
+    "synonyms": [
+      "struttura cartongesso",
+      "montanti",
+      "guide cartongesso",
+      "drywall frame"
+    ],
+    "unit": "m2"
+  },
+  {
+    "code": "WALL_DRY_PANEL",
+    "max_crew": 2,
+    "min_crew": 1,
+    "name": "Posa lastre cartongesso",
+    "notes": "Verificare passaggio impianti prima di chiudere. Includere eventuale isolante.",
+    "prerequisites": [
+      "WALL_DRY_FRAME",
+      "ELEC_ROUGH",
+      "PLUMB_ROUGH"
+    ],
+    "primary_role": "cartongessista",
+    "productivity_per_worker_per_hour": 15,
+    "roles_allowed": [
+      "cartongessista",
+      "muratore"
+    ],
+    "synonyms": [
+      "chiusura cartongesso",
+      "lastre",
+      "pannelli",
+      "drywall panel"
+    ],
+    "unit": "m2"
+  },
+  {
+    "code": "WALL_DRY_FINISH",
+    "max_crew": 2,
+    "min_crew": 1,
+    "name": "Stuccatura e finitura cartongesso",
+    "notes": "Richiede tempi di asciugatura tra le mani (solitamente 3 mani).",
+    "prerequisites": [
+      "WALL_DRY_PANEL"
+    ],
+    "primary_role": "cartongessista",
+    "productivity_per_worker_per_hour": 10,
+    "roles_allowed": [
+      "cartongessista",
+      "imbianchino"
+    ],
+    "synonyms": [
+      "stuccatura",
+      "rasatura cartongesso",
+      "nastri cartongesso",
+      "finitura drywall"
+    ],
+    "unit": "m2"
+  },
+  {
+    "code": "STRU_SCREED",
+    "max_crew": 4,
+    "min_crew": 2,
+    "name": "Realizzazione massetto",
+    "notes": "Rispettare tempi di asciugatura (es. 1 sett/cm) prima di posare legno.",
+    "prerequisites": [
+      "ELEC_ROUGH",
+      "PLUMB_ROUGH"
+    ],
+    "primary_role": "muratore",
+    "productivity_per_worker_per_hour": 8,
+    "roles_allowed": [
+      "muratore",
+      "piastrellista"
+    ],
+    "synonyms": [
+      "massetto",
+      "sottofondo",
+      "posa massetto",
+      "caldana"
+    ],
+    "unit": "m2"
+  },
+  {
+    "code": "PLUMB_FIXTURE",
+    "max_crew": 2,
+    "min_crew": 1,
+    "name": "Montaggio sanitari e rubinetteria",
+    "notes": "Test di tenuta e scarico.",
+    "prerequisites": [
+      "PLUMB_ROUGH",
+      "FLOOR_TILE",
+      "WALL_TILE"
+    ],
+    "primary_role": "idraulico",
+    "productivity_per_worker_per_hour": 2,
+    "roles_allowed": [
+      "idraulico"
+    ],
+    "synonyms": [
+      "posa sanitari",
+      "wc",
+      "bidet",
+      "lavandino",
+      "montaggio rubinetti",
+      "doccia"
+    ],
+    "unit": "pz"
+  },
+  {
+    "code": "ELEC_FIXTURE",
+    "max_crew": 2,
+    "min_crew": 1,
+    "name": "Montaggio frutti e punti luce",
+    "notes": "Collegamento e test. Da fare dopo tinteggiatura.",
+    "prerequisites": [
+      "ELEC_ROUGH",
+      "PAINT"
+    ],
+    "primary_role": "elettricista",
+    "productivity_per_worker_per_hour": 10,
+    "roles_allowed": [
+      "elettricista"
+    ],
+    "synonyms": [
+      "placche",
+      "interruttori",
+      "prese",
+      "montaggio lampadari",
+      "frutti elettrici"
+    ],
+    "unit": "pz"
+  },
+  {
+    "code": "HVAC_SPLIT",
+    "max_crew": 2,
+    "min_crew": 1,
+    "name": "Installazione climatizzatore split",
+    "notes": "Include posa UI, UE, tubi rame, scarico condensa, vuoto e carica.",
+    "prerequisites": [
+      "ELEC_ROUGH",
+      "PLUMB_ROUGH",
+      "PLASTER"
+    ],
+    "primary_role": "idraulico",
+    "productivity_per_worker_per_hour": 0.25,
+    "roles_allowed": [
+      "idraulico",
+      "frigorista",
+      "elettricista"
+    ],
+    "synonyms": [
+      "condizionatore",
+      "split",
+      "clima",
+      "posa clima",
+      "HVAC"
+    ],
+    "unit": "pz"
+  },
+  {
+    "code": "FIN_WINDOW",
+    "max_crew": 3,
+    "min_crew": 2,
+    "name": "Posa serramenti / finestre",
+    "notes": "Posa su controtelaio; sigillatura interna ed esterna.",
+    "prerequisites": [
+      "PLASTER"
+    ],
+    "primary_role": "serramentista",
+    "productivity_per_worker_per_hour": 0.5,
+    "roles_allowed": [
+      "serramentista",
+      "falegname",
+      "posatore"
+    ],
+    "synonyms": [
+      "finestre",
+      "serramenti",
+      "infissi",
+      "montaggio finestre"
+    ],
+    "unit": "pz"
+  },
+  {
+    "code": "FIN_DOOR",
+    "max_crew": 2,
+    "min_crew": 1,
+    "name": "Posa porte interne",
+    "notes": "Verifica livelli e squadro vano porta. Da posare dopo pavimenti e pittura.",
+    "prerequisites": [
+      "FLOOR_TILE",
+      "PAINT"
+    ],
+    "primary_role": "falegname",
+    "productivity_per_worker_per_hour": 0.7,
+    "roles_allowed": [
+      "falegname",
+      "posatore"
+    ],
+    "synonyms": [
+      "porte",
+      "montaggio porte",
+      "telaio",
+      "falsitelaio"
+    ],
+    "unit": "pz"
+  },
+  {
+    "code": "FLOOR_PARQUET",
+    "max_crew": 2,
+    "min_crew": 1,
+    "name": "Posa parquet",
+    "notes": "Verifica umidità massetto (max 2%). Posa flottante o incollata.",
+    "prerequisites": [
+      "STRU_SCREED"
+    ],
+    "primary_role": "parquettista",
+    "productivity_per_worker_per_hour": 3,
+    "roles_allowed": [
+      "parquettista",
+      "falegname"
+    ],
+    "synonyms": [
+      "parquet",
+      "pavimento in legno",
+      "posa legno"
+    ],
+    "unit": "m2"
+  },
+  {
+    "code": "FIN_SKIRTING",
+    "max_crew": 2,
+    "min_crew": 1,
+    "name": "Posa battiscopa",
+    "notes": "Tagli a 45° per angoli. Solitamente una delle ultime lavorazioni.",
+    "prerequisites": [
+      "FLOOR_TILE",
+      "FLOOR_PARQUET",
+      "PAINT"
+    ],
+    "primary_role": "parquettista",
+    "productivity_per_worker_per_hour": 20,
+    "roles_allowed": [
+      "parquettista",
+      "falegname",
+      "piastrellista",
+      "imbianchino"
+    ],
+    "synonyms": [
+      "battiscopa",
+      "zoccolino"
+    ],
+    "unit": "m"
+  },
+  {
+    "code": "WATERPROOF",
+    "max_crew": 2,
+    "min_crew": 1,
+    "name": "Impermeabilizzazione (es. doccia)",
+    "notes": "Applicare prima della posa piastrelle in zone umide.",
+    "prerequisites": [
+      "PLASTER",
+      "STRU_SCREED"
+    ],
+    "primary_role": "piastrellista",
+    "productivity_per_worker_per_hour": 10,
+    "roles_allowed": [
+      "piastrellista",
+      "muratore"
+    ],
+    "synonyms": [
+      "guaina",
+      "impermeabilizzazione doccia",
+      "mapelastic",
+      "guaina liquida"
+    ],
+    "unit": "m2"
+  },
+  {
+    "code": "SITE_PREP",
+    "max_crew": 2,
+    "min_crew": 1,
+    "name": "Approntamento cantiere e protezioni",
+    "notes": "Protezione pavimenti esistenti, parti comuni, ascensori.",
+    "prerequisites": [],
+    "primary_role": "operaio",
+    "productivity_per_worker_per_hour": 50,
+    "roles_allowed": [
+      "operaio",
+      "muratore"
+    ],
+    "synonyms": [
+      "protezioni",
+      "allestimento cantiere",
+      "cartoni",
+      "nylon",
+      "delimitazione area"
+    ],
+    "unit": "m2"
+  },
+  {
+    "code": "SITE_WASTE",
+    "max_crew": 3,
+    "min_crew": 2,
+    "name": "Carico e trasporto macerie a discarica",
+    "notes": "Include oneri di discarica. Necessario formulario FIR.",
+    "prerequisites": [
+      "DEM_WALL",
+      "DEM_FLOOR"
+    ],
+    "primary_role": "operaio",
+    "productivity_per_worker_per_hour": 1,
+    "roles_allowed": [
+      "operaio",
+      "muratore"
+    ],
+    "synonyms": [
+      "macerie",
+      "rifiuti",
+      "discarica",
+      "smaltimento",
+      "calcinacci"
+    ],
+    "unit": "m3"
+  },
+  {
+    "code": "HVAC_FLOOR_HEAT",
+    "max_crew": 2,
+    "min_crew": 1,
+    "name": "Posa impianto riscaldamento a pavimento",
+    "notes": "Da posare prima del massetto. Include posa collettore.",
+    "prerequisites": [
+      "PLUMB_ROUGH"
+    ],
+    "primary_role": "idraulico",
+    "productivity_per_worker_per_hour": 10,
+    "roles_allowed": [
+      "idraulico",
+      "termoidraulico"
+    ],
+    "synonyms": [
+      "riscaldamento a pavimento",
+      "serpentine",
+      "pannelli radianti"
+    ],
+    "unit": "m2"
+  },
+  {
+    "code": "STRU_SCREED_REINF",
+    "max_crew": 4,
+    "min_crew": 2,
+    "name": "Realizzazione massetto armato",
+    "notes": "Rispettare tempi di asciugatura.",
+    "prerequisites": [
+      "HVAC_FLOOR_HEAT"
+    ],
+    "primary_role": "muratore",
+    "productivity_per_worker_per_hour": 6,
+    "roles_allowed": [
+      "muratore"
+    ],
+    "synonyms": [
+      "massetto armato",
+      "rete elettrosaldata",
+      "massetto con rete"
+    ],
+    "unit": "m2"
+  },
+  {
+    "code": "HVAC_BOILER",
+    "max_crew": 2,
+    "min_crew": 1,
+    "name": "Installazione caldaia / pompa di calore",
+    "notes": "Richiede collaudo e certificazione (es. F-GAS per PdC).",
+    "prerequisites": [
+      "PLUMB_ROUGH",
+      "ELEC_ROUGH"
+    ],
+    "primary_role": "idraulico",
+    "productivity_per_worker_per_hour": 0.2,
+    "roles_allowed": [
+      "idraulico",
+      "termoidraulico",
+      "frigorista"
+    ],
+    "synonyms": [
+      "caldaia",
+      "pompa di calore",
+      "scaldabagno",
+      "centrale termica"
+    ],
+    "unit": "pz"
+  },
+  {
+    "code": "ELEC_PANEL",
+    "max_crew": 1,
+    "min_crew": 1,
+    "name": "Installazione e cablaggio quadro elettrico",
+    "notes": "Dimensionamento in base al carico. Include test differenziali.",
+    "prerequisites": [
+      "ELEC_ROUGH",
+      "PLASTER"
+    ],
+    "primary_role": "elettricista",
+    "productivity_per_worker_per_hour": 0.25,
+    "roles_allowed": [
+      "elettricista"
+    ],
+    "synonyms": [
+      "quadro elettrico",
+      "centralino",
+      "salvavita",
+      "magnetotermici"
+    ],
+    "unit": "pz"
+  },
+  {
+    "code": "CEIL_SUSPEND",
+    "max_crew": 2,
+    "min_crew": 1,
+    "name": "Realizzazione controsoffitto (lastre)",
+    "notes": "Includere eventuali botole di ispezione. Stuccatura a parte (vedi WALL_DRY_FINISH).",
+    "prerequisites": [
+      "PLASTER"
+    ],
+    "primary_role": "cartongessista",
+    "productivity_per_worker_per_hour": 8,
+    "roles_allowed": [
+      "cartongessista",
+      "muratore"
+    ],
+    "synonyms": [
+      "controsoffitto",
+      "falso soffitto",
+      "veletta",
+      "botola"
+    ],
+    "unit": "m2"
+  },
+  {
+    "code": "EXT_EIFS",
+    "max_crew": 4,
+    "min_crew": 2,
+    "name": "Posa cappotto termico (EIFS)",
+    "notes": "Include pannello isolante, tassellatura, rete, rasatura e finitura.",
+    "prerequisites": [],
+    "primary_role": "muratore",
+    "productivity_per_worker_per_hour": 4,
+    "roles_allowed": [
+      "muratore",
+      "facciatista"
+    ],
+    "synonyms": [
+      "cappotto termico",
+      "isolamento esterno",
+      "ETICS",
+      "rasatura armata"
+    ],
+    "unit": "m2"
+  },
+  {
+    "code": "ROOF_WATERPROOF",
+    "max_crew": 4,
+    "min_crew": 2,
+    "name": "Impermeabilizzazione copertura piana",
+    "notes": "Posa a fiamma o autoadesiva. Attenzione ai risvolti.",
+    "prerequisites": [],
+    "primary_role": "impermeabilizzatore",
+    "productivity_per_worker_per_hour": 15,
+    "roles_allowed": [
+      "impermeabilizzatore",
+      "muratore",
+      "coperturista"
+    ],
+    "synonyms": [
+      "guaina tetto",
+      "impermeabilizzazione",
+      "membrana bituminosa",
+      "tetto piano"
+    ],
+    "unit": "m2"
+  },
+  {
+    "code": "ROOF_TILE",
+    "max_crew": 4,
+    "min_crew": 2,
+    "name": "Posa manto di copertura (tegole/coppi)",
+    "notes": "Include listellatura e fissaggio elementi.",
+    "prerequisites": [
+      "ROOF_WATERPROOF"
+    ],
+    "primary_role": "coperturista",
+    "productivity_per_worker_per_hour": 10,
+    "roles_allowed": [
+      "coperturista",
+      "muratore"
+    ],
+    "synonyms": [
+      "tegole",
+      "coppi",
+      "copertura tetto",
+      "manto",
+      "tetto falda"
+    ],
+    "unit": "m2"
+  },
+  {
+    "code": "SITE_CLEAN_FINAL",
+    "max_crew": 4,
+    "min_crew": 1,
+    "name": "Pulizie finali di cantiere",
+    "notes": "Rimozione polvere fine, macchie pittura, etichette serramenti.",
+    "prerequisites": [
+      "FIN_DOOR",
+      "ELEC_FIXTURE",
+      "PLUMB_FIXTURE",
+      "FIN_SKIRTING"
+    ],
+    "primary_role": "operaio",
+    "productivity_per_worker_per_hour": 30,
+    "roles_allowed": [
+      "operaio",
+      "addetto pulizie"
+    ],
+    "synonyms": [
+      "pulizia finale",
+      "pulizie post-cantiere",
+      "sgrosso"
+    ],
+    "unit": "m2"
+  },
+  {
+    "code": "EXT_EXCAV",
+    "max_crew": 2,
+    "min_crew": 1,
+    "name": "Scavo di sbancamento o a sezione",
+    "notes": "Tracciamento e quote definite. Sicurezza scavi.",
+    "prerequisites": [],
+    "primary_role": "escavatorista",
+    "productivity_per_worker_per_hour": 20,
+    "roles_allowed": [
+      "escavatorista",
+      "operaio"
+    ],
+    "synonyms": [
+      "scavo",
+      "sbancamento",
+      "movimento terra",
+      "scavi"
+    ],
+    "unit": "m3"
+  },
+  {
+    "code": "STRU_FOUND_FORM",
+    "max_crew": 4,
+    "min_crew": 2,
+    "name": "Posa casseforme per fondazioni",
+    "notes": "Pulizia fondo scavo. Utilizzo di disarmante.",
+    "prerequisites": [
+      "EXT_EXCAV"
+    ],
+    "primary_role": "carpentiere",
+    "productivity_per_worker_per_hour": 4,
+    "roles_allowed": [
+      "carpentiere",
+      "muratore"
+    ],
+    "synonyms": [
+      "casseforme",
+      "casseratura",
+      "armatura fondazioni"
+    ],
+    "unit": "m2"
+  },
+  {
+    "code": "STRU_FOUND_REBAR",
+    "max_crew": 4,
+    "min_crew": 2,
+    "name": "Posa armatura (ferro) per fondazioni",
+    "notes": "Distanziali e legature come da progetto strutturale.",
+    "prerequisites": [
+      "STRU_FOUND_FORM"
+    ],
+    "primary_role": "ferraiolo",
+    "productivity_per_worker_per_hour": 40,
+    "roles_allowed": [
+      "ferraiolo",
+      "carpentiere"
+    ],
+    "synonyms": [
+      "ferro",
+      "gabbie",
+      "armatura",
+      "posa ferro",
+      "ferraiolo"
+    ],
+    "unit": "kg"
+  },
+  {
+    "code": "STRU_FOUND_POUR",
+    "max_crew": 6,
+    "min_crew": 3,
+    "name": "Getto calcestruzzo per fondazioni",
+    "notes": "Include vibrazione del calcestruzzo. Rispettare maturazione.",
+    "prerequisites": [
+      "STRU_FOUND_REBAR"
+    ],
+    "primary_role": "muratore",
+    "productivity_per_worker_per_hour": 5,
+    "roles_allowed": [
+      "muratore",
+      "operaio",
+      "carpentiere"
+    ],
+    "synonyms": [
+      "getto",
+      "calcestruzzo",
+      "cls",
+      "betoniera",
+      "pompa cls"
+    ],
+    "unit": "m3"
+  },
+  {
+    "code": "STRU_SLAB",
+    "max_crew": 5,
+    "min_crew": 2,
+    "name": "Realizzazione solaio (es. laterocemento)",
+    "notes": "Include puntellatura, posa travetti, pignatte e rete. Escluso getto.",
+    "prerequisites": [
+      "WALL_BUILD"
+    ],
+    "primary_role": "muratore",
+    "productivity_per_worker_per_hour": 6,
+    "roles_allowed": [
+      "muratore",
+      "carpentiere"
+    ],
+    "synonyms": [
+      "solaio",
+      "travetti e pignatte",
+      "predalles",
+      "posa solaio"
+    ],
+    "unit": "m2"
+  },
+  {
+    "code": "STRU_STEEL",
+    "max_crew": 4,
+    "min_crew": 2,
+    "name": "Montaggio carpenteria metallica (travi/colonne)",
+    "notes": "Necessario mezzo di sollevamento. Include serraggio bulloni.",
+    "prerequisites": [
+      "STRU_FOUND_POUR"
+    ],
+    "primary_role": "carpentiere metallico",
+    "productivity_per_worker_per_hour": 100,
+    "roles_allowed": [
+      "carpentiere metallico",
+      "fabbro"
+    ],
+    "synonyms": [
+      "travi acciaio",
+      "colonne acciaio",
+      "carpenteria",
+      "struttura metallica",
+      "putrelle"
+    ],
+    "unit": "kg"
+  },
+  {
+    "code": "EXT_SEWER",
+    "max_crew": 3,
+    "min_crew": 2,
+    "name": "Posa rete fognaria esterna",
+    "notes": "Verificare pendenze (min 1-2%) e quote di allaccio. Include posa pozzetti.",
+    "prerequisites": [
+      "EXT_EXCAV"
+    ],
+    "primary_role": "idraulico",
+    "productivity_per_worker_per_hour": 5,
+    "roles_allowed": [
+      "idraulico",
+      "muratore",
+      "escavatorista"
+    ],
+    "synonyms": [
+      "fognatura",
+      "scarichi esterni",
+      "tubi PVC rossi",
+      "allaccio fogna",
+      "pozzetti"
+    ],
+    "unit": "m"
+  },
+  {
+    "code": "INS_ACOUSTIC",
+    "max_crew": 2,
+    "min_crew": 1,
+    "name": "Posa isolante acustico (pareti/soffitto)",
+    "notes": "Da inserire prima della chiusura delle lastre di cartongesso.",
+    "prerequisites": [
+      "WALL_DRY_FRAME"
+    ],
+    "primary_role": "cartongessista",
+    "productivity_per_worker_per_hour": 15,
+    "roles_allowed": [
+      "cartongessista",
+      "isolatore"
+    ],
+    "synonyms": [
+      "fonoisolante",
+      "fonoassorbente",
+      "lana di roccia",
+      "isolamento acustico"
+    ],
+    "unit": "m2"
+  },
+  {
+    "code": "HVAC_VMC",
+    "max_crew": 2,
+    "min_crew": 1,
+    "name": "Installazione impianto VMC (Ventilazione Meccanica)",
+    "notes": "Include posa tubazioni flessibili e bocchette. Macchina a parte.",
+    "prerequisites": [
+      "CEIL_SUSPEND"
+    ],
+    "primary_role": "idraulico",
+    "productivity_per_worker_per_hour": 0.5,
+    "roles_allowed": [
+      "idraulico",
+      "installatore vmc",
+      "cartongessista"
+    ],
+    "synonyms": [
+      "VMC",
+      "ventilazione meccanica",
+      "ricambio aria",
+      "bocchette vmc",
+      "recuperatore calore"
+    ],
+    "unit": "pz"
+  },
+  {
+    "code": "ELEC_ALARM",
+    "max_crew": 2,
+    "min_crew": 1,
+    "name": "Installazione impianto allarme",
+    "notes": "Posa componenti finali. Il cablaggio deve essere predisposto in ELEC_ROUGH.",
+    "prerequisites": [
+      "ELEC_ROUGH",
+      "PAINT"
+    ],
+    "primary_role": "elettricista",
+    "productivity_per_worker_per_hour": 3,
+    "roles_allowed": [
+      "elettricista",
+      "tecnico sicurezza"
+    ],
+    "synonyms": [
+      "allarme",
+      "antifurto",
+      "sensori volumetrici",
+      "contatti magnetici",
+      "security"
+    ],
+    "unit": "pz"
+  },
+  {
+    "code": "ELEC_DOMOTICS",
+    "max_crew": 1,
+    "min_crew": 1,
+    "name": "Installazione e configurazione Domotica",
+    "notes": "Richiede programmazione software specifica. Sostituisce/integra i frutti.",
+    "prerequisites": [
+      "ELEC_PANEL",
+      "ELEC_FIXTURE"
+    ],
+    "primary_role": "elettricista",
+    "productivity_per_worker_per_hour": 1.5,
+    "roles_allowed": [
+      "elettricista",
+      "tecnico domotica"
+    ],
+    "synonyms": [
+      "domotica",
+      "smart home",
+      "automazione",
+      "KNX",
+      "attuatori"
+    ],
+    "unit": "pz"
+  },
+  {
+    "code": "FLOOR_RESIN",
+    "max_crew": 2,
+    "min_crew": 1,
+    "name": "Posa pavimento/rivestimento in resina",
+    "notes": "Richiede primer, più mani e finitura protettiva. Supporto deve essere perfetto.",
+    "prerequisites": [
+      "STRU_SCREED"
+    ],
+    "primary_role": "posatore resina",
+    "productivity_per_worker_per_hour": 3,
+    "roles_allowed": [
+      "posatore resina",
+      "imbianchino"
+    ],
+    "synonyms": [
+      "resina",
+      "pavimento resina",
+      "spatolato",
+      "rivestimento bagno resina"
+    ],
+    "unit": "m2"
+  },
+  {
+    "code": "FIN_RAILING",
+    "max_crew": 3,
+    "min_crew": 2,
+    "name": "Montaggio ringhiere / parapetti",
+    "notes": "Fissaggio a pavimento o parete. Include verifica piombo e sicurezza.",
+    "prerequisites": [
+      "FLOOR_TILE",
+      "PAINT"
+    ],
+    "primary_role": "fabbro",
+    "productivity_per_worker_per_hour": 3,
+    "roles_allowed": [
+      "fabbro",
+      "carpentiere metallico",
+      "serramentista"
+    ],
+    "synonyms": [
+      "ringhiera",
+      "parapetto",
+      "balaustra",
+      "fabbro",
+      "corrimano"
+    ],
+    "unit": "m"
+  },
+  {
+    "code": "WALL_COVER",
+    "max_crew": 2,
+    "min_crew": 1,
+    "name": "Posa rivestimento murale (Carta da parati / Boiserie)",
+    "notes": "Richiede parete perfettamente liscia e preparata (fondo/primer).",
+    "prerequisites": [
+      "PLASTER",
+      "PAINT"
+    ],
+    "primary_role": "posatore",
+    "productivity_per_worker_per_hour": 5,
+    "roles_allowed": [
+      "posatore",
+      "imbianchino",
+      "falegname"
+    ],
+    "synonyms": [
+      "carta da parati",
+      "boiserie",
+      "rivestimento legno",
+      "wall covering"
+    ],
+    "unit": "m2"
+  },
+  {
+    "code": "EXT_PAVING",
+    "max_crew": 3,
+    "min_crew": 1,
+    "name": "Posa pavimentazione esterna (autobloccanti/pietre)",
+    "notes": "Include preparazione letto di posa (sabbia/ghiaietto) e sigillatura.",
+    "prerequisites": [
+      "EXT_EXCAV"
+    ],
+    "primary_role": "muratore",
+    "productivity_per_worker_per_hour": 6,
+    "roles_allowed": [
+      "muratore",
+      "piastrellista",
+      "giardiniere"
+    ],
+    "synonyms": [
+      "autobloccanti",
+      "pavimentazione esterna",
+      "porfido",
+      "posa sassi",
+      "vialetto"
+    ],
+    "unit": "m2"
+  }
+]

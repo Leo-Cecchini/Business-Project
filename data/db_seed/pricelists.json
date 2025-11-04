@@ -1,0 +1,222 @@
+[
+  {
+    "city": "",
+    "region": "Lombardia",
+    "created_at": {
+      "$date": "2025-11-02T22:42:00.369Z"
+    },
+    "factors": {
+      "historic_center": 1.05,
+      "remote": 1.08
+    },
+    "materials": {
+      "FLR-001": 21.06,
+      "ADH-001": 0.0,
+      "STU-001": 1.19,
+      "BSK-001": 7.02,
+      "WAS-001": 3.24
+    },
+    "updated_at": {
+      "$date": "2025-11-02T22:42:00.369Z"
+    },
+    "wages": {}
+  },
+  {
+    "region": "Lazio",
+    "city": "",
+    "created_at": {
+      "$date": "2025-11-02T22:42:00.378Z"
+    },
+    "factors": {
+      "historic_center": 1.05,
+      "remote": 1.08
+    },
+    "materials": {
+      "FLR-001": 20.48,
+      "ADH-001": 0.0,
+      "STU-001": 1.16,
+      "BSK-001": 6.83,
+      "WAS-001": 3.15
+    },
+    "updated_at": {
+      "$date": "2025-11-02T22:42:00.378Z"
+    },
+    "wages": {}
+  },
+  {
+    "city": "",
+    "region": "Veneto",
+    "created_at": {
+      "$date": "2025-11-02T22:42:00.378Z"
+    },
+    "factors": {
+      "historic_center": 1.05,
+      "remote": 1.08
+    },
+    "materials": {
+      "FLR-001": 20.28,
+      "ADH-001": 0.0,
+      "STU-001": 1.14,
+      "BSK-001": 6.76,
+      "WAS-001": 3.12
+    },
+    "updated_at": {
+      "$date": "2025-11-02T22:42:00.378Z"
+    },
+    "wages": {}
+  },
+  {
+    "city": "",
+    "region": "Emilia-Romagna",
+    "created_at": {
+      "$date": "2025-11-02T22:42:00.378Z"
+    },
+    "factors": {
+      "historic_center": 1.05,
+      "remote": 1.08
+    },
+    "materials": {
+      "FLR-001": 20.28,
+      "ADH-001": 0.0,
+      "STU-001": 1.14,
+      "BSK-001": 6.76,
+      "WAS-001": 3.12
+    },
+    "updated_at": {
+      "$date": "2025-11-02T22:42:00.378Z"
+    },
+    "wages": {}
+  },
+  {
+    "city": "",
+    "region": "Piemonte",
+    "created_at": {
+      "$date": "2025-11-02T22:42:00.379Z"
+    },
+    "factors": {
+      "historic_center": 1.05,
+      "remote": 1.08
+    },
+    "materials": {
+      "FLR-001": 20.09,
+      "ADH-001": 0.0,
+      "STU-001": 1.13,
+      "BSK-001": 6.7,
+      "WAS-001": 3.09
+    },
+    "updated_at": {
+      "$date": "2025-11-02T22:42:00.379Z"
+    },
+    "wages": {}
+  },
+  {
+    "region": "Toscana",
+    "city": "",
+    "created_at": {
+      "$date": "2025-11-02T22:42:00.379Z"
+    },
+    "factors": {
+      "historic_center": 1.05,
+      "remote": 1.08
+    },
+    "materials": {
+      "FLR-001": 20.28,
+      "ADH-001": 0.0,
+      "STU-001": 1.14,
+      "BSK-001": 6.76,
+      "WAS-001": 3.12
+    },
+    "updated_at": {
+      "$date": "2025-11-02T22:42:00.379Z"
+    },
+    "wages": {}
+  },
+  {
+    "region": "Campania",
+    "city": "",
+    "created_at": {
+      "$date": "2025-11-02T22:42:00.379Z"
+    },
+    "factors": {
+      "historic_center": 1.05,
+      "remote": 1.08
+    },
+    "materials": {
+      "FLR-001": 18.72,
+      "ADH-001": 0.0,
+      "STU-001": 1.06,
+      "BSK-001": 6.24,
+      "WAS-001": 2.88
+    },
+    "updated_at": {
+      "$date": "2025-11-02T22:42:00.379Z"
+    },
+    "wages": {}
+  },
+  {
+    "city": "",
+    "region": "Puglia",
+    "created_at": {
+      "$date": "2025-11-02T22:42:00.379Z"
+    },
+    "factors": {
+      "historic_center": 1.05,
+      "remote": 1.08
+    },
+    "materials": {
+      "FLR-001": 18.33,
+      "ADH-001": 0.0,
+      "STU-001": 1.03,
+      "BSK-001": 6.11,
+      "WAS-001": 2.82
+    },
+    "updated_at": {
+      "$date": "2025-11-02T22:42:00.379Z"
+    },
+    "wages": {}
+  },
+  {
+    "region": "Sicilia",
+    "city": "",
+    "created_at": {
+      "$date": "2025-11-02T22:42:00.379Z"
+    },
+    "factors": {
+      "historic_center": 1.05,
+      "remote": 1.08
+    },
+    "materials": {
+      "FLR-001": 18.14,
+      "ADH-001": 0.0,
+      "STU-001": 1.02,
+      "BSK-001": 6.04,
+      "WAS-001": 2.79
+    },
+    "updated_at": {
+      "$date": "2025-11-02T22:42:00.379Z"
+    },
+    "wages": {}
+  },
+  {
+    "region": "Calabria",
+    "city": "",
+    "created_at": {
+      "$date": "2025-11-02T22:42:00.379Z"
+    },
+    "factors": {
+      "historic_center": 1.05,
+      "remote": 1.08
+    },
+    "materials": {
+      "FLR-001": 17.94,
+      "ADH-001": 0.0,
+      "STU-001": 1.01,
+      "BSK-001": 5.98,
+      "WAS-001": 2.76
+    },
+    "updated_at": {
+      "$date": "2025-11-02T22:42:00.379Z"
+    },
+    "wages": {}
+  }
+]
