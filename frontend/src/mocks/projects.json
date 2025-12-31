@@ -1,0 +1,191 @@
+[
+    {
+        "id": "mock-1",
+        "name": "Ristrutturazione Villa Roma",
+        "status": "Confermato",
+        "project_date": "2025-01-10",
+        "project_address": "Via Roma 123, Roma",
+        "location_city": "Roma",
+        "works": [],
+        "meta_extra": {}
+    },
+    {
+        "id": "mock-2",
+        "name": "Ristrutturazione Uffici Firenze",
+        "status": "Confermato",
+        "project_date": "2025-11-08",
+        "project_address": "Via Dante 45, Firenze",
+        "location_city": "Firenze",
+        "works": [
+            {
+                "work_name": "Demolizione pavimenti e controsoffitti",
+                "status": "planned",
+                "start_date_planned": "2025-11-19",
+                "end_date_planned": "2025-11-24",
+                "start_date_actual": null,
+                "end_date_actual": null,
+                "duration_estimated_hours": 77,
+                "duration_actual_hours": null,
+                "number_of_workers": 3,
+                "workers": []
+            },
+            {
+                "work_name": "Rimozione impianti idraulici",
+                "status": "planned",
+                "start_date_planned": "2025-11-25",
+                "end_date_planned": "2025-12-01",
+                "start_date_actual": null,
+                "end_date_actual": null,
+                "duration_estimated_hours": 70,
+                "duration_actual_hours": null,
+                "number_of_workers": 2,
+                "workers": []
+            },
+            {
+                "work_name": "Esecuzione tracce impianti",
+                "status": "planned",
+                "start_date_planned": "2025-12-02",
+                "end_date_planned": "2025-12-15",
+                "start_date_actual": null,
+                "end_date_actual": null,
+                "duration_estimated_hours": 200,
+                "duration_actual_hours": null,
+                "number_of_workers": 3,
+                "workers": []
+            },
+            {
+                "work_name": "Posa pavimenti e rivestimenti",
+                "status": "planned",
+                "start_date_planned": "2025-12-16",
+                "end_date_planned": "2025-12-30",
+                "start_date_actual": null,
+                "end_date_actual": null,
+                "duration_estimated_hours": 180,
+                "duration_actual_hours": null,
+                "number_of_workers": 2,
+                "workers": []
+            }
+        ],
+        "meta_extra": {
+            "computo_metrico": {
+                "_id": "CME-MOCK-456",
+                "metadata": {
+                    "document_title": "Computo Metrico Ristrutturazione Uffici",
+                    "subject": "Ristrutturazione uffici 120mq",
+                    "client": "Azienda XYZ",
+                    "location": "Via Dante 45, Firenze",
+                    "project_manager": "Arch. Rossi",
+                    "technician": "Geom. Verdi",
+                    "date": "2025-11-08"
+                },
+                "bill_of_quantities": [
+                    {
+                        "category": "DEMOLIZIONI E RIMOZIONI",
+                        "category_total": 5500.0,
+                        "items": [
+                            {
+                                "reference": "A.01",
+                                "code": "DEM.PAV",
+                                "description": "Demolizione pavimento in piastrelle e massetto",
+                                "unit": "mq",
+                                "quantity": 120.0,
+                                "unit_price": 25.0,
+                                "item_total": 3000.0
+                            },
+                            {
+                                "reference": "A.02",
+                                "code": "DEM.CONTR",
+                                "description": "Rimozione controsoffitti in cartongesso",
+                                "unit": "mq",
+                                "quantity": 100.0,
+                                "unit_price": 15.0,
+                                "item_total": 1500.0
+                            },
+                            {
+                                "reference": "A.03",
+                                "code": "DEM.IMP",
+                                "description": "Rimozione impianti esistenti",
+                                "unit": "cad",
+                                "quantity": 1.0,
+                                "unit_price": 1000.0,
+                                "item_total": 1000.0
+                            }
+                        ]
+                    },
+                    {
+                        "category": "IMPIANTI",
+                        "category_total": 18000.0,
+                        "items": [
+                            {
+                                "reference": "B.01",
+                                "code": "IMP.ELE",
+                                "description": "Impianto elettrico completo con punti luce e prese",
+                                "unit": "cad",
+                                "quantity": 1.0,
+                                "unit_price": 8000.0,
+                                "item_total": 8000.0
+                            },
+                            {
+                                "reference": "B.02",
+                                "code": "IMP.IDR",
+                                "description": "Impianto idraulico bagni",
+                                "unit": "cad",
+                                "quantity": 2.0,
+                                "unit_price": 3000.0,
+                                "item_total": 6000.0
+                            },
+                            {
+                                "reference": "B.03",
+                                "code": "IMP.COND",
+                                "description": "Impianto condizionamento",
+                                "unit": "cad",
+                                "quantity": 1.0,
+                                "unit_price": 4000.0,
+                                "item_total": 4000.0
+                            }
+                        ]
+                    },
+                    {
+                        "category": "FINITURE",
+                        "category_total": 12000.0,
+                        "items": [
+                            {
+                                "reference": "C.01",
+                                "code": "FIN.PAV",
+                                "description": "Pavimento in gres porcellanato 60x60",
+                                "unit": "mq",
+                                "quantity": 120.0,
+                                "unit_price": 65.0,
+                                "item_total": 7800.0
+                            },
+                            {
+                                "reference": "C.02",
+                                "code": "FIN.PITT",
+                                "description": "Tinteggiatura pareti e soffitti",
+                                "unit": "mq",
+                                "quantity": 300.0,
+                                "unit_price": 14.0,
+                                "item_total": 4200.0
+                            }
+                        ]
+                    }
+                ],
+                "summary": [
+                    {
+                        "category": "DEMOLIZIONI E RIMOZIONI",
+                        "price": 5500.0
+                    },
+                    {
+                        "category": "IMPIANTI",
+                        "price": 18000.0
+                    },
+                    {
+                        "category": "FINITURE",
+                        "price": 12000.0
+                    }
+                ],
+                "grand_total": 35500.0
+            }
+        }
+    }
+]

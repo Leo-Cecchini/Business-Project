@@ -1,0 +1,104 @@
+version: '3.8'
+
+services:
+  # MongoDB Database
+  mongodb:
+    image: mongo:7
+    container_name: construction-mongodb
+    restart: unless-stopped
+    ports:
+      - "27017:27017"
+    command: mongod --quiet --logpath /dev/null
+    logging:
+      driver: "none"
+    environment:
+      MONGO_INITDB_ROOT_USERNAME: admin
+      MONGO_INITDB_ROOT_PASSWORD: ${MONGO_PASSWORD:-changeme123}
+      MONGO_INITDB_DATABASE: business_project
+    volumes:
+      - mongodb_data:/data/db
+      - mongodb_config:/data/configdb
+    networks:
+      - app-network
+    healthcheck:
+      test: echo 'db.runCommand("ping").ok' | mongosh localhost:27017/test --quiet
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # Backend Flask API
+  backend:
+    build: 
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: construction-backend
+    restart: unless-stopped
+    ports:
+      - "5001:5001" 
+    environment:
+      - FLASK_ENV=development
+      - FLASK_DEBUG=1
+      - PORT=5001
+      - MONGODB_URI=${MONGODB_URI}
+      - MONGODB_DB=${MONGODB_DB}
+      - GOOGLE_API_KEY=${GOOGLE_API_KEY}
+      - SECRET_KEY=${SECRET_KEY}
+      - AUTO_SEED=${AUTO_SEED}
+      - SEED_MODE=${SEED_MODE}
+      - AUTO_GENERATE_PRICELISTS=${AUTO_GENERATE_PRICELISTS}
+    volumes:
+      # Mount backend code
+      - ./backend:/app/backend
+      
+      # Mount init_db.py dalla root
+      - ./init_db.py:/app/init_db.py
+      
+      # ✅ Mount seed data dalla root/seed
+      - ./seed:/app/seed
+      
+      # Exclude cache
+      - /app/backend/__pycache__
+      - /app/backend/.pytest_cache
+    depends_on:
+      mongodb:
+        condition: service_healthy
+    networks:
+      - app-network
+    working_dir: /app
+    command: sh -c "python init_db.py && python backend/run.py"
+
+  # Frontend React/Vite
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    container_name: construction-frontend
+    restart: unless-stopped
+    ports:
+      - "5173:5173"
+    environment:
+      - VITE_API_BASE=http://localhost:5001  # ✅ Punta a porta 5001
+      - NODE_ENV=development
+    volumes:
+      # Mount source code for hot reload
+      - ./frontend:/app
+      # Exclude node_modules
+      - /app/node_modules
+    depends_on:
+      - backend
+    networks:
+      - app-network
+    command: npm run dev -- --host 0.0.0.0
+    stdin_open: true
+    tty: true
+
+networks:
+  app-network:
+    driver: bridge
+    name: construction-network
+
+volumes:
+  mongodb_data:
+    name: construction-mongodb-data
+  mongodb_config:
+    name: construction-mongodb-config
