@@ -1,18 +1,10 @@
-#!/usr/bin/env python3
-"""
-init_db.py - Database Initialization Script (Standalone)
-Posizionato nella root del progetto (dove sta docker-compose.yml)
-Eseguito automaticamente all'avvio del backend Docker
-
-Carica JSON seed direttamente senza dipendenze da script esterni.
-"""
-
 import os
 import sys
 import time
 import json
 import glob
 from datetime import datetime
+from bson import ObjectId  # ✅ AGGIUNGI PER GESTIRE _id CUSTOM
 
 # Setup path per import dal backend
 backend_path = os.path.join(os.path.dirname(__file__), 'backend')
@@ -151,7 +143,31 @@ def seed_collection(db, collection_name, documents, mode="merge"):
             skipped += 1
             continue
         
-        key = get_document_key(collection_name, doc)
+        # ✅ GESTIONE _id CUSTOM (EXTENDED JSON o STRING)
+        if "_id" in doc:
+            if isinstance(doc["_id"], dict) and "$oid" in doc["_id"]:
+                # Extended JSON: {"$oid": "6957aeaf57e6e5cae46b8af0"}
+                try:
+                    doc["_id"] = ObjectId(doc["_id"]["$oid"])
+                except Exception as e:
+                    print(f"  ⚠️  _id invalido: {doc['_id']}, skip: {e}")
+                    skipped += 1
+                    continue
+            elif isinstance(doc["_id"], str):
+                # String diretta: "6957aeaf57e6e5cae46b8af0"
+                try:
+                    doc["_id"] = ObjectId(doc["_id"])
+                except Exception as e:
+                    print(f"  ⚠️  _id invalido: {doc['_id']}, skip: {e}")
+                    skipped += 1
+                    continue
+        
+        # Usa _id come chiave se presente, altrimenti usa get_document_key
+        if "_id" in doc:
+            key = {"_id": doc["_id"]}
+        else:
+            key = get_document_key(collection_name, doc)
+        
         existing = collection.find_one(key)
         
         if not existing:

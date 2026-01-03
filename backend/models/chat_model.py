@@ -1,26 +1,26 @@
 # models/chat_model.py
 from typing import Dict, List, Optional
 import os
+import logging
+from functools import lru_cache
+from datetime import datetime, timezone
+import time
+
 from langchain_google_genai import ChatGoogleGenerativeAI
 from langchain_community.chat_message_histories import MongoDBChatMessageHistory
 from langchain_core.prompts import ChatPromptTemplate, MessagesPlaceholder
-from langchain_core.output_parsers import StrOutputParser
-from langchain_core.messages import AIMessage, ToolMessage  # NEW
+from langchain_core.messages import AIMessage, ToolMessage
+from pymongo import MongoClient
+
 from models_mongo.material import MaterialDoc
 from models_mongo.worker import WorkerDoc
 from mongoengine.queryset.visitor import Q
-
-# NEW: imports per logging, cache e gestione errori
-import logging
-from functools import lru_cache
-from datetime import datetime
-import time
 
 SYSTEM_PROMPT = """Sei un assistente per imprenditori edili.
 - Rispondi in italiano tecnico ma chiaro.
 - Se la domanda è poco specifica, fai al massimo 3 domande mirate (chi, cosa, quanto, dove).
 - Se ci sono numeri, dai SEMPRE un riepilogo tabellare e UNA stima finale.
-- Se usi fonti (documenti interni o web), elencale alla fine in “Fonti:”.
+- Se usi fonti (documenti interni o web), elencale alla fine in "Fonti:".
 - Se non sei sicuro, di' cosa manca e proponi come stimarlo. Evita frasi vaghe.
 - Preferisci unità del settore (m, m², m³, kg, €/m², ore/uomo).
 - NON inventare prezzi: se non li hai, proponi fasce e il metodo di calcolo.
@@ -32,6 +32,20 @@ Formatta SEMPRE così:
 4) Prossimi passi (se applicabile)
 5) Fonti (bullet con titoli/URL o nomi file)
 """
+
+# --- CLASSE CUSTOM PER EVITARE RESOURCE LEAK ---
+class SharedMongoDBChatMessageHistory(MongoDBChatMessageHistory):
+    """
+    Versione ottimizzata che accetta un client MongoDB esistente
+    invece di crearne uno nuovo ogni volta (che causava il blocco).
+    """
+    def __init__(self, client: MongoClient, session_id: str, database_name: str, collection_name: str):
+        self.client = client
+        self.session_id = session_id
+        self.database_name = database_name
+        self.collection_name = collection_name
+        self.db = self.client[database_name]
+        self.collection = self.db[collection_name]
 
 def _clip(text: str, n: int) -> str:
     return (text or "").strip()[:n]
@@ -69,53 +83,37 @@ def _list_local_refs(search_results: List[Dict]) -> str:
         lines.append(f"[LOCAL {i}] {src}" + (f" (score={round(float(score),3)})" if score is not None else ""))
     return "\n".join(lines)
 
-
 def _list_web_refs(web_hits: List[Dict]) -> str:
     if not web_hits:
         return "(nessuna)"
     return "\n".join([f"[WEB {i}] {r.get('title') or r.get('url') or f'Fonte {i}'}" for i, r in enumerate(web_hits, 1)])
 
-
-# --- Safety & caching helpers (NEW) ---
-
 def safe_invoke(llm_or_chain, payload):
-    """
-    Invoca il modello in modo sicuro: non alza eccezioni ma ritorna un AIMessage con errore.
-    Accetta sia un LLM (self.llm / self.llm_with_tools) sia un chain/array di messaggi.
-    """
     try:
         return llm_or_chain.invoke(payload)
     except Exception as e:
-        # ritorna un AIMessage, così il flusso a valle non rompe
         return AIMessage(content=f"[ERRORE LLM] {type(e).__name__}: {str(e)[:180]}")
 
 @lru_cache(maxsize=256)
 def cached_db_hints(question: str) -> str:
-    """Cache dei suggerimenti DB per ridurre round-trip su query ripetute."""
     return _quick_db_hints(question, limit=6)
 
-
-# --- DB hints helper ---
 def _quick_db_hints(question: str, limit: int = 6) -> str:
-    """Ritorna un breve testo con top materiali/operai pertinenti per dare ancore al modello."""
     lines = []
-
-    # materiali (aliases->name->text)
     try:
         base = MaterialDoc.objects
-        m = list(base.filter(aliases__icontains=question).only("name","sku","unit","supplier").limit(limit))
+        m = list(base.filter(aliases__icontains=question).only("name","sku","unit").limit(limit))
         if not m:
-            m = list(base.filter(name__icontains=question).only("name","sku","unit","supplier").limit(limit))
+            m = list(base.filter(name__icontains=question).only("name","sku","unit").limit(limit))
         if not m:
-            m = list(base.search_text(question).only("name","sku","unit","supplier").order_by("$text_score").limit(limit))
+            m = list(base.search_text(question).only("name","sku","unit").order_by("$text_score").limit(limit))
         if m:
             lines.append("Materiali suggeriti:")
             for x in m:
-                lines.append(f"- {x.name} (SKU: {getattr(x,'sku',None)}, unit: {getattr(x,'unit',None)}, supplier: {getattr(x,'supplier',None)})")
+                lines.append(f"- {x.name} (SKU: {getattr(x,'sku',None)}, unit: {getattr(x,'unit',None)})")
     except Exception:
         pass
 
-    # operai (aliases->role/name->text)
     try:
         wq = WorkerDoc.objects
         w = list(wq.filter(aliases__icontains=question).only("name","role","available").limit(limit))
@@ -133,43 +131,42 @@ def _quick_db_hints(question: str, limit: int = 6) -> str:
 
     return "\n".join(lines) if lines else ""
 
-
 class ChatModel:
-    def __init__(self, api_key: str, model_name: str = "gemini-2.5-flash", temperature: float = 0.1):
+    def __init__(self, api_key: str, model_name: str = "gemini-2.0-flash-exp", temperature: float = 0.1):
         self.llm = ChatGoogleGenerativeAI(
             model=model_name,
             temperature=temperature,
             google_api_key=api_key,
             convert_system_message_to_human=True,
-            request_timeout=40,   # NEW: timeout di rete
+            request_timeout=40,
         )
 
-        # NEW: logger base
         self.logger = logging.getLogger("ChatModel")
         if not self.logger.handlers:
             self.logger.setLevel(logging.INFO)
-        # ✨ Memoria persistente su MongoDB
+            
         self.mongo_uri = os.getenv("MONGODB_URI", "mongodb://localhost:27017")
         self.mongo_db = os.getenv("MONGODB_DB", "business_project")
         self.mongo_collection = os.getenv("CHAT_COLLECTION", "chat_sessions")
-        
+
+        # FIX: Inizializza UN SOLO client MongoDB condiviso
+        self.shared_client = MongoClient(self.mongo_uri)
+
         self.tools = []
-        self.llm_with_tools = self.llm
+        try:
+            from agents.worker_tools import create_worker_tool, remove_worker_tool
+            self.tools = [create_worker_tool, remove_worker_tool]
+            self.llm_with_tools = self.llm.bind_tools(self.tools)
+        except Exception:
+            self.llm_with_tools = self.llm
 
     def _scoped_session_id(self, base_session_id: str, site_id: Optional[str]) -> str:
-        """
-        Namespacizza la sessione per cantiere:
-        - site_id valorizzato  -> "<base>::<site_id>"
-        - site_id assente      -> "<base>::GLOBAL-CHAT"
-        Questo isola la memoria conversazionale tra cantieri e chat aziendale.
-        """
         suffix = site_id if site_id else "GLOBAL-CHAT"
         return f"{base_session_id}::{suffix}"
 
-    # ---------- Memoria persistente ----------
     def get_or_create_history(self, session_id: str) -> MongoDBChatMessageHistory:
-        return MongoDBChatMessageHistory(
-            connection_string=self.mongo_uri,
+        return SharedMongoDBChatMessageHistory(
+            client=self.shared_client,
             database_name=self.mongo_db,
             collection_name=self.mongo_collection,
             session_id=session_id
@@ -182,66 +179,53 @@ class ChatModel:
         except Exception:
             pass
 
-    # ---------- Rolling summary ----------
     def _should_summarize(self, history: MongoDBChatMessageHistory) -> bool:
         try:
-            return len(getattr(history, "messages", [])) > 20
+            msgs = getattr(history, "messages", [])
+            return len(msgs) > 20
         except Exception:
             return False
 
     def _summarize(self, history: MongoDBChatMessageHistory):
-        """Compatta la history in un memo strutturato preservando i fatti chiave."""
         try:
-            msgs = list(getattr(history, "messages", []))[-40:]
-            if not msgs:
+            msgs = getattr(history, "messages", [])
+            if len(msgs) <= 20:
                 return
-            lines = []
-            for m in msgs:
-                role = getattr(m, "type", None) or getattr(m, "role", None) or "user"
-                content = getattr(m, "content", "") or ""
-                lines.append(f"{role.upper()}: {content}")
-            transcript = "\n".join(lines)
-
-            prompt = (
-                "Riassumi i punti e le decisioni chiave della chat per un contesto edile.\n"
-                "- Restituisci 10–12 bullet concisi con valori e vincoli quando presenti.\n"
-                "- Aggiungi sezioni: 'Vincoli', 'TODO'.\n"
-                "- NON inventare; usa solo il transcript.\n\n"
-                "Transcript:\n" + transcript
-            )
-
-            resp = self.llm.invoke(prompt)
-            summary_text = getattr(resp, "content", resp)
+            
+            history_text = "\n".join([f"{m.type}: {m.content[:200]}" for m in msgs])
+            summary_prompt = f"Riassumi questa conversazione in 3-5 punti chiave:\n{history_text}"
+            
+            summary = safe_invoke(self.llm, [("human", summary_prompt)])
+            summary_text = getattr(summary, "content", "Conversazione precedente")
+            
             history.clear()
-            history.add_ai_message(f"[MEMO] {summary_text}")
-        except Exception:
-            pass
+            history.add_ai_message(f"[RIASSUNTO CONVERSAZIONE]\n{summary_text}")
+        except Exception as e:
+            self.logger.warning(f"Summarize failed: {e}")
 
-    # ---------- Esecuzione tools & finalizzazione ----------
-    def _execute_tool_calls(self, ai_msg) -> tuple[list, str | None]:
-        """Tool calling disabled - always return empty flow."""
-        return [ai_msg], None
-    
-    # ---------- Chat con memoria persistente ----------
-    def chat(self, vector_store, session_id: str, question: str, site_id: str | None = None):
-        scoped_session = self._scoped_session_id(session_id, site_id)
-        history = self.get_or_create_history(scoped_session)
+    def _execute_tool_calls(self, ai_msg: AIMessage) -> tuple:
+        if not hasattr(ai_msg, "tool_calls") or not ai_msg.tool_calls:
+            return [ai_msg], None
+        
+        messages = [ai_msg]
+        for tc in ai_msg.tool_calls:
+            if tc["name"] == "create_worker_tool":
+                return messages, "Per favore conferma i dati del nuovo lavoratore prima di crearlo."
+            elif tc["name"] == "remove_worker_tool":
+                return messages, "Per favore conferma la rimozione del lavoratore."
+        
+        return messages, None
+
+    def answer(self, session_id: str, question: str, search_results: list = None, site_id: str = None) -> dict:
+        history = self.get_or_create_history(self._scoped_session_id(session_id, site_id))
 
         if self._should_summarize(history):
             self._summarize(history)
 
-        try:
-            where = {"project_id": {"$in": [site_id, "GLOBAL"]}} if site_id else None
-            search_results = vector_store.search(question, limit=8, where=where)
-        except Exception:
-            search_results = []
-
+        search_results = search_results or []
         local_refs = _list_local_refs(search_results)
         local_blob = _pack_local_context(search_results, limit=8, clip=900)
-        db_hints = cached_db_hints(question)  # usa la cache
-        self.logger.info(f"[chat] sid={session_id} q={question[:80]}")
-        if db_hints:
-            self.logger.debug(f"[db_hints] {db_hints[:120]}")
+        db_hints = cached_db_hints(question)
 
         prompt = ChatPromptTemplate.from_messages([
             ("system", SYSTEM_PROMPT),
@@ -259,7 +243,6 @@ class ChatModel:
             ("human", "{question}")
         ])
 
-        # Usa il modello con tools (fallback automatico se non disponibili)
         chain = prompt | self.llm_with_tools
         _t0 = time.perf_counter()
         latency_ms = None
@@ -271,14 +254,12 @@ class ChatModel:
             "db_hints": db_hints,
         })
 
-        # Gestione tool-calls
         messages_flow, needs_confirm = self._execute_tool_calls(ai_msg if isinstance(ai_msg, AIMessage) else AIMessage(content=str(ai_msg)))
         if needs_confirm:
             history.add_user_message(question)
             history.add_ai_message(needs_confirm)
             return {"answer": needs_confirm, "source_documents": search_results}
 
-        # Se abbiamo eseguito tools, chiedi al modello la risposta finale
         if len(messages_flow) > 1:
             final = safe_invoke(self.llm, messages_flow)
             response = getattr(final, "content", str(final))
@@ -290,6 +271,7 @@ class ChatModel:
 
         history.add_user_message(question)
         history.add_ai_message(response)
+        
         try:
             latency_ms = int((time.perf_counter() - _t0) * 1000)
             db = WorkerDoc._get_db()
@@ -300,7 +282,7 @@ class ChatModel:
                 "tokens_in": len(question.split()),
                 "tokens_out": len(response.split()),
                 "tools_used": [t.name for t in getattr(self, "tools", [])],
-                "timestamp": datetime.utcnow(),
+                "timestamp": datetime.now(timezone.utc),
                 "latency_ms": latency_ms,
                 "site_id": site_id,
                 "had_error": isinstance(response, str) and response.startswith("[ERRORE LLM]"),
@@ -318,10 +300,7 @@ class ChatModel:
             }
         }
 
-    # ---------- Chat con contesti multipli ----------
     def answer_with_contexts(self, session_id: str, question: str, local_ctx: list, web_ctx: list, calc_json: dict | None = None, site_id: str | None = None) -> dict:
-        from langchain_core.prompts import ChatPromptTemplate
-        from langchain_core.output_parsers import StrOutputParser
         import json as _json
 
         history = self.get_or_create_history(self._scoped_session_id(session_id, site_id))
@@ -398,6 +377,7 @@ class ChatModel:
 
         history.add_user_message(question)
         history.add_ai_message(answer)
+        
         try:
             latency_ms = int((time.perf_counter() - _t0) * 1000)
             db = WorkerDoc._get_db()
@@ -409,7 +389,7 @@ class ChatModel:
                 "tokens_in": len(question.split()),
                 "tokens_out": len(answer.split()),
                 "tools_used": [t.name for t in getattr(self, "tools", [])],
-                "timestamp": datetime.utcnow(),
+                "timestamp": datetime.now(timezone.utc),
                 "latency_ms": latency_ms,
                 "had_error": isinstance(answer, str) and answer.startswith("[ERRORE LLM]"),
             })

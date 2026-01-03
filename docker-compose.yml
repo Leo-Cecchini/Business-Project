@@ -36,16 +36,43 @@ services:
     ports:
       - "5001:5001" 
     environment:
+      # Flask
       - FLASK_ENV=development
       - FLASK_DEBUG=1
       - PORT=5001
+      
+      # MongoDB
       - MONGODB_URI=${MONGODB_URI}
       - MONGODB_DB=${MONGODB_DB}
+      
+      # ✅ GOOGLE AI (CHAT DEPENDENCIES)
       - GOOGLE_API_KEY=${GOOGLE_API_KEY}
+      - MODEL_NAME=${MODEL_NAME:-gemini-2.0-flash-exp}
+      - EMBEDDING_MODEL=${EMBEDDING_MODEL:-models/text-embedding-004}
+      - EMBEDDING_DIMENSION=${EMBEDDING_DIMENSION:-768}
+      - TEMPERATURE=${TEMPERATURE:-0.1}
+      
+      # ✅ QDRANT VECTOR STORE
+      - QDRANT_PATH=${QDRANT_PATH:-./qdrant_data}
+      - QDRANT_COLLECTION=${QDRANT_COLLECTION:-documents}
+      - QDRANT_READONLY=${QDRANT_READONLY:-false}
+      
+      # ✅ CHUNKING
+      - CHUNK_SIZE=${CHUNK_SIZE:-1200}
+      - CHUNK_OVERLAP=${CHUNK_OVERLAP:-120}
+      
+      # ✅ WEB RETRIEVAL
+      - ENABLE_WEB_RETRIEVAL=${ENABLE_WEB_RETRIEVAL:-true}
+      - WEB_TIMEOUT_SEC=${WEB_TIMEOUT_SEC:-8}
+      
+      # Flask Secret
       - SECRET_KEY=${SECRET_KEY}
+      
+      # Seed Config
       - AUTO_SEED=${AUTO_SEED}
       - SEED_MODE=${SEED_MODE}
       - AUTO_GENERATE_PRICELISTS=${AUTO_GENERATE_PRICELISTS}
+      
     volumes:
       # Mount backend code
       - ./backend:/app/backend
@@ -77,7 +104,7 @@ services:
     ports:
       - "5173:5173"
     environment:
-      - VITE_API_BASE=http://localhost:5001  # ✅ Punta a porta 5001
+      - VITE_API_BASE=http://localhost:5001
       - NODE_ENV=development
     volumes:
       # Mount source code for hot reload

@@ -1,7 +1,7 @@
 # services/telemetry.py
 from __future__ import annotations
 from typing import Dict, Any
-from datetime import datetime
+from datetime import datetime, timezone
 from threading import Thread
 try:
     from mongoengine.connection import get_db
@@ -13,7 +13,7 @@ def fire_and_forget(event: Dict[str, Any]):
     def _run():
         try:
             db = get_db()
-            event["ts"] = datetime.utcnow()
+            event["ts"] = datetime.now(timezone.utc)
             db["telemetry"].insert_one(event)
         except Exception:
             pass

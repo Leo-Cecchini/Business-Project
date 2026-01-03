@@ -46,6 +46,9 @@
     }
   },
   {
+    "_id": {
+      "$oid": "69555659347538bef11d21e4"
+    },
     "name": "dd",
     "project_date": "2025-11-08",
     "project_address": "dg",
@@ -54,7 +57,7 @@
     "addresses": {
       "formatted": "Corso dei Mille, 90072 Altofonte PA, Italia",
       "street": "Corso dei Mille",
-      "street_number": null,
+      "street_number": 5,
       "city": "Altofonte",
       "state": "Italia",
       "postal_code": "90072"
@@ -279,7 +282,9 @@
     ],
     "meta_extra": {
       "computo_metrico": {
-        "_id": "CME-6affe0bd",
+        "id": "6957af1b57e6e5cae46b8af1",
+        "computo_code": "CME-6affe0bd",
+        "project_id": "6957aeaf57e6e5cae46b8af0",
         "metadata": {
           "document_title": "COMPUTO METRICO ESTIMATIVO",
           "subject": "Lavori di manutenzione straordinaria immobile via Toscana 1, piano I, scala A, int. 2",
@@ -292,1111 +297,945 @@
         "bill_of_quantities": [
           {
             "category": "DEMOLIZIONI E RIMOZIONI",
-            "sub_category": null,
-            "item_number": 1,
-            "item_code": "A 3.01.9 a",
-            "description": "Demolizione di muratura di tamponamento e di tramezzi, compresi intonaci, rivestimenti, coibenti, tubazioni di qualsiasi natura (canalizzazioni idriche, termiche, elettriche, telefoniche, gas, ecc), eseguita anche con idonei mezzi compreso il tiro in discesa dei materiali, il trasporto, la cernita e l'accatastamento nei siti che verranno indicati dalla DL nell'ambito del cantiere dei materiali utilizzabili ... escluso il trasporto in discarica...: (PER PORTE BAGNI) laterizi pieni spessore totale fino a 160 mm",
-            "unit_of_measure": "mq",
-            "quantity": 3,
-            "unit_price": 20.01,
-            "total_price": 60.03
-          },
-          {
-            "category": "DEMOLIZIONI E RIMOZIONI",
-            "sub_category": null,
-            "item_number": 2,
-            "item_code": "A 3.01.10 a",
-            "description": "Demolizione di controsoffitti in genere, sia orizzontali che centinati: (PER CORRIDOI) gesso e relativo supporto",
-            "unit_of_measure": "mq",
-            "quantity": 70,
-            "unit_price": 10.8,
-            "total_price": 756
-          },
-          {
-            "category": "DEMOLIZIONI E RIMOZIONI",
-            "sub_category": null,
-            "item_number": 3,
-            "item_code": "G 1.01.1 a",
-            "description": "Demolizione di pavimenti interni, comprese le opere provvisionali di protezione, la movimentazione con qualsiasi mezzo delle macerie nell'ambito del cantiere... il carico e trasporto delle macerie agli impianti di stoccaggio, di recupero, o a discarica esclusi gli oneri di smaltimento: in piastrelle di cemento, ceramica, cotto, con relativa malta di allettamento",
-            "unit_of_measure": "mq",
-            "quantity": 13,
-            "unit_price": 19.01,
-            "total_price": 247.13
-          },
-          {
-            "category": "DEMOLIZIONI E RIMOZIONI",
-            "sub_category": null,
-            "item_number": 4,
-            "item_code": "G 1.01.1 b",
-            "description": "Demolizione di pavimenti interni, comprese le opere provvisionali di protezione, la movimentazione con qualsiasi mezzo delle macerie nell'ambito del cantiere... il carico e trasporto delle macerie agli impianti di stoccaggio, di recupero, o a discarica esclusi gli oneri di smaltimento: resilienti (PVC, linoleum, gomma ecc)",
-            "unit_of_measure": "mq",
-            "quantity": 88,
-            "unit_price": 9.37,
-            "total_price": 824.56
-          },
-          {
-            "category": "DEMOLIZIONI E RIMOZIONI",
-            "sub_category": null,
-            "item_number": 5,
-            "item_code": "G 1.01.1 c",
-            "description": "Demolizione di pavimenti interni, comprese le opere provvisionali di protezione, la movimentazione con qualsiasi mezzo delle macerie nell'ambito del cantiere... il carico e trasporto delle macerie agli impianti di stoccaggio, di recupero, o a discarica esclusi gli oneri di smaltimento: in legno, moquette",
-            "unit_of_measure": "mq",
-            "quantity": 166,
-            "unit_price": 7.68,
-            "total_price": 1274.88
-          },
-          {
-            "category": "DEMOLIZIONI E RIMOZIONI",
-            "sub_category": null,
-            "item_number": 6,
-            "item_code": "A 3.01.16 a",
-            "description": "Demolizione di rivestimenti di pareti, compresa la demolizione della sottostante malta di allettamento, calo in basso e l'avvicinamento al luogo di deposito provvisorio nell'ambito del cantiere, escluso il trasporto a rifiuto in discarica autorizzata del materiale non utilizzabile: in piastrelle o tesserine di gres ceramica o vetro e simili",
-            "unit_of_measure": "mq",
-            "quantity": 45,
-            "unit_price": 15.21,
-            "total_price": 684.45
-          },
-          {
-            "category": "DEMOLIZIONI E RIMOZIONI",
-            "sub_category": null,
-            "item_number": 7,
-            "item_code": "A 3.02.15",
-            "description": "Rimozione di battiscopa, cornici o mantovane in legno compresi eventuale calo in basso, avvicinamento al luogo di deposito provvisorio",
-            "unit_of_measure": "ml",
-            "quantity": 300,
-            "unit_price": 1.6,
-            "total_price": 480
-          },
-          {
-            "category": "DEMOLIZIONI E RIMOZIONI",
-            "sub_category": null,
-            "item_number": 8,
-            "item_code": "G 1.02.3",
-            "description": "Rimozione di apparecchi igienico-sanitari, incluso lo smontaggio delle apparecchiature e degli accessori. Compreso l'abbassamento, il carico e trasporto ad impianti di stoccaggio, di recupero o a discarica. Esclusi gli oneri di smaltimento",
-            "unit_of_measure": "cad",
-            "quantity": 10,
-            "unit_price": 65.39,
-            "total_price": 653.9
-          },
-          {
-            "category": "DEMOLIZIONI E RIMOZIONI",
-            "sub_category": null,
-            "item_number": 9,
-            "item_code": "G 1.02.4 a",
-            "description": "Rimozione delle linee di alimentazione degli apparecchi igienico-sanitari fino alle valvole di intercettazione e delle relative tubazioni di scarico fino alla colonna principale. Comprese le opere di demolizione a parete e a pavimento, i tagli, le intercettazioni,... il carico e il trasporto delle macerie ad impianti di stoccaggio, di recupero o a discarica. Esclusi gli oneri di smaltimento: linee acqua calda e fredda",
-            "unit_of_measure": "cad",
-            "quantity": 6,
-            "unit_price": 167.52,
-            "total_price": 1005.12
-          },
-          {
-            "category": "DEMOLIZIONI E RIMOZIONI",
-            "sub_category": null,
-            "item_number": 10,
-            "item_code": "G 1.02.4 b",
-            "description": "Rimozione delle linee di alimentazione degli apparecchi igienico-sanitari fino alle valvole di intercettazione e delle relative tubazioni di scarico fino alla colonna principale. Comprese le opere di demolizione a parete e a pavimento, i tagli, le intercettazioni,... il carico e il trasporto delle macerie ad impianti di stoccaggio, di recupero o a discarica. Esclusi gli oneri di smaltimento: linee acqua fredda",
-            "unit_of_measure": "cad",
-            "quantity": 4,
-            "unit_price": 145.03,
-            "total_price": 580.12
-          },
-          {
-            "category": "DEMOLIZIONI E RIMOZIONI",
-            "sub_category": null,
-            "item_number": 11,
-            "item_code": "G 1.02.5",
-            "description": "Rimozione punto di utilizzo idrico e scarico di apparecchi igienico-sanitari all'interno di bagni, wc, docce, cucine ecc. … sono inoltre comprese le attività connesse a garantire la continuità del servizio all'interno dello stabile. Sono esclusi gli oneri di smaltimento",
-            "unit_of_measure": "cad",
-            "quantity": 10,
-            "unit_price": 282.42,
-            "total_price": 2824.2
-          },
-          {
-            "category": "DEMOLIZIONI E RIMOZIONI",
-            "sub_category": null,
-            "item_number": 12,
-            "item_code": "A 3.02.17 b",
-            "description": "Rimozione di rubinetterie, saracinesche, apparecchi di intercettazione vari, comprese opere murarie: per gruppo di rubinetti sino al diametro 3/4\"",
-            "unit_of_measure": "cad",
-            "quantity": 5,
-            "unit_price": 21.61,
-            "total_price": 108.05
-          },
-          {
-            "category": "DEMOLIZIONI E RIMOZIONI",
-            "sub_category": null,
-            "item_number": 13,
-            "item_code": "A 3.02.24 b.2.",
-            "description": "Rimozione rete di distribuzione e terminali (radiatori, fan-coil, ecc), di impianto di riscaldamento compreso ogni onere e magistero per chiusura delle tubazioni di adduzione e scarico, svuotamento dell'impianto, rimozione di mensole, trasporto a rifiuto del materiale inutilizzabile nell'ambito del cantiere e quanto altro occorre: radiatori in ghisa e/o in alluminio: da 7 a 12 elementi per radiatore",
-            "unit_of_measure": "cad",
-            "quantity": 12,
-            "unit_price": 12.8,
-            "total_price": 153.6
-          },
-          {
-            "category": "DEMOLIZIONI E RIMOZIONI",
-            "sub_category": null,
-            "item_number": 14,
-            "item_code": "A 3.02.24 d",
-            "description": "fan-coil (UNITA' ESTERNE, FANCOIL, SPLIT)",
-            "unit_of_measure": "cad",
-            "quantity": 22,
-            "unit_price": 17.61,
-            "total_price": 387.42
-          },
-          {
-            "category": "DEMOLIZIONI E RIMOZIONI",
-            "sub_category": null,
-            "item_number": 15,
-            "item_code": "A 3.02.29",
-            "description": "Smontaggio di infissi in profilato di ferro o di alluminio calcolato sulla superficie, inclusa l'eventuale parte vetrata, compresi telaio, controtelaio, smuratura delle grappe o dei tasselli di tenuta ed eventuale taglio a sezione degli elementi (PORTA A VETRI INGRESSO BLINDATA)",
-            "unit_of_measure": "mq",
-            "quantity": 18,
-            "unit_price": 24.82,
-            "total_price": 446.76
-          },
-          {
-            "category": "DEMOLIZIONI E RIMOZIONI",
-            "sub_category": null,
-            "item_number": 16,
-            "item_code": "A 3.02.26",
-            "description": "Smontaggio di porte, cancelli, ringhiere, cancellate ecc in ferro pieno… (GRATA FINESTRA INGRESSO)",
-            "unit_of_measure": "kg",
-            "quantity": 40.32,
-            "unit_price": 1.19,
-            "total_price": 47.98
-          },
-          {
-            "category": "DEMOLIZIONI E RIMOZIONI",
-            "sub_category": null,
-            "item_number": 17,
-            "item_code": "A 3.03.6",
-            "description": "Carico e trasporto a discariche e/o impianti autorizzati che dovranno vidimare copia del formulario di identificazione del rifiuto trasportato secondo le norme vigenti di materiali di risulta provenienti da demolizioni, con autocarro di portata fino a 1.5 ton o mezzo di uguali caratteristiche se preventivamente autorizzato dalla D.L., compresi carico, viaggio di andata e ritorno e scarico con esclusione degli oneri di discarica",
-            "unit_of_measure": "ton",
-            "quantity": 4.66,
-            "unit_price": 89.31,
-            "total_price": 416.18
-          },
-          {
-            "category": "DEMOLIZIONI E RIMOZIONI",
-            "sub_category": null,
-            "item_number": 18,
-            "item_code": "A 3.03.7 d",
-            "description": "Costo per il conferimento dei rifiuti a impianto di recupero o discarica autorizzata ai fini del loro recupero/smaltimento: recuperabile",
-            "unit_of_measure": "ton",
-            "quantity": 6.51,
-            "unit_price": 24.84,
-            "total_price": 161.71
+            "category_total": 11112.09,
+            "items": [
+              {
+                "reference": "01",
+                "code": "A 3.01.9 a",
+                "description": "Demolizione di muratura di tamponamento e di tramezzi, compresi intonaci, rivestimenti, coibenti, tubazioni di qualsiasi natura (canalizzazioni idriche, termiche, elettriche, telefoniche, gas, ecc), eseguita anche con idonei mezzi compreso il tiro in discesa dei materiali, il trasporto, la cernita e l'accatastamento nei siti che verranno indicati dalla DL nell'ambito del cantiere dei materiali utilizzabili ... escluso il trasporto in discarica...: (PER PORTE BAGNI) laterizi pieni spessore totale fino a 160 mm",
+                "quantity": 3,
+                "unit": "mq",
+                "unit_price": 20.01,
+                "item_total": 60.03
+              },
+              {
+                "reference": "02",
+                "code": "A 3.01.10 a",
+                "description": "Demolizione di controsoffitti in genere, sia orizzontali che centinati: (PER CORRIDOI) gesso e relativo supporto",
+                "quantity": 70,
+                "unit": "mq",
+                "unit_price": 10.8,
+                "item_total": 756
+              },
+              {
+                "reference": "03",
+                "code": "G 1.01.1 a",
+                "description": "Demolizione di pavimenti interni, comprese le opere provvisionali di protezione, la movimentazione con qualsiasi mezzo delle macerie nell'ambito del cantiere... il carico e trasporto delle macerie agli impianti di stoccaggio, di recupero, o a discarica esclusi gli oneri di smaltimento: in piastrelle di cemento, ceramica, cotto, con relativa malta di allettamento",
+                "quantity": 13,
+                "unit": "mq",
+                "unit_price": 19.01,
+                "item_total": 247.13
+              },
+              {
+                "reference": "04",
+                "code": "G 1.01.1 b",
+                "description": "Demolizione di pavimenti interni, comprese le opere provvisionali di protezione, la movimentazione con qualsiasi mezzo delle macerie nell'ambito del cantiere... il carico e trasporto delle macerie agli impianti di stoccaggio, di recupero, o a discarica esclusi gli oneri di smaltimento: resilienti (PVC, linoleum, gomma ecc)",
+                "quantity": 88,
+                "unit": "mq",
+                "unit_price": 9.37,
+                "item_total": 824.56
+              },
+              {
+                "reference": "05",
+                "code": "G 1.01.1 c",
+                "description": "Demolizione di pavimenti interni, comprese le opere provvisionali di protezione, la movimentazione con qualsiasi mezzo delle macerie nell'ambito del cantiere... il carico e trasporto delle macerie agli impianti di stoccaggio, di recupero, o a discarica esclusi gli oneri di smaltimento: in legno, moquette",
+                "quantity": 166,
+                "unit": "mq",
+                "unit_price": 7.68,
+                "item_total": 1274.88
+              },
+              {
+                "reference": "06",
+                "code": "A 3.01.16 a",
+                "description": "Demolizione di rivestimenti di pareti, compresa la demolizione della sottostante malta di allettamento, calo in basso e l'avvicinamento al luogo di deposito provvisorio nell'ambito del cantiere, escluso il trasporto a rifiuto in discarica autorizzata del materiale non utilizzabile: in piastrelle o tesserine di gres ceramica o vetro e simili",
+                "quantity": 45,
+                "unit": "mq",
+                "unit_price": 15.21,
+                "item_total": 684.45
+              },
+              {
+                "reference": "07",
+                "code": "A 3.02.15",
+                "description": "Rimozione di battiscopa, cornici o mantovane in legno compresi eventuale calo in basso, avvicinamento al luogo di deposito provvisorio",
+                "quantity": 300,
+                "unit": "ml",
+                "unit_price": 1.6,
+                "item_total": 480
+              },
+              {
+                "reference": "08",
+                "code": "G 1.02.3",
+                "description": "Rimozione di apparecchi igienico-sanitari, incluso lo smontaggio delle apparecchiature e degli accessori. Compreso l'abbassamento, il carico e trasporto ad impianti di stoccaggio, di recupero o a discarica. Esclusi gli oneri di smaltimento",
+                "quantity": 10,
+                "unit": "cad",
+                "unit_price": 65.39,
+                "item_total": 653.9
+              },
+              {
+                "reference": "09",
+                "code": "G 1.02.4 a",
+                "description": "Rimozione delle linee di alimentazione degli apparecchi igienico-sanitari fino alle valvole di intercettazione e delle relative tubazioni di scarico fino alla colonna principale. Comprese le opere di demolizione a parete e a pavimento, i tagli, le intercettazioni,... il carico e il trasporto delle macerie ad impianti di stoccaggio, di recupero o a discarica. Esclusi gli oneri di smaltimento: linee acqua calda e fredda",
+                "quantity": 6,
+                "unit": "cad",
+                "unit_price": 167.52,
+                "item_total": 1005.12
+              },
+              {
+                "reference": "10",
+                "code": "G 1.02.4 b",
+                "description": "Rimozione delle linee di alimentazione degli apparecchi igienico-sanitari fino alle valvole di intercettazione e delle relative tubazioni di scarico fino alla colonna principale. Comprese le opere di demolizione a parete e a pavimento, i tagli, le intercettazioni,... il carico e il trasporto delle macerie ad impianti di stoccaggio, di recupero o a discarica. Esclusi gli oneri di smaltimento: linee acqua fredda",
+                "quantity": 4,
+                "unit": "cad",
+                "unit_price": 145.03,
+                "item_total": 580.12
+              },
+              {
+                "reference": "11",
+                "code": "G 1.02.5",
+                "description": "Rimozione punto di utilizzo idrico e scarico di apparecchi igienico-sanitari all'interno di bagni, wc, docce, cucine ecc. … sono inoltre comprese le attività connesse a garantire la continuità del servizio all'interno dello stabile. Sono esclusi gli oneri di smaltimento",
+                "quantity": 10,
+                "unit": "cad",
+                "unit_price": 282.42,
+                "item_total": 2824.2
+              },
+              {
+                "reference": "12",
+                "code": "A 3.02.17 b",
+                "description": "Rimozione di rubinetterie, saracinesche, apparecchi di intercettazione vari, comprese opere murarie: per gruppo di rubinetti sino al diametro 3/4\"",
+                "quantity": 5,
+                "unit": "cad",
+                "unit_price": 21.61,
+                "item_total": 108.05
+              },
+              {
+                "reference": "13",
+                "code": "A 3.02.24 b.2.",
+                "description": "Rimozione rete di distribuzione e terminali (radiatori, fan-coil, ecc), di impianto di riscaldamento compreso ogni onere e magistero per chiusura delle tubazioni di adduzione e scarico, svuotamento dell'impianto, rimozione di mensole, trasporto a rifiuto del materiale inutilizzabile nell'ambito del cantiere e quanto altro occorre: radiatori in ghisa e/o in alluminio: da 7 a 12 elementi per radiatore",
+                "quantity": 12,
+                "unit": "cad",
+                "unit_price": 12.8,
+                "item_total": 153.6
+              },
+              {
+                "reference": "14",
+                "code": "A 3.02.24 d",
+                "description": "fan-coil (UNITA' ESTERNE, FANCOIL, SPLIT)",
+                "quantity": 22,
+                "unit": "cad",
+                "unit_price": 17.61,
+                "item_total": 387.42
+              },
+              {
+                "reference": "15",
+                "code": "A 3.02.29",
+                "description": "Smontaggio di infissi in profilato di ferro o di alluminio calcolato sulla superficie, inclusa l'eventuale parte vetrata, compresi telaio, controtelaio, smuratura delle grappe o dei tasselli di tenuta ed eventuale taglio a sezione degli elementi (PORTA A VETRI INGRESSO BLINDATA)",
+                "quantity": 18,
+                "unit": "mq",
+                "unit_price": 24.82,
+                "item_total": 446.76
+              },
+              {
+                "reference": "16",
+                "code": "A 3.02.26",
+                "description": "Smontaggio di porte, cancelli, ringhiere, cancellate ecc in ferro pieno… (GRATA FINESTRA INGRESSO)",
+                "quantity": 40.32,
+                "unit": "kg",
+                "unit_price": 1.19,
+                "item_total": 47.98
+              },
+              {
+                "reference": "17",
+                "code": "A 3.03.6",
+                "description": "Carico e trasporto a discariche e/o impianti autorizzati che dovranno vidimare copia del formulario di identificazione del rifiuto trasportato secondo le norme vigenti di materiali di risulta provenienti da demolizioni, con autocarro di portata fino a 1.5 ton o mezzo di uguali caratteristiche se preventivamente autorizzato dalla D.L., compresi carico, viaggio di andata e ritorno e scarico con esclusione degli oneri di discarica",
+                "quantity": 4.66,
+                "unit": "ton",
+                "unit_price": 89.31,
+                "item_total": 416.18
+              },
+              {
+                "reference": "18",
+                "code": "A 3.03.7 d",
+                "description": "Costo per il conferimento dei rifiuti a impianto di recupero o discarica autorizzata ai fini del loro recupero/smaltimento: recuperabile",
+                "quantity": 6.51,
+                "unit": "ton",
+                "unit_price": 24.84,
+                "item_total": 161.71
+              }
+            ]
           },
           {
             "category": "RICOSTRUZIONI",
-            "sub_category": null,
-            "item_number": 19,
-            "item_code": "A 9.05.2 c",
-            "description": "Tramezzature in pannelli di latero-gesso, 33x100 cm, con superficie liscia, battente e controbattente, comprese tracce alle testate ed ammorsature, stuccatura dei giunti, tagli a misura ed ogni altro onere e magistero per fornire l'opera eseguita a perfetta regola d'arte: spessore 12 cm",
-            "unit_of_measure": "mq",
-            "quantity": 32,
-            "unit_price": 62.28,
-            "total_price": 1992.96
-          },
-          {
-            "category": "RICOSTRUZIONI",
-            "sub_category": null,
-            "item_number": 20,
-            "item_code": "A 12.01.4 b",
-            "description": "Intonaco pronto premiscelato in leganti speciali costituito da un primo strato di fondo e da uno strato di finitura, tirato in piano e fratazzato, applicato con le necessarie poste e guide, rifinito con uno strato di malta fine… esclusi i ponteggi (NEI BAGNI PARETI DEMOLIZ RIVESTIM): con base grassello di calce",
-            "unit_of_measure": "mq",
-            "quantity": 45,
-            "unit_price": 38.92,
-            "total_price": 1751.4
-          },
-          {
-            "category": "RICOSTRUZIONI",
-            "sub_category": null,
-            "item_number": 21,
-            "item_code": "A 14.02.2 a",
-            "description": "Rivestimento di pareti interne con piastrelle di gres con superficie liscia posta in opera su intonaco rustico da pagarsi a parte, compresi l'allettamento con collante, le stuccature dei giunti con cemento colorato o idoneo sigillante, i pezzi speciali, i terminali e la pulitura: gres ceramico a colori chiari 7,5 x 15 cm (BAGNI)",
-            "unit_of_measure": "mq",
-            "quantity": 66,
-            "unit_price": 63.83,
-            "total_price": 4212.78
-          },
-          {
-            "category": "RICOSTRUZIONI",
-            "sub_category": null,
-            "item_number": 22,
-            "item_code": "A 14.01.18 d",
-            "description": "Pavimento in piastrelle di gres fine porcellanato (prima scelta) poste in opera su letto di malta bastarda, previo spolvero di cemento tipo 32.5 con giunti connessi a cemento bianco o idoneo sigillante, compresi tagli, sfridi e pulitura finale: dimensioni 60 x 60 cm granigliato naturale",
-            "unit_of_measure": "mq",
-            "quantity": 21,
-            "unit_price": 93.29,
-            "total_price": 1959.09
-          },
-          {
-            "category": "RICOSTRUZIONI",
-            "sub_category": null,
-            "item_number": 23,
-            "item_code": "A 7.03.06 a",
-            "description": "Massetto premiscelato pronto all'impiego per lavori di recupero, costituito da malta premiscelata per la realizzazione di sottofondi esterni ed interni ad asciugamento rapido e ritiro fortemente compensato: per uno spessore fino a 20 mm",
-            "unit_of_measure": "mq",
-            "quantity": 166,
-            "unit_price": 35.03,
-            "total_price": 5814.98
-          },
-          {
-            "category": "RICOSTRUZIONI",
-            "sub_category": null,
-            "item_number": 24,
-            "item_code": "A 9.04.6 a",
-            "description": "Fornitura e posa in opera di lastra prefabbricata in gesso cartonato fonoisolante e termoisolante di spessore variabile, completa di certificato delle caratteristiche, per la realizzazione di pareti, contropareti, controsoffitti: Lastra prefabbricata in gesso cartonato fonoisolante spessore 12,5 mm",
-            "unit_of_measure": "mq",
-            "quantity": 160,
-            "unit_price": 34.23,
-            "total_price": 5476.8
-          },
-          {
-            "category": "RICOSTRUZIONI",
-            "sub_category": null,
-            "item_number": 25,
-            "item_code": "A 14.01.33 b",
-            "description": "Pavimentazione in linoleum con piastrelle da 50x50 cm, oppure con teli da 2,00 di altezza: in teli alti 2,00 mt e dello spessore di 2,5 mm circa",
-            "unit_of_measure": "mq",
-            "quantity": 266,
-            "unit_price": 63.91,
-            "total_price": 17000.06
-          },
-          {
-            "category": "RICOSTRUZIONI",
-            "sub_category": null,
-            "item_number": 26,
-            "item_code": "A 14.01.25.k",
-            "description": "PER ANALOGIA Pavimento in tavolette di legno (lamparquet) prima scelta, conforme alle norme UNI 4375/A, di spessore 10 mm, da 4-6 cm di larghezza, 22-32 cm di lunghezza, posto in opera su adeguato piano di posa da pagarsi a parte, compresi i tagli, sfridi, collanti, lamatura e laccatura. RECUPERO PARQUET ESISTENTE: Rovere",
-            "unit_of_measure": "mq",
-            "quantity": 43,
-            "unit_price": 94.3,
-            "total_price": 4054.9
+            "category_total": 42262.97,
+            "items": [
+              {
+                "reference": "19",
+                "code": "A 9.05.2 c",
+                "description": "Tramezzature in pannelli di latero-gesso, 33x100 cm, con superficie liscia, battente e controbattente, comprese tracce alle testate ed ammorsature, stuccatura dei giunti, tagli a misura ed ogni altro onere e magistero per fornire l'opera eseguita a perfetta regola d'arte: spessore 12 cm",
+                "quantity": 32,
+                "unit": "mq",
+                "unit_price": 62.28,
+                "item_total": 1992.96
+              },
+              {
+                "reference": "20",
+                "code": "A 12.01.4 b",
+                "description": "Intonaco pronto premiscelato in leganti speciali costituito da un primo strato di fondo e da uno strato di finitura, tirato in piano e fratazzato, applicato con le necessarie poste e guide, rifinito con uno strato di malta fine… esclusi i ponteggi (NEI BAGNI PARETI DEMOLIZ RIVESTIM): con base grassello di calce",
+                "quantity": 45,
+                "unit": "mq",
+                "unit_price": 38.92,
+                "item_total": 1751.4
+              },
+              {
+                "reference": "21",
+                "code": "A 14.02.2 a",
+                "description": "Rivestimento di pareti interne con piastrelle di gres con superficie liscia posta in opera su intonaco rustico da pagarsi a parte, compresi l'allettamento con collante, le stuccature dei giunti con cemento colorato o idoneo sigillante, i pezzi speciali, i terminali e la pulitura: gres ceramico a colori chiari 7,5 x 15 cm (BAGNI)",
+                "quantity": 66,
+                "unit": "mq",
+                "unit_price": 63.83,
+                "item_total": 4212.78
+              },
+              {
+                "reference": "22",
+                "code": "A 14.01.18 d",
+                "description": "Pavimento in piastrelle di gres fine porcellanato (prima scelta) poste in opera su letto di malta bastarda, previo spolvero di cemento tipo 32.5 con giunti connessi a cemento bianco o idoneo sigillante, compresi tagli, sfridi e pulitura finale: dimensioni 60 x 60 cm granigliato naturale",
+                "quantity": 21,
+                "unit": "mq",
+                "unit_price": 93.29,
+                "item_total": 1959.09
+              },
+              {
+                "reference": "23",
+                "code": "A 7.03.06 a",
+                "description": "Massetto premiscelato pronto all'impiego per lavori di recupero, costituito da malta premiscelata per la realizzazione di sottofondi esterni ed interni ad asciugamento rapido e ritiro fortemente compensato: per uno spessore fino a 20 mm",
+                "quantity": 166,
+                "unit": "mq",
+                "unit_price": 35.03,
+                "item_total": 5814.98
+              },
+              {
+                "reference": "24",
+                "code": "A 9.04.6 a",
+                "description": "Fornitura e posa in opera di lastra prefabbricata in gesso cartonato fonoisolante e termoisolante di spessore variabile, completa di certificato delle caratteristiche, per la realizzazione di pareti, contropareti, controsoffitti: Lastra prefabbricata in gesso cartonato fonoisolante spessore 12,5 mm",
+                "quantity": 160,
+                "unit": "mq",
+                "unit_price": 34.23,
+                "item_total": 5476.8
+              },
+              {
+                "reference": "25",
+                "code": "A 14.01.33 b",
+                "description": "Pavimentazione in linoleum con piastrelle da 50x50 cm, oppure con teli da 2,00 di altezza: in teli alti 2,00 mt e dello spessore di 2,5 mm circa",
+                "quantity": 266,
+                "unit": "mq",
+                "unit_price": 63.91,
+                "item_total": 17000.06
+              },
+              {
+                "reference": "26",
+                "code": "A 14.01.25.k",
+                "description": "PER ANALOGIA Pavimento in tavolette di legno (lamparquet) prima scelta, conforme alle norme UNI 4375/A, di spessore 10 mm, da 4-6 cm di larghezza, 22-32 cm di lunghezza, posto in opera su adeguato piano di posa da pagarsi a parte, compresi i tagli, sfridi, collanti, lamatura e laccatura. RECUPERO PARQUET ESISTENTE: Rovere",
+                "quantity": 43,
+                "unit": "mq",
+                "unit_price": 94.3,
+                "item_total": 4054.9
+              }
+            ]
           },
           {
             "category": "OPERE DI PITTURA",
-            "sub_category": null,
-            "item_number": 27,
-            "item_code": "A 20.01.8",
-            "description": "Stuccatura e rasatura di intonaci civili nuovi, per dare le superfici perfettamente pronte alla tinteggiatura",
-            "unit_of_measure": "mq",
-            "quantity": 1335,
-            "unit_price": 6.32,
-            "total_price": 8437.2
-          },
-          {
-            "category": "OPERE DI PITTURA",
-            "sub_category": null,
-            "item_number": 28,
-            "item_code": "A 20.01.13 a.2",
-            "description": "Tinteggiatura con pittura lavabile di resina sintetica emulsionabile (idropittura) in tinte non forti a tre mani a coprire: con pitture vinilacriliche",
-            "unit_of_measure": "mq",
-            "quantity": 1335,
-            "unit_price": 12.17,
-            "total_price": 16246.95
-          },
-          {
-            "category": "IMPIANTI",
-            "sub_category": "Impianto elettrico",
-            "item_number": 29,
-            "item_code": "D 1.01.1 b",
-            "description": "Punto luce e punto di comando sottotraccia esclusa la linea dorsale comprensivo delle scatole di derivazione e morsetti a mantello, conduttori del tipo FS17 di sezione minima di fase e di terra pari a 1,5 mmq, scatola portafrutto, cestello, incassata al muro, frutto, tubazione in pvc autoestinguente incassata sotto intonaco diametro minimo 20mm. Posto in opera a regola d'arte, escluse le opere murarie, incluso quanto altro occorre per dare l'opera finita a regola d'arte: punto luce con doppia linea di alimentazione",
-            "unit_of_measure": "cad",
-            "quantity": 288,
-            "unit_price": 20.91,
-            "total_price": 6022.08
+            "category_total": 24684.15,
+            "items": [
+              {
+                "reference": "27",
+                "code": "A 20.01.8",
+                "description": "Stuccatura e rasatura di intonaci civili nuovi, per dare le superfici perfettamente pronte alla tinteggiatura",
+                "quantity": 1335,
+                "unit": "mq",
+                "unit_price": 6.32,
+                "item_total": 8437.2
+              },
+              {
+                "reference": "28",
+                "code": "A 20.01.13 a.2",
+                "description": "Tinteggiatura con pittura lavabile di resina sintetica emulsionabile (idropittura) in tinte non forti a tre mani a coprire: con pitture vinilacriliche",
+                "quantity": 1335,
+                "unit": "mq",
+                "unit_price": 12.17,
+                "item_total": 16246.95
+              }
+            ]
           },
           {
             "category": "IMPIANTI",
-            "sub_category": "Impianto elettrico",
-            "item_number": 30,
-            "item_code": "D 1.01.2 b",
-            "description": "Incremento al punto luce in traccia per quota linea dorsale: incluse le opere murarie con conduttori tipo FS17",
-            "unit_of_measure": "cad",
-            "quantity": 288,
-            "unit_price": 13.18,
-            "total_price": 3795.84
-          },
-          {
-            "category": "IMPIANTI",
-            "sub_category": "Impianto elettrico",
-            "item_number": 31,
-            "item_code": "D 1.01.3 a",
-            "description": "Incremento al punto luce per opere murarie comprensivo degli scassi e dei ripristini della muratura esistente di qualsiasi tipo, esclusa quella in pietra, dalla scatola di derivazione della linea dorsale, compresa la rasatura ed esclusa la tinteggiatura: per punto luce semplice o doppio",
-            "unit_of_measure": "cad",
-            "quantity": 288,
-            "unit_price": 8.53,
-            "total_price": 2456.64
-          },
-          {
-            "category": "IMPIANTI",
-            "sub_category": "Impianto elettrico",
-            "item_number": 32,
-            "item_code": "D 1.01.8 c",
-            "description": "Punto di comando con regolatore elettronico di luminosità da applicare su scatola portafrutto, in sostituzione del dispositivo di comando, per la regolazione di carichi resistivi, max 500 W, completo di filtro antidisturbo, accessori e cablaggio. E' compreso quanto altro occorre per il lavoro finito: con comando a pulsante",
-            "unit_of_measure": "cad",
-            "quantity": 15,
-            "unit_price": 65.85,
-            "total_price": 987.75
-          },
-          {
-            "category": "IMPIANTI",
-            "sub_category": "Impianto elettrico",
-            "item_number": 33,
-            "item_code": "D 1.02.1 a",
-            "description": "Punto presa sottotraccia esclusa la linea dorsale comprensivo della scatola di derivazione incassata a muro, morsetti di derivazione a mantello, conduttori del tipo FS17 di sezione minima di fase e di terra pari a 2,5 mmq (per prese fino a 16 A), 6mmq (per prese fino a 32 A), scatola portafrutto: per presa 2 x 10 A/16 A + T",
-            "unit_of_measure": "cad",
-            "quantity": 20,
-            "unit_price": 25.56,
-            "total_price": 511.2
-          },
-          {
-            "category": "IMPIANTI",
-            "sub_category": "Impianto elettrico",
-            "item_number": 34,
-            "item_code": "D 1.02.3",
-            "description": "Incremento al punto presa per opere murarie comprensivo degli scassi e dei ripristini della muratura esistente in forati o mattoni dalla scatola di derivazione della linea dorsale per punto presa, compresa la rasatura, esclusa la tinteggiatura.",
-            "unit_of_measure": "cad",
-            "quantity": 20,
-            "unit_price": 6.98,
-            "total_price": 139.6
-          },
-          {
-            "category": "IMPIANTI",
-            "sub_category": "Impianto elettrico",
-            "item_number": 35,
-            "item_code": "D 1.02.5 a",
-            "description": "Incremento al punto presa in vista per esecuzione IP44/IP55 realizzato con conduttori FS17 con tubazione in pvc autoestinguente rigida o flessibile, filettabile o raccordabile, scatole in pvc o in ferro. Il tutto posto in opera a regola d'arte: per punto presa in pvc",
-            "unit_of_measure": "cad",
-            "quantity": 20,
-            "unit_price": 7.75,
-            "total_price": 155
-          },
-          {
-            "category": "IMPIANTI",
-            "sub_category": "Impianto elettrico",
-            "item_number": 36,
-            "item_code": "D 1.02.11 a",
-            "description": "Presa CEE in materiale plastico autoestinguente in custodia minima IP55, provvista di interruttore di blocco e fusibili e di eventuali supporti, posta in opera a regola d'arte: 2P + T + 16A",
-            "unit_of_measure": "cad",
-            "quantity": 4,
-            "unit_price": 68.18,
-            "total_price": 272.72
-          },
-          {
-            "category": "IMPIANTI",
-            "sub_category": "Impianto elettrico",
-            "item_number": 37,
-            "item_code": "D 1.02.11 d",
-            "description": "3P + T + 32A",
-            "unit_of_measure": "cad",
-            "quantity": 6,
-            "unit_price": 110.78,
-            "total_price": 664.68
-          },
-          {
-            "category": "IMPIANTI",
-            "sub_category": "Impianto elettrico",
-            "item_number": 38,
-            "item_code": "D 2.01.01 b",
-            "description": "Cavo unipolare flessibile, conforme ai requisiti previsti dalla normativa europea regolamento UE 305/2011, prodotti da Costruzione CPR di rame ricotto isolato con materiale isolante in PVC di qualità S17, norme di riferimento CEI EN 50525, CEI 20-40; sigla FS17 450/750 V, sezione nominale; sezione 1,5 mmq",
-            "unit_of_measure": "m",
-            "quantity": 120,
-            "unit_price": 1.54,
-            "total_price": 184.8
-          },
-          {
-            "category": "IMPIANTI",
-            "sub_category": "Impianto elettrico",
-            "item_number": 39,
-            "item_code": "D 2.01.01 c",
-            "description": "sezione 2,5 mmq",
-            "unit_of_measure": "m",
-            "quantity": 70,
-            "unit_price": 2.12,
-            "total_price": 148.4
-          },
-          {
-            "category": "IMPIANTI",
-            "sub_category": "Impianto elettrico",
-            "item_number": 40,
-            "item_code": "D 2.01.01 d",
-            "description": "sezione 4 mmq",
-            "unit_of_measure": "m",
-            "quantity": 120,
-            "unit_price": 3.2,
-            "total_price": 384
-          },
-          {
-            "category": "IMPIANTI",
-            "sub_category": "Impianto elettrico",
-            "item_number": 41,
-            "item_code": "D 2.01.01 e",
-            "description": "sezione 6 mmq",
-            "unit_of_measure": "m",
-            "quantity": 80,
-            "unit_price": 4.99,
-            "total_price": 399.2
-          },
-          {
-            "category": "IMPIANTI",
-            "sub_category": "Impianto elettrico",
-            "item_number": 42,
-            "item_code": "D 2.02.1 a",
-            "description": "Cavo flessibile, conforme ai requisiti previsti dalla normative Europea Regolamento UE 305/2011 .. Con materiale isolante in gomma HEPR ad alto modulo di qualità G16 ..: sezione 1,5 mmq",
-            "unit_of_measure": "m",
-            "quantity": 120,
-            "unit_price": 3.16,
-            "total_price": 379.2
-          },
-          {
-            "category": "IMPIANTI",
-            "sub_category": "Impianto elettrico",
-            "item_number": 43,
-            "item_code": "D 2.02.1 b",
-            "description": "sezione 2,5 mmq",
-            "unit_of_measure": "m",
-            "quantity": 70,
-            "unit_price": 3.43,
-            "total_price": 240.1
-          },
-          {
-            "category": "IMPIANTI",
-            "sub_category": "Impianto elettrico",
-            "item_number": 44,
-            "item_code": "D 2.02.1 c",
-            "description": "sezione 4 mmq",
-            "unit_of_measure": "m",
-            "quantity": 120,
-            "unit_price": 4.81,
-            "total_price": 577.2
-          },
-          {
-            "category": "IMPIANTI",
-            "sub_category": "Impianto elettrico",
-            "item_number": 45,
-            "item_code": "D 2.02.1 d",
-            "description": "sezione 6 mmq",
-            "unit_of_measure": "m",
-            "quantity": 80,
-            "unit_price": 4.84,
-            "total_price": 387.2
-          },
-          {
-            "category": "IMPIANTI",
-            "sub_category": "Impianto elettrico",
-            "item_number": 46,
-            "item_code": "D 2.03.01 c",
-            "description": "Cavo telefonico per impianti interni rispondenti alle norme CEI 46-5 e CEI 20-22, CEI 20-37, tabella UNEL 36754 non propaganti incendio e a ridotta emissione di gas corrosivi isolato in materiale termoplastico PVC…: formazione a coppia 2 x 2 x 0.6",
-            "unit_of_measure": "m",
-            "quantity": 151,
-            "unit_price": 1.86,
-            "total_price": 280.86
-          },
-          {
-            "category": "IMPIANTI",
-            "sub_category": "Impianto elettrico",
-            "item_number": 47,
-            "item_code": "D 2.05.2 b",
-            "description": "Cavi per trasmissione dati rispondenti alle normative IEC 15801 EN 50173 con guaina a bassa emissione di fumi con conduttori twistati a filo unico con corda flessibile con isolamento centrale in polietilene e guaina in PVC a bassa emissione di fumi: cavo per trasmissione dati FTP categoria 6 24AWG, conforme ISO-IEC 11801: 4cp",
-            "unit_of_measure": "m",
-            "quantity": 150,
-            "unit_price": 4.37,
-            "total_price": 655.5
-          },
-          {
-            "category": "IMPIANTI",
-            "sub_category": "Impianto elettrico",
-            "item_number": 48,
-            "item_code": "D 7.02",
-            "description": "Quadro elettrico da incasso a struttura metallica, con lamiera dello spessore minimo 10/10 elettrosaldata e pressopiegata, verniciato a fuoco, modulare",
-            "unit_of_measure": "mq",
-            "quantity": 0.5,
-            "unit_price": 728.2,
-            "total_price": 364.1
-          },
-          {
-            "category": "IMPIANTI",
-            "sub_category": "Impianto elettrico",
-            "item_number": 49,
-            "item_code": "D 7.07.2",
-            "description": "Centralino in materiale termoplastico con sportello incernierato, IP55 predisposto al montaggio di apparecchiature modulari a mezzo guida DIN, completo di eventuale morsettiera, accessori: da 9 a 13 moduli",
-            "unit_of_measure": "cad",
-            "quantity": 1,
-            "unit_price": 53.65,
-            "total_price": 53.65
-          },
-          {
-            "category": "IMPIANTI",
-            "sub_category": "Impianto elettrico",
-            "item_number": 50,
-            "item_code": "D 7.19",
-            "description": "Presa italiana o Schucko 2 x 10/16 A +T del tipo modulare da quadro",
-            "unit_of_measure": "cad",
-            "quantity": 20,
-            "unit_price": 12.33,
-            "total_price": 246.6
-          },
-          {
-            "category": "IMPIANTI",
-            "sub_category": "Impianto elettrico",
-            "item_number": 51,
-            "item_code": "D 7.2",
-            "description": "Suoneria ronzatore del tipo modulare da quadro, per attacco su guida DIN completa di cablaggio, tensione 8/220V, in opera",
-            "unit_of_measure": "cad",
-            "quantity": 5,
-            "unit_price": 14.59,
-            "total_price": 72.95
-          },
-          {
-            "category": "IMPIANTI",
-            "sub_category": "Impianto elettrico",
-            "item_number": 52,
-            "item_code": "D 4.10.6",
-            "description": "Interruttore crepuscolare con soglia d'intervento 1/50 lux ritardo 20 sec, disinseribile completo di accessori per il montaggio, in opera",
-            "unit_of_measure": "cad",
-            "quantity": 5,
-            "unit_price": 134.93,
-            "total_price": 674.65
-          },
-          {
-            "category": "IMPIANTI",
-            "sub_category": "Impianto elettrico",
-            "item_number": 53,
-            "item_code": "D 13.01.62",
-            "description": "Sensore per la rilevazione della luminosità ambiente utilizzato per la connessione all'interruttore crepuscolare tipo LW/S3.1. montaggio superficiale, grado di protezione IP54",
-            "unit_of_measure": "cad",
-            "quantity": 5,
-            "unit_price": 187.21,
-            "total_price": 936.05
-          },
-          {
-            "category": "IMPIANTI",
-            "sub_category": "Impianto elettrico",
-            "item_number": 54,
-            "item_code": "D 3.23.1.b",
-            "description": "Sganciatore differenziale con soglia di intervento regolabile Idn da 0.03 A a 3A tempo di intervento istantaneo con indicazione di preallarme al 50% della soglia impostata, in opera: fino a 125 A",
-            "unit_of_measure": "cad",
-            "quantity": 1,
-            "unit_price": 617.81,
-            "total_price": 617.81
-          },
-          {
-            "category": "IMPIANTI",
-            "sub_category": "Impianto elettrico",
-            "item_number": 55,
-            "item_code": "D 3.06.1.a",
-            "description": "Interruttore magnetotermico differenziale con soglia di intervento differenziale di 300mA conforme alle norme CEI EN 61009 involucro modulare: bipolare fino a 32 A",
-            "unit_of_measure": "cad",
-            "quantity": 6,
-            "unit_price": 165.78,
-            "total_price": 994.68
-          },
-          {
-            "category": "IMPIANTI",
-            "sub_category": "Impianto elettrico",
-            "item_number": 56,
-            "item_code": "D 3.06.2.b",
-            "description": "bipolare fino a 63 A",
-            "unit_of_measure": "cad",
-            "quantity": 8,
-            "unit_price": 219.79,
-            "total_price": 1758.32
-          },
-          {
-            "category": "IMPIANTI",
-            "sub_category": "Impianto elettrico",
-            "item_number": 57,
-            "item_code": "D 3.08",
-            "description": "Relè differenziale modulare con dispositivo per attacco rapido, e trasformatore toroidale esterno, regolazione della sensibilità da 0.3mA a 2A, e il tempo di intervento da 20ms a 5s, completo di accessori in opera",
-            "unit_of_measure": "cad",
-            "quantity": 1,
-            "unit_price": 152.16,
-            "total_price": 152.16
-          },
-          {
-            "category": "IMPIANTI",
-            "sub_category": "Impianto idraulico",
-            "item_number": 58,
-            "item_code": "E 01054",
-            "description": "Rete generale di distribuzione acqua calda/fredda per un bagno standard realizzata all'interno del suddetto ambiente, con tubazioni in polietilene reticolato con giunzioni saldate con polifusore, tubazione sez 20 mm, raccordi finali con filettatura, completa di rubinetto di arresto del tipo da incasso a cappuccio con esclusione della colonna di adduzione idrica, della posa dei sanitari e della rubinetteria e dell'assistenza muraria",
-            "unit_of_measure": "cad",
-            "quantity": 2,
-            "unit_price": 896.7,
-            "total_price": 1793.4
-          },
-          {
-            "category": "IMPIANTI",
-            "sub_category": "Impianto idraulico",
-            "item_number": 59,
-            "item_code": "E 01180.a",
-            "description": "Realizzazione delle schermature di adduzione e scarico, con tubazioni in acciaio zincato ed in polipropilene ad innesto, per un bagno per disabili composto da un lavabo, vaso igienico e cassetta di risciacquamento con esclusione delle opere murarie per il passaggio delle tubazioni, la fornitura della rubinetteria: dimensioni bagno 2.10 x 1.80 m",
-            "unit_of_measure": "cad",
-            "quantity": 1,
-            "unit_price": 1576.62,
-            "total_price": 1576.62
-          },
-          {
-            "category": "IMPIANTI",
-            "sub_category": "Impianto idraulico",
-            "item_number": 60,
-            "item_code": "E 01058.a",
-            "description": "Predisposizione di allaccio per apparecchi igienico-sanitari fornito e posto in opera all'interno di bagni, wc, docce, cucine ecc: allaccio per lavabo",
-            "unit_of_measure": "cad",
-            "quantity": 5,
-            "unit_price": 197.8,
-            "total_price": 989
-          },
-          {
-            "category": "IMPIANTI",
-            "sub_category": "Impianto idraulico",
-            "item_number": 61,
-            "item_code": "E 01058.b",
-            "description": "allaccio per lavello cucina",
-            "unit_of_measure": "cad",
-            "quantity": 1,
-            "unit_price": 223.1,
-            "total_price": 223.1
-          },
-          {
-            "category": "IMPIANTI",
-            "sub_category": "Impianto idraulico",
-            "item_number": 62,
-            "item_code": "E 01058.f",
-            "description": "allaccio per lavastoviglie",
-            "unit_of_measure": "cad",
-            "quantity": 1,
-            "unit_price": 162.15,
-            "total_price": 162.15
-          },
-          {
-            "category": "IMPIANTI",
-            "sub_category": "Impianto idraulico",
-            "item_number": 63,
-            "item_code": "E 01058.i",
-            "description": "allaccio per bidet",
-            "unit_of_measure": "cad",
-            "quantity": 3,
-            "unit_price": 196.65,
-            "total_price": 589.95
-          },
-          {
-            "category": "IMPIANTI",
-            "sub_category": "Impianto idraulico",
-            "item_number": 64,
-            "item_code": "E 01058.m",
-            "description": "allaccio per vaso a cacciata",
-            "unit_of_measure": "cad",
-            "quantity": 3,
-            "unit_price": 111.55,
-            "total_price": 334.65
-          },
-          {
-            "category": "IMPIANTI",
-            "sub_category": "Impianto idraulico",
-            "item_number": 65,
-            "item_code": "E 01058.o",
-            "description": "allaccio per cassetta di scarico",
-            "unit_of_measure": "cad",
-            "quantity": 3,
-            "unit_price": 129.95,
-            "total_price": 389.85
-          },
-          {
-            "category": "IMPIANTI",
-            "sub_category": "Impianto idraulico",
-            "item_number": 66,
-            "item_code": "E 01058.r",
-            "description": "incremento per allaccio vaso o bidet sospeso",
-            "unit_of_measure": "cad",
-            "quantity": 5,
-            "unit_price": 67.85,
-            "total_price": 339.25
-          },
-          {
-            "category": "IMPIANTI",
-            "sub_category": "Impianto idraulico",
-            "item_number": 67,
-            "item_code": "E 01065.c",
-            "description": "Vaso igienico a sifone incorporato in porcellana vetrificata bianca dato in opera… collegato alla rete di scarico, comprese guarnizioni, anelli in gomma, collarini metallici, con esclusione delle opere murarie: sospeso con scarico a parete completo di struttura di sostegno e di sedile",
-            "unit_of_measure": "cad",
-            "quantity": 2,
-            "unit_price": 462.99,
-            "total_price": 925.98
-          },
-          {
-            "category": "IMPIANTI",
-            "sub_category": "Impianto idraulico",
-            "item_number": 68,
-            "item_code": "E 01186",
-            "description": "Cassetta da incasso da 7.5 l, posata in muratura con doppio risciacquo",
-            "unit_of_measure": "cad",
-            "quantity": 3,
-            "unit_price": 353.81,
-            "total_price": 1061.43
-          },
-          {
-            "category": "IMPIANTI",
-            "sub_category": "Impianto idraulico",
-            "item_number": 69,
-            "item_code": "E 01077.a",
-            "description": "Lavabo in porcellana vetrificata, su due mensole in ghisa smaltate dato in opera, collegato allo scarico e alle tubazioni di adduzione acqua calda e fredda … con esclusione delle opere murarie: delle dimensioni di circa 70 x 55 cm",
-            "unit_of_measure": "cad",
-            "quantity": 4,
-            "unit_price": 486.23,
-            "total_price": 1944.92
-          },
-          {
-            "category": "IMPIANTI",
-            "sub_category": "Impianto idraulico",
-            "item_number": 70,
-            "item_code": "E 01080.b",
-            "description": "Bidet in porcellana vetrificata monoblocco, dato in opera collegato allo scarico e alle tubazioni di adduzione di acqua calda e fredda … con esclusione delle opere murarie: sospeso, dimensioni 35 x 57 x 32 cm",
-            "unit_of_measure": "cad",
-            "quantity": 3,
-            "unit_price": 694.16,
-            "total_price": 2082.48
-          },
-          {
-            "category": "IMPIANTI",
-            "sub_category": "Impianto idraulico",
-            "item_number": 71,
-            "item_code": "E 01102.a",
-            "description": "Lavabo in ceramica con fronte concavo, appoggia gomiti e paraspruzzi, miscelatore meccanico monocomando con maniglia a presa facilitata con bocchello estraibile. Con esclusione delle opere murarie (PER BAGNO DISABILI): con mensole fisse in acciaio verniciato",
-            "unit_of_measure": "cad",
-            "quantity": 1,
-            "unit_price": 592.72,
-            "total_price": 592.72
-          },
-          {
-            "category": "IMPIANTI",
-            "sub_category": "Impianto idraulico",
-            "item_number": 72,
-            "item_code": "E 01104.a",
-            "description": "Vaso igienico (WC/bidet) in ceramica con sifone incorporato, catino allungato, sedile rimuovibile in plastica antiscivolo, apertura anteriore, completo di cassetta a zaino. Con esclusione delle opere murarie (PER BAGNO DISABILI): installato a pavimento",
-            "unit_of_measure": "cad",
-            "quantity": 1,
-            "unit_price": 795.33,
-            "total_price": 795.33
-          },
-          {
-            "category": "IMPIANTI",
-            "sub_category": "Impianto idraulico",
-            "item_number": 73,
-            "item_code": "E 01109",
-            "description": "Maniglione di sostegno destro o sinistro per lavabo, vasca, wc, bidet, ecc in alluminio rivestito in nylon, diametro esterno 35 mm, in opera compresi stop di fissaggio",
-            "unit_of_measure": "cad",
-            "quantity": 2,
-            "unit_price": 162.27,
-            "total_price": 324.54
-          },
-          {
-            "category": "IMPIANTI",
-            "sub_category": "Impianto idraulico",
-            "item_number": 74,
-            "item_code": "E 01126.b",
-            "description": "Miscelatore monocomando cromato per lavabo con scarico automatico: con leva clinica e bocca girevole",
-            "unit_of_measure": "cad",
-            "quantity": 4,
-            "unit_price": 168.22,
-            "total_price": 672.88
-          },
-          {
-            "category": "IMPIANTI",
-            "sub_category": "Impianto idraulico",
-            "item_number": 75,
-            "item_code": "E 01130",
-            "description": "Miscelatore monocomando cromato per bidet con erogazione a doccietta orientabile completo di scarico",
-            "unit_of_measure": "cad",
-            "quantity": 3,
-            "unit_price": 148.88,
-            "total_price": 446.64
-          },
-          {
-            "category": "IMPIANTI",
-            "sub_category": "Impianto idraulico",
-            "item_number": 76,
-            "item_code": "E 01002.c",
-            "description": "Tubo in acciaio senza saldatura a norma UNI EN 10255, esclusi gli scavi, i reinterri, tracce e raccorderia: diametro interno 3/4 spessore 2.6 mm",
-            "unit_of_measure": "m",
-            "quantity": 60,
-            "unit_price": 20.25,
-            "total_price": 1215
-          },
-          {
-            "category": "IMPIANTI",
-            "sub_category": "Impianto di condizionamento",
-            "item_number": 77,
-            "item_code": "E 03204.b",
-            "description": "Unità motocondensante esterna a volume (flusso) di refrigerante variabile R410A a pompa di calore condensata ad aria, ad espansione diretta, dotata di un compressore swing DC regolato da inverter collegato mediante circuito frigorifero a due tubi in rame ad unità interne, posta in opera con esclusione del collegamento elettrico, delle tubazioni e delle opere murarie: potenza frigorifera 28kW, potenza assorbita 6.32kW; potenza termica 31.5kW, potenza assorbita 5.47kW",
-            "unit_of_measure": "cad",
-            "quantity": 2,
-            "unit_price": 9542.68,
-            "total_price": 19085.36
-          },
-          {
-            "category": "IMPIANTI",
-            "sub_category": "Impianto di condizionamento",
-            "item_number": 78,
-            "item_code": "E 03011.e",
-            "description": "Unità interna del tipo a cassetta con mandata aria a 360° (roundflow) o a 4 vie, batteria in rame, sistema di controllo della qualità del refrigerante R410A mediante valvola di espansione lineare, scocca esterna in pvc, completa di filtro a lunga durata facilmente ispezionabile trattato contro le muffe, sistema di sollevamento condensa di tipo meccanico, ventilatore a 4 velocità, alette per la diffusione dell'aria in ambiente del tipo motorizzate, (dimensioni 600 x 600 mm o 840 x 840 mm) alimentazione elettrica 230W - 1 - 50 Hertz, posta in opera con esclusione del collegamento elettrico e delle tubazioni delle seguenti potenzialità: resa frigorifera 5.6kW, resa termica 6.3kW",
-            "unit_of_measure": "cad",
-            "quantity": 3,
-            "unit_price": 1380.79,
-            "total_price": 4142.37
-          },
-          {
-            "category": "IMPIANTI",
-            "sub_category": "Impianto di condizionamento",
-            "item_number": 79,
-            "item_code": "E 03011.f",
-            "description": "resa frigorifera 7.1kW, resa termica 8.0kW",
-            "unit_of_measure": "cad",
-            "quantity": 6,
-            "unit_price": 1506.21,
-            "total_price": 9037.26
-          },
-          {
-            "category": "IMPIANTI",
-            "sub_category": "Impianto di condizionamento",
-            "item_number": 80,
-            "item_code": "E 03011.h",
-            "description": "resa frigorifera 11.2kW, resa termica 12.5kW",
-            "unit_of_measure": "cad",
-            "quantity": 8,
-            "unit_price": 2155.58,
-            "total_price": 17244.64
-          },
-          {
-            "category": "IMPIANTI",
-            "sub_category": null,
-            "item_number": 80,
-            "item_code": "E 3.01.19.b.3",
-            "description": "Esecuzione di tracce nella muratura, eseguite a mano, compresi la chiusura delle tracce e l'avvicinamento del materiale di risulta al luogo di deposito provvisorio, in attesa del trasporto allo scarico: per tracce in muratura di pietrame tenero o mattoni pieni, della sezione da 226 cmq a 400 cmq (PER IMPIANTO ELETTRICO)",
-            "unit_of_measure": "m",
-            "quantity": 152,
-            "unit_price": 52.03,
-            "total_price": 7908.56
-          },
-          {
-            "category": "IMPIANTI",
-            "sub_category": null,
-            "item_number": 81,
-            "item_code": "E 3.01.19.b.1",
-            "description": "fino a 100 cmq (PER IMPIANTO IDRAULICO)",
-            "unit_of_measure": "m",
-            "quantity": 40,
-            "unit_price": 30.43,
-            "total_price": 1217.2
-          },
-          {
-            "category": "IMPIANTI",
-            "sub_category": null,
-            "item_number": 82,
-            "item_code": "E 3.01.19.b.2",
-            "description": "della sezione da 101 cmq a 225 cmq (PER IMPIANTO DI CONDIZIONAMENTO)",
-            "unit_of_measure": "m",
-            "quantity": 110,
-            "unit_price": 44.04,
-            "total_price": 4844.4
-          },
-          {
-            "category": "IMPIANTI",
-            "sub_category": null,
-            "item_number": 83,
-            "item_code": "A 3.03.5a",
-            "description": "Carico e trasporto a discariche e/o impianti autorizzati che dovranno vidimare copia del formulario di identificazione del rifiuto trasportato secondo le norme vigenti scavi anche se bagnato compreso il carico eseguito con mezzi o a mano e il successivo scarico. Esclusione oneri di discarica: compresi il carico a mano",
-            "unit_of_measure": "ton",
-            "quantity": 6.07,
-            "unit_price": 36.66,
-            "total_price": 222.53
-          },
-          {
-            "category": "IMPIANTI",
-            "sub_category": null,
-            "item_number": 84,
-            "item_code": "A 3.03.5e",
-            "description": "per ogni km ulteriore ai 10 km dal cantiere tale compenso viene corrisposto qualora la più vicina discarica risulti a distanza superiore a 10 km dal cantiere.",
-            "unit_of_measure": "ton",
-            "quantity": 6.07,
-            "unit_price": 1.1,
-            "total_price": 133.54
-          },
-          {
-            "category": "IMPIANTI",
-            "sub_category": null,
-            "item_number": 85,
-            "item_code": "A 3.03.7 d",
-            "description": "Costo per il conferimento dei rifiuti a impianto di recupero o discarica autorizzata ai fini del loro recupero/smaltimento: recuperabile",
-            "unit_of_measure": "ton",
-            "quantity": 6.07,
-            "unit_price": 24.84,
-            "total_price": 150.78
+            "category_total": 104959.47,
+            "items": [
+              {
+                "reference": "29",
+                "code": "D 1.01.1 b",
+                "description": "Punto luce e punto di comando sottotraccia esclusa la linea dorsale comprensivo delle scatole di derivazione e morsetti a mantello, conduttori del tipo FS17 di sezione minima di fase e di terra pari a 1,5 mmq, scatola portafrutto, cestello, incassata al muro, frutto, tubazione in pvc autoestinguente incassata sotto intonaco diametro minimo 20mm. Posto in opera a regola d'arte, escluse le opere murarie, incluso quanto altro occorre per dare l'opera finita a regola d'arte: punto luce con doppia linea di alimentazione",
+                "quantity": 288,
+                "unit": "cad",
+                "unit_price": 20.91,
+                "item_total": 6022.08
+              },
+              {
+                "reference": "30",
+                "code": "D 1.01.2 b",
+                "description": "Incremento al punto luce in traccia per quota linea dorsale: incluse le opere murarie con conduttori tipo FS17",
+                "quantity": 288,
+                "unit": "cad",
+                "unit_price": 13.18,
+                "item_total": 3795.84
+              },
+              {
+                "reference": "31",
+                "code": "D 1.01.3 a",
+                "description": "Incremento al punto luce per opere murarie comprensivo degli scassi e dei ripristini della muratura esistente di qualsiasi tipo, esclusa quella in pietra, dalla scatola di derivazione della linea dorsale, compresa la rasatura ed esclusa la tinteggiatura: per punto luce semplice o doppio",
+                "quantity": 288,
+                "unit": "cad",
+                "unit_price": 8.53,
+                "item_total": 2456.64
+              },
+              {
+                "reference": "32",
+                "code": "D 1.01.8 c",
+                "description": "Punto di comando con regolatore elettronico di luminosità da applicare su scatola portafrutto, in sostituzione del dispositivo di comando, per la regolazione di carichi resistivi, max 500 W, completo di filtro antidisturbo, accessori e cablaggio. E' compreso quanto altro occorre per il lavoro finito: con comando a pulsante",
+                "quantity": 15,
+                "unit": "cad",
+                "unit_price": 65.85,
+                "item_total": 987.75
+              },
+              {
+                "reference": "33",
+                "code": "D 1.02.1 a",
+                "description": "Punto presa sottotraccia esclusa la linea dorsale comprensivo della scatola di derivazione incassata a muro, morsetti di derivazione a mantello, conduttori del tipo FS17 di sezione minima di fase e di terra pari a 2,5 mmq (per prese fino a 16 A), 6mmq (per prese fino a 32 A), scatola portafrutto: per presa 2 x 10 A/16 A + T",
+                "quantity": 20,
+                "unit": "cad",
+                "unit_price": 25.56,
+                "item_total": 511.2
+              },
+              {
+                "reference": "34",
+                "code": "D 1.02.3",
+                "description": "Incremento al punto presa per opere murarie comprensivo degli scassi e dei ripristini della muratura esistente in forati o mattoni dalla scatola di derivazione della linea dorsale per punto presa, compresa la rasatura, esclusa la tinteggiatura.",
+                "quantity": 20,
+                "unit": "cad",
+                "unit_price": 6.98,
+                "item_total": 139.6
+              },
+              {
+                "reference": "35",
+                "code": "D 1.02.5 a",
+                "description": "Incremento al punto presa in vista per esecuzione IP44/IP55 realizzato con conduttori FS17 con tubazione in pvc autoestinguente rigida o flessibile, filettabile o raccordabile, scatole in pvc o in ferro. Il tutto posto in opera a regola d'arte: per punto presa in pvc",
+                "quantity": 20,
+                "unit": "cad",
+                "unit_price": 7.75,
+                "item_total": 155
+              },
+              {
+                "reference": "36",
+                "code": "D 1.02.11 a",
+                "description": "Presa CEE in materiale plastico autoestinguente in custodia minima IP55, provvista di interruttore di blocco e fusibili e di eventuali supporti, posta in opera a regola d'arte: 2P + T + 16A",
+                "quantity": 4,
+                "unit": "cad",
+                "unit_price": 68.18,
+                "item_total": 272.72
+              },
+              {
+                "reference": "37",
+                "code": "D 1.02.11 d",
+                "description": "3P + T + 32A",
+                "quantity": 6,
+                "unit": "cad",
+                "unit_price": 110.78,
+                "item_total": 664.68
+              },
+              {
+                "reference": "38",
+                "code": "D 2.01.01 b",
+                "description": "Cavo unipolare flessibile, conforme ai requisiti previsti dalla normativa europea regolamento UE 305/2011, prodotti da Costruzione CPR di rame ricotto isolato con materiale isolante in PVC di qualità S17, norme di riferimento CEI EN 50525, CEI 20-40; sigla FS17 450/750 V, sezione nominale; sezione 1,5 mmq",
+                "quantity": 120,
+                "unit": "m",
+                "unit_price": 1.54,
+                "item_total": 184.8
+              },
+              {
+                "reference": "39",
+                "code": "D 2.01.01 c",
+                "description": "sezione 2,5 mmq",
+                "quantity": 70,
+                "unit": "m",
+                "unit_price": 2.12,
+                "item_total": 148.4
+              },
+              {
+                "reference": "40",
+                "code": "D 2.01.01 d",
+                "description": "sezione 4 mmq",
+                "quantity": 120,
+                "unit": "m",
+                "unit_price": 3.2,
+                "item_total": 384
+              },
+              {
+                "reference": "41",
+                "code": "D 2.01.01 e",
+                "description": "sezione 6 mmq",
+                "quantity": 80,
+                "unit": "m",
+                "unit_price": 4.99,
+                "item_total": 399.2
+              },
+              {
+                "reference": "42",
+                "code": "D 2.02.1 a",
+                "description": "Cavo flessibile, conforme ai requisiti previsti dalla normative Europea Regolamento UE 305/2011 .. Con materiale isolante in gomma HEPR ad alto modulo di qualità G16 ..: sezione 1,5 mmq",
+                "quantity": 120,
+                "unit": "m",
+                "unit_price": 3.16,
+                "item_total": 379.2
+              },
+              {
+                "reference": "43",
+                "code": "D 2.02.1 b",
+                "description": "sezione 2,5 mmq",
+                "quantity": 70,
+                "unit": "m",
+                "unit_price": 3.43,
+                "item_total": 240.1
+              },
+              {
+                "reference": "44",
+                "code": "D 2.02.1 c",
+                "description": "sezione 4 mmq",
+                "quantity": 120,
+                "unit": "m",
+                "unit_price": 4.81,
+                "item_total": 577.2
+              },
+              {
+                "reference": "45",
+                "code": "D 2.02.1 d",
+                "description": "sezione 6 mmq",
+                "quantity": 80,
+                "unit": "m",
+                "unit_price": 4.84,
+                "item_total": 387.2
+              },
+              {
+                "reference": "46",
+                "code": "D 2.03.01 c",
+                "description": "Cavo telefonico per impianti interni rispondenti alle norme CEI 46-5 e CEI 20-22, CEI 20-37, tabella UNEL 36754 non propaganti incendio e a ridotta emissione di gas corrosivi isolato in materiale termoplastico PVC…: formazione a coppia 2 x 2 x 0.6",
+                "quantity": 151,
+                "unit": "m",
+                "unit_price": 1.86,
+                "item_total": 280.86
+              },
+              {
+                "reference": "47",
+                "code": "D 2.05.2 b",
+                "description": "Cavi per trasmissione dati rispondenti alle normative IEC 15801 EN 50173 con guaina a bassa emissione di fumi con conduttori twistati a filo unico con corda flessibile con isolamento centrale in polietilene e guaina in PVC a bassa emissione di fumi: cavo per trasmissione dati FTP categoria 6 24AWG, conforme ISO-IEC 11801: 4cp",
+                "quantity": 150,
+                "unit": "m",
+                "unit_price": 4.37,
+                "item_total": 655.5
+              },
+              {
+                "reference": "48",
+                "code": "D 7.02",
+                "description": "Quadro elettrico da incasso a struttura metallica, con lamiera dello spessore minimo 10/10 elettrosaldata e pressopiegata, verniciato a fuoco, modulare",
+                "quantity": 0.5,
+                "unit": "mq",
+                "unit_price": 728.2,
+                "item_total": 364.1
+              },
+              {
+                "reference": "49",
+                "code": "D 7.07.2",
+                "description": "Centralino in materiale termoplastico con sportello incernierato, IP55 predisposto al montaggio di apparecchiature modulari a mezzo guida DIN, completo di eventuale morsettiera, accessori: da 9 a 13 moduli",
+                "quantity": 1,
+                "unit": "cad",
+                "unit_price": 53.65,
+                "item_total": 53.65
+              },
+              {
+                "reference": "50",
+                "code": "D 7.19",
+                "description": "Presa italiana o Schucko 2 x 10/16 A +T del tipo modulare da quadro",
+                "quantity": 20,
+                "unit": "cad",
+                "unit_price": 12.33,
+                "item_total": 246.6
+              },
+              {
+                "reference": "51",
+                "code": "D 7.2",
+                "description": "Suoneria ronzatore del tipo modulare da quadro, per attacco su guida DIN completa di cablaggio, tensione 8/220V, in opera",
+                "quantity": 5,
+                "unit": "cad",
+                "unit_price": 14.59,
+                "item_total": 72.95
+              },
+              {
+                "reference": "52",
+                "code": "D 4.10.6",
+                "description": "Interruttore crepuscolare con soglia d'intervento 1/50 lux ritardo 20 sec, disinseribile completo di accessori per il montaggio, in opera",
+                "quantity": 5,
+                "unit": "cad",
+                "unit_price": 134.93,
+                "item_total": 674.65
+              },
+              {
+                "reference": "53",
+                "code": "D 13.01.62",
+                "description": "Sensore per la rilevazione della luminosità ambiente utilizzato per la connessione all'interruttore crepuscolare tipo LW/S3.1. montaggio superficiale, grado di protezione IP54",
+                "quantity": 5,
+                "unit": "cad",
+                "unit_price": 187.21,
+                "item_total": 936.05
+              },
+              {
+                "reference": "54",
+                "code": "D 3.23.1.b",
+                "description": "Sganciatore differenziale con soglia di intervento regolabile Idn da 0.03 A a 3A tempo di intervento istantaneo con indicazione di preallarme al 50% della soglia impostata, in opera: fino a 125 A",
+                "quantity": 1,
+                "unit": "cad",
+                "unit_price": 617.81,
+                "item_total": 617.81
+              },
+              {
+                "reference": "55",
+                "code": "D 3.06.1.a",
+                "description": "Interruttore magnetotermico differenziale con soglia di intervento differenziale di 300mA conforme alle norme CEI EN 61009 involucro modulare: bipolare fino a 32 A",
+                "quantity": 6,
+                "unit": "cad",
+                "unit_price": 165.78,
+                "item_total": 994.68
+              },
+              {
+                "reference": "56",
+                "code": "D 3.06.2.b",
+                "description": "bipolare fino a 63 A",
+                "quantity": 8,
+                "unit": "cad",
+                "unit_price": 219.79,
+                "item_total": 1758.32
+              },
+              {
+                "reference": "57",
+                "code": "D 3.08",
+                "description": "Relè differenziale modulare con dispositivo per attacco rapido, e trasformatore toroidale esterno, regolazione della sensibilità da 0.3mA a 2A, e il tempo di intervento da 20ms a 5s, completo di accessori in opera",
+                "quantity": 1,
+                "unit": "cad",
+                "unit_price": 152.16,
+                "item_total": 152.16
+              },
+              {
+                "reference": "58",
+                "code": "E 01054",
+                "description": "Rete generale di distribuzione acqua calda/fredda per un bagno standard realizzata all'interno del suddetto ambiente, con tubazioni in polietilene reticolato con giunzioni saldate con polifusore, tubazione sez 20 mm, raccordi finali con filettatura, completa di rubinetto di arresto del tipo da incasso a cappuccio con esclusione della colonna di adduzione idrica, della posa dei sanitari e della rubinetteria e dell'assistenza muraria",
+                "quantity": 2,
+                "unit": "cad",
+                "unit_price": 896.7,
+                "item_total": 1793.4
+              },
+              {
+                "reference": "59",
+                "code": "E 01180.a",
+                "description": "Realizzazione delle schermature di adduzione e scarico, con tubazioni in acciaio zincato ed in polipropilene ad innesto, per un bagno per disabili composto da un lavabo, vaso igienico e cassetta di risciacquamento con esclusione delle opere murarie per il passaggio delle tubazioni, la fornitura della rubinetteria: dimensioni bagno 2.10 x 1.80 m",
+                "quantity": 1,
+                "unit": "cad",
+                "unit_price": 1576.62,
+                "item_total": 1576.62
+              },
+              {
+                "reference": "60",
+                "code": "E 01058.a",
+                "description": "Predisposizione di allaccio per apparecchi igienico-sanitari fornito e posto in opera all'interno di bagni, wc, docce, cucine ecc: allaccio per lavabo",
+                "quantity": 5,
+                "unit": "cad",
+                "unit_price": 197.8,
+                "item_total": 989
+              },
+              {
+                "reference": "61",
+                "code": "E 01058.b",
+                "description": "allaccio per lavello cucina",
+                "quantity": 1,
+                "unit": "cad",
+                "unit_price": 223.1,
+                "item_total": 223.1
+              },
+              {
+                "reference": "62",
+                "code": "E 01058.f",
+                "description": "allaccio per lavastoviglie",
+                "quantity": 1,
+                "unit": "cad",
+                "unit_price": 162.15,
+                "item_total": 162.15
+              },
+              {
+                "reference": "63",
+                "code": "E 01058.i",
+                "description": "allaccio per bidet",
+                "quantity": 3,
+                "unit": "cad",
+                "unit_price": 196.65,
+                "item_total": 589.95
+              },
+              {
+                "reference": "64",
+                "code": "E 01058.m",
+                "description": "allaccio per vaso a cacciata",
+                "quantity": 3,
+                "unit": "cad",
+                "unit_price": 111.55,
+                "item_total": 334.65
+              },
+              {
+                "reference": "65",
+                "code": "E 01058.o",
+                "description": "allaccio per cassetta di scarico",
+                "quantity": 3,
+                "unit": "cad",
+                "unit_price": 129.95,
+                "item_total": 389.85
+              },
+              {
+                "reference": "66",
+                "code": "E 01058.r",
+                "description": "incremento per allaccio vaso o bidet sospeso",
+                "quantity": 5,
+                "unit": "cad",
+                "unit_price": 67.85,
+                "item_total": 339.25
+              },
+              {
+                "reference": "67",
+                "code": "E 01065.c",
+                "description": "Vaso igienico a sifone incorporato in porcellana vetrificata bianca dato in opera… collegato alla rete di scarico, comprese guarnizioni, anelli in gomma, collarini metallici, con esclusione delle opere murarie: sospeso con scarico a parete completo di struttura di sostegno e di sedile",
+                "quantity": 2,
+                "unit": "cad",
+                "unit_price": 462.99,
+                "item_total": 925.98
+              },
+              {
+                "reference": "68",
+                "code": "E 01186",
+                "description": "Cassetta da incasso da 7.5 l, posata in muratura con doppio risciacquo",
+                "quantity": 3,
+                "unit": "cad",
+                "unit_price": 353.81,
+                "item_total": 1061.43
+              },
+              {
+                "reference": "69",
+                "code": "E 01077.a",
+                "description": "Lavabo in porcellana vetrificata, su due mensole in ghisa smaltate dato in opera, collegato allo scarico e alle tubazioni di adduzione acqua calda e fredda … con esclusione delle opere murarie: delle dimensioni di circa 70 x 55 cm",
+                "quantity": 4,
+                "unit": "cad",
+                "unit_price": 486.23,
+                "item_total": 1944.92
+              },
+              {
+                "reference": "70",
+                "code": "E 01080.b",
+                "description": "Bidet in porcellana vetrificata monoblocco, dato in opera collegato allo scarico e alle tubazioni di adduzione di acqua calda e fredda … con esclusione delle opere murarie: sospeso, dimensioni 35 x 57 x 32 cm",
+                "quantity": 3,
+                "unit": "cad",
+                "unit_price": 694.16,
+                "item_total": 2082.48
+              },
+              {
+                "reference": "71",
+                "code": "E 01102.a",
+                "description": "Lavabo in ceramica con fronte concavo, appoggia gomiti e paraspruzzi, miscelatore meccanico monocomando con maniglia a presa facilitata con bocchello estraibile. Con esclusione delle opere murarie (PER BAGNO DISABILI): con mensole fisse in acciaio verniciato",
+                "quantity": 1,
+                "unit": "cad",
+                "unit_price": 592.72,
+                "item_total": 592.72
+              },
+              {
+                "reference": "72",
+                "code": "E 01104.a",
+                "description": "Vaso igienico (WC/bidet) in ceramica con sifone incorporato, catino allungato, sedile rimuovibile in plastica antiscivolo, apertura anteriore, completo di cassetta a zaino. Con esclusione delle opere murarie (PER BAGNO DISABILI): installato a pavimento",
+                "quantity": 1,
+                "unit": "cad",
+                "unit_price": 795.33,
+                "item_total": 795.33
+              },
+              {
+                "reference": "73",
+                "code": "E 01109",
+                "description": "Maniglione di sostegno destro o sinistro per lavabo, vasca, wc, bidet, ecc in alluminio rivestito in nylon, diametro esterno 35 mm, in opera compresi stop di fissaggio",
+                "quantity": 2,
+                "unit": "cad",
+                "unit_price": 162.27,
+                "item_total": 324.54
+              },
+              {
+                "reference": "74",
+                "code": "E 01126.b",
+                "description": "Miscelatore monocomando cromato per lavabo con scarico automatico: con leva clinica e bocca girevole",
+                "quantity": 4,
+                "unit": "cad",
+                "unit_price": 168.22,
+                "item_total": 672.88
+              },
+              {
+                "reference": "75",
+                "code": "E 01130",
+                "description": "Miscelatore monocomando cromato per bidet con erogazione a doccietta orientabile completo di scarico",
+                "quantity": 3,
+                "unit": "cad",
+                "unit_price": 148.88,
+                "item_total": 446.64
+              },
+              {
+                "reference": "76",
+                "code": "E 01002.c",
+                "description": "Tubo in acciaio senza saldatura a norma UNI EN 10255, esclusi gli scavi, i reinterri, tracce e raccorderia: diametro interno 3/4 spessore 2.6 mm",
+                "quantity": 60,
+                "unit": "m",
+                "unit_price": 20.25,
+                "item_total": 1215
+              },
+              {
+                "reference": "77",
+                "code": "E 03204.b",
+                "description": "Unità motocondensante esterna a volume (flusso) di refrigerante variabile R410A a pompa di calore condensata ad aria, ad espansione diretta, dotata di un compressore swing DC regolato da inverter collegato mediante circuito frigorifero a due tubi in rame ad unità interne, posta in opera con esclusione del collegamento elettrico, delle tubazioni e delle opere murarie: potenza frigorifera 28kW, potenza assorbita 6.32kW; potenza termica 31.5kW, potenza assorbita 5.47kW",
+                "quantity": 2,
+                "unit": "cad",
+                "unit_price": 9542.68,
+                "item_total": 19085.36
+              },
+              {
+                "reference": "78",
+                "code": "E 03011.e",
+                "description": "Unità interna del tipo a cassetta con mandata aria a 360° (roundflow) o a 4 vie, batteria in rame, sistema di controllo della qualità del refrigerante R410A mediante valvola di espansione lineare, scocca esterna in pvc, completa di filtro a lunga durata facilmente ispezionabile trattato contro le muffe, sistema di sollevamento condensa di tipo meccanico, ventilatore a 4 velocità, alette per la diffusione dell'aria in ambiente del tipo motorizzate, (dimensioni 600 x 600 mm o 840 x 840 mm) alimentazione elettrica 230W - 1 - 50 Hertz, posta in opera con esclusione del collegamento elettrico e delle tubazioni delle seguenti potenzialità: resa frigorifera 5.6kW, resa termica 6.3kW",
+                "quantity": 3,
+                "unit": "cad",
+                "unit_price": 1380.79,
+                "item_total": 4142.37
+              },
+              {
+                "reference": "79",
+                "code": "E 03011.f",
+                "description": "resa frigorifera 7.1kW, resa termica 8.0kW",
+                "quantity": 6,
+                "unit": "cad",
+                "unit_price": 1506.21,
+                "item_total": 9037.26
+              },
+              {
+                "reference": "80",
+                "code": "E 03011.h",
+                "description": "resa frigorifera 11.2kW, resa termica 12.5kW",
+                "quantity": 8,
+                "unit": "cad",
+                "unit_price": 2155.58,
+                "item_total": 17244.64
+              },
+              {
+                "reference": "80",
+                "code": "E 3.01.19.b.3",
+                "description": "Esecuzione di tracce nella muratura, eseguite a mano, compresi la chiusura delle tracce e l'avvicinamento del materiale di risulta al luogo di deposito provvisorio, in attesa del trasporto allo scarico: per tracce in muratura di pietrame tenero o mattoni pieni, della sezione da 226 cmq a 400 cmq (PER IMPIANTO ELETTRICO)",
+                "quantity": 152,
+                "unit": "m",
+                "unit_price": 52.03,
+                "item_total": 7908.56
+              },
+              {
+                "reference": "81",
+                "code": "E 3.01.19.b.1",
+                "description": "fino a 100 cmq (PER IMPIANTO IDRAULICO)",
+                "quantity": 40,
+                "unit": "m",
+                "unit_price": 30.43,
+                "item_total": 1217.2
+              },
+              {
+                "reference": "82",
+                "code": "E 3.01.19.b.2",
+                "description": "della sezione da 101 cmq a 225 cmq (PER IMPIANTO DI CONDIZIONAMENTO)",
+                "quantity": 110,
+                "unit": "m",
+                "unit_price": 44.04,
+                "item_total": 4844.4
+              },
+              {
+                "reference": "83",
+                "code": "A 3.03.5a",
+                "description": "Carico e trasporto a discariche e/o impianti autorizzati che dovranno vidimare copia del formulario di identificazione del rifiuto trasportato secondo le norme vigenti scavi anche se bagnato compreso il carico eseguito con mezzi o a mano e il successivo scarico. Esclusione oneri di discarica: compresi il carico a mano",
+                "quantity": 6.07,
+                "unit": "ton",
+                "unit_price": 36.66,
+                "item_total": 222.53
+              },
+              {
+                "reference": "84",
+                "code": "A 3.03.5e",
+                "description": "per ogni km ulteriore ai 10 km dal cantiere tale compenso viene corrisposto qualora la più vicina discarica risulti a distanza superiore a 10 km dal cantiere.",
+                "quantity": 6.07,
+                "unit": "ton",
+                "unit_price": 1.1,
+                "item_total": 133.54
+              },
+              {
+                "reference": "85",
+                "code": "A 3.03.7 d",
+                "description": "Costo per il conferimento dei rifiuti a impianto di recupero o discarica autorizzata ai fini del loro recupero/smaltimento: recuperabile",
+                "quantity": 6.07,
+                "unit": "ton",
+                "unit_price": 24.84,
+                "item_total": 150.78
+              }
+            ]
           },
           {
             "category": "OPERE DI FINITURA",
-            "sub_category": null,
-            "item_number": 86,
-            "item_code": "A 16.01.1 e",
-            "description": "Controtelaio in abete dello spessore di 25 mm in opera, completo di idonee grappe per l'ancoraggio alla muratura e quanto altro necessario per dare il lavoro finito a regola d'arte: di larghezza fino a 15 cm",
-            "unit_of_measure": "m",
-            "quantity": 30,
-            "unit_price": 18.42,
-            "total_price": 552.6
-          },
-          {
-            "category": "OPERE DI FINITURA",
-            "sub_category": null,
-            "item_number": 87,
-            "item_code": "A 16.01.11 a.1",
-            "description": "PER ANALOGIA Sportellone in legno ad una, due, tre o quattro ante: in pino del nord",
-            "unit_of_measure": "mq",
-            "quantity": 8,
-            "unit_price": 368.39,
-            "total_price": 2947.12
-          },
-          {
-            "category": "OPERE DI FINITURA",
-            "sub_category": null,
-            "item_number": 88,
-            "item_code": "A 19.01.4 c",
-            "description": "PER ANALOGIA Vetrate termoacustiche isolanti composte da due cristalli incolori con intercapedine 6-12 mm e poste in opera con opportuni distanziatori: spessore dei cristalli pari a 6mm",
-            "unit_of_measure": "mq",
-            "quantity": 27,
-            "unit_price": 122.79,
-            "total_price": 3315.33
-          },
-          {
-            "category": "OPERE DI FINITURA",
-            "sub_category": null,
-            "item_number": 89,
-            "item_code": "G 1.10.9 b",
-            "description": "Sostituzione di coppia di maniglie nei materiali: ottone",
-            "unit_of_measure": "cad",
-            "quantity": 19,
-            "unit_price": 39.44,
-            "total_price": 749.36
-          },
-          {
-            "category": "OPERE DI FINITURA",
-            "sub_category": null,
-            "item_number": 90,
-            "item_code": "A 17.02.1 a",
-            "description": "Ferro tondo, piatto od angolare per impieghi non strutturali, quali ringhiere, inferriate, a spartiti geometrici, fornito e posto in opera previa pesatura, comprese le opere murarie: inferriate",
-            "unit_of_measure": "kg",
-            "quantity": 150,
-            "unit_price": 9.13,
-            "total_price": 1369.5
-          },
-          {
-            "category": "OPERE DI FINITURA",
-            "sub_category": null,
-            "item_number": 91,
-            "item_code": "A 20.03.1.d",
-            "description": "Sverniciatura di opere in metallo di qualsiasi forma: fonte di calore a fiamma o ad aria (GRATE E BALCONE)",
-            "unit_of_measure": "mq",
-            "quantity": 21,
-            "unit_price": 21.16,
-            "total_price": 444.36
-          },
-          {
-            "category": "OPERE DI FINITURA",
-            "sub_category": null,
-            "item_number": 92,
-            "item_code": "A 20.03.5",
-            "description": "Applicazione di pittura antiruggine su superfici già preparate",
-            "unit_of_measure": "mq",
-            "quantity": 21,
-            "unit_price": 8.84,
-            "total_price": 185.64
-          },
-          {
-            "category": "OPERE DI FINITURA",
-            "sub_category": null,
-            "item_number": 93,
-            "item_code": "A 20.03.7.a",
-            "description": "Verniciatura per opere in ferro, a due mani a coprire, e ogni altro mezzo d'opera per dare il lavoro finito a regola d'arte: smalto sintetico opaco",
-            "unit_of_measure": "mq",
-            "quantity": 21,
-            "unit_price": 18.34,
-            "total_price": 385.14
-          },
-          {
-            "category": "OPERE DI FINITURA",
-            "sub_category": null,
-            "item_number": 94,
-            "item_code": "A 20.02.4 a",
-            "description": "Preparazione di superficie in legno con: stuccatura e rasatura",
-            "unit_of_measure": "mq",
-            "quantity": 90,
-            "unit_price": 9.88,
-            "total_price": 889.2
-          },
-          {
-            "category": "OPERE DI FINITURA",
-            "sub_category": null,
-            "item_number": 95,
-            "item_code": "A 20.02.4 b",
-            "description": "carteggiatura e abrasivatura per uniformare i fondi",
-            "unit_of_measure": "mq",
-            "quantity": 90,
-            "unit_price": 4.17,
-            "total_price": 375.3
-          },
-          {
-            "category": "OPERE DI FINITURA",
-            "sub_category": null,
-            "item_number": 96,
-            "item_code": "A 20.02.6 a",
-            "description": "Pittura su superfici in legno già preparate, in colori correnti chiari a due mani a coprire: smalto sintetico opaco",
-            "unit_of_measure": "mq",
-            "quantity": 90,
-            "unit_price": 23.63,
-            "total_price": 2126.7
-          },
-          {
-            "category": "OPERE DI FINITURA",
-            "sub_category": null,
-            "item_number": 97,
-            "item_code": "A 14.02.13.a",
-            "description": "Zoccolino battiscopa in legno massello duro (rovere o faggio) posto in opera: 80 x 10 mm",
-            "unit_of_measure": "m",
-            "quantity": 350.03,
-            "unit_price": 16.17,
-            "total_price": 5660.04
+            "category_total": 19000.29,
+            "items": [
+              {
+                "reference": "86",
+                "code": "A 16.01.1 e",
+                "description": "Controtelaio in abete dello spessore di 25 mm in opera, completo di idonee grappe per l'ancoraggio alla muratura e quanto altro necessario per dare il lavoro finito a regola d'arte: di larghezza fino a 15 cm",
+                "quantity": 30,
+                "unit": "m",
+                "unit_price": 18.42,
+                "item_total": 552.6
+              },
+              {
+                "reference": "87",
+                "code": "A 16.01.11 a.1",
+                "description": "PER ANALOGIA Sportellone in legno ad una, due, tre o quattro ante: in pino del nord",
+                "quantity": 8,
+                "unit": "mq",
+                "unit_price": 368.39,
+                "item_total": 2947.12
+              },
+              {
+                "reference": "88",
+                "code": "A 19.01.4 c",
+                "description": "PER ANALOGIA Vetrate termoacustiche isolanti composte da due cristalli incolori con intercapedine 6-12 mm e poste in opera con opportuni distanziatori: spessore dei cristalli pari a 6mm",
+                "quantity": 27,
+                "unit": "mq",
+                "unit_price": 122.79,
+                "item_total": 3315.33
+              },
+              {
+                "reference": "89",
+                "code": "G 1.10.9 b",
+                "description": "Sostituzione di coppia di maniglie nei materiali: ottone",
+                "quantity": 19,
+                "unit": "cad",
+                "unit_price": 39.44,
+                "item_total": 749.36
+              },
+              {
+                "reference": "90",
+                "code": "A 17.02.1 a",
+                "description": "Ferro tondo, piatto od angolare per impieghi non strutturali, quali ringhiere, inferriate, a spartiti geometrici, fornito e posto in opera previa pesatura, comprese le opere murarie: inferriate",
+                "quantity": 150,
+                "unit": "kg",
+                "unit_price": 9.13,
+                "item_total": 1369.5
+              },
+              {
+                "reference": "91",
+                "code": "A 20.03.1.d",
+                "description": "Sverniciatura di opere in metallo di qualsiasi forma: fonte di calore a fiamma o ad aria (GRATE E BALCONE)",
+                "quantity": 21,
+                "unit": "mq",
+                "unit_price": 21.16,
+                "item_total": 444.36
+              },
+              {
+                "reference": "92",
+                "code": "A 20.03.5",
+                "description": "Applicazione di pittura antiruggine su superfici già preparate",
+                "quantity": 21,
+                "unit": "mq",
+                "unit_price": 8.84,
+                "item_total": 185.64
+              },
+              {
+                "reference": "93",
+                "code": "A 20.03.7.a",
+                "description": "Verniciatura per opere in ferro, a due mani a coprire, e ogni altro mezzo d'opera per dare il lavoro finito a regola d'arte: smalto sintetico opaco",
+                "quantity": 21,
+                "unit": "mq",
+                "unit_price": 18.34,
+                "item_total": 385.14
+              },
+              {
+                "reference": "94",
+                "code": "A 20.02.4 a",
+                "description": "Preparazione di superficie in legno con: stuccatura e rasatura",
+                "quantity": 90,
+                "unit": "mq",
+                "unit_price": 9.88,
+                "item_total": 889.2
+              },
+              {
+                "reference": "95",
+                "code": "A 20.02.4 b",
+                "description": "carteggiatura e abrasivatura per uniformare i fondi",
+                "quantity": 90,
+                "unit": "mq",
+                "unit_price": 4.17,
+                "item_total": 375.3
+              },
+              {
+                "reference": "96",
+                "code": "A 20.02.6 a",
+                "description": "Pittura su superfici in legno già preparate, in colori correnti chiari a due mani a coprire: smalto sintetico opaco",
+                "quantity": 90,
+                "unit": "mq",
+                "unit_price": 23.63,
+                "item_total": 2126.7
+              },
+              {
+                "reference": "97",
+                "code": "A 14.02.13.a",
+                "description": "Zoccolino battiscopa in legno massello duro (rovere o faggio) posto in opera: 80 x 10 mm",
+                "quantity": 350.03,
+                "unit": "m",
+                "unit_price": 16.17,
+                "item_total": 5660.04
+              }
+            ]
           }
         ],
         "summary": [
           {
-            "description": "TOTALE PER LAVORAZIONI OPERE",
-            "amount": 202018.97
+            "category": "TOTALE PER LAVORAZIONI OPERE",
+            "price": 202018.97
           },
           {
-            "description": "DEMOLIZIONI E ASPORTAZIONI",
-            "amount": 11112.09
+            "category": "DEMOLIZIONI E ASPORTAZIONI",
+            "price": 11112.09
           },
           {
-            "description": "RICOSTRUZIONI",
-            "amount": 42262.97
+            "category": "RICOSTRUZIONI",
+            "price": 42262.97
           },
           {
-            "description": "OPERE DI PITTURA",
-            "amount": 24684.15
+            "category": "OPERE DI PITTURA",
+            "price": 24684.15
           },
           {
-            "description": "IMPIANTI",
-            "amount": 104959.47
+            "category": "IMPIANTI",
+            "price": 104959.47
           },
           {
-            "description": "OPERE DI FINITURA",
-            "amount": 19000.29
+            "category": "OPERE DI FINITURA",
+            "price": 19000.29
           },
           {
-            "description": "TOTALE OPERE",
-            "amount": 202018.97
+            "category": "TOTALE OPERE",
+            "price": 202018.97
           }
         ],
         "grand_total": 202018.97
@@ -1404,8 +1243,9 @@
       "estimate": {
         "start": "2025-11-04",
         "end": "2025-11-04"
-      }
+      },
+      "created_at": "2025-01-02"
     },
-    "metric_computation_id": "CME-6affe0bd"
+    "metric_computation_id": "6957af1b57e6e5cae46b8af1"
   }
 ]

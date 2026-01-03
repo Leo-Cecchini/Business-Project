@@ -25,11 +25,11 @@ class Config:
     
     # Qdrant (vector store locale)
     QDRANT_PATH = os.getenv('QDRANT_PATH', './qdrant_data')
-    QDRANT_COLLECTION = 'documents'
+    QDRANT_COLLECTION = os.getenv('QDRANT_COLLECTION', 'documents')    
     
     # Embedding model
     EMBEDDING_MODEL = os.getenv('EMBEDDING_MODEL', 'sentence-transformers/all-MiniLM-L6-v2')
-    EMBEDDING_DIMENSION = int(os.getenv('EMBEDDING_DIM', '384'))
+    EMBEDDING_DIMENSION = int(os.getenv('EMBEDDING_DIMENSION', '768'))    
     
     # Upload settings
     UPLOAD_FOLDER = os.getenv('UPLOAD_FOLDER', 'uploads')
@@ -44,8 +44,10 @@ class Config:
     TEMPERATURE = float(os.getenv('TEMPERATURE', '0.1'))
     
     # Web retrieval settings
-    ENABLE_WEB_RETRIEVAL = os.getenv("ENABLE_WEB_RETRIEVAL", "false").lower() == "true"
-    WEB_TIMEOUT_SEC = int(os.getenv("WEB_TIMEOUT_SEC", "8"))
+    #ENABLE_WEB_RETRIEVAL = os.getenv("ENABLE_WEB_RETRIEVAL", "false").lower() == "true"
+    ENABLE_WEB_RETRIEVAL = True
+    #WEB_TIMEOUT_SEC = int(os.getenv("WEB_TIMEOUT_SEC", "8"))
+    WEB_TIMEOUT_SEC = 8
     
     # Bootstrap & Seeding
     BOOTSTRAP_DB = os.getenv("BOOTSTRAP_DB", "1") == "1"

@@ -3,6 +3,7 @@ from __future__ import annotations
 from typing import Optional, Any, Dict
 import json
 import re
+import os
 
 from langchain_core.prompts import ChatPromptTemplate
 from langchain_core.output_parsers import JsonOutputParser
@@ -56,7 +57,7 @@ def _coerce_float(v: Any, default: float) -> float:
 
 
 # ==========================
-# Heuristics STIMA / STAFF / DOCUMENT
+# Heuristics STIMA / STAFF / DOCUMENT / WEB
 # ==========================
 _STRONG_ESTIMATE = [
     "stima", "preventivo", "computo", "computo metrico", "offerta",
@@ -108,11 +109,26 @@ def _looks_like_document_query(text: str) -> bool:
         "confronta", "confrontare", "analizza", "analizzare", "estrai", "estrarre", "confronto", "estrazione", "analisi"
     ])
 
+# --- NUOVA FUNZIONE PER IL WEB ---
+def _looks_like_web_query(text: str) -> bool:
+    t = (text or "").lower()
+    # Parole chiave che indicano chiaramente una ricerca esterna
+    triggers = [
+        "meteo", "previsioni", "tempo", "pioggia",
+        "normativa", "legge", "decreto", "gazzetta", "uni", "iso", "cam",
+        "sicurezza", "standard", "dlgs", "81/08",
+        "prezzo di mercato", "quotazione", "andamento", "listino online",
+        "chi è", "cosa è", "cerca su", "trova su web", "su internet"
+    ]
+    return any(k in t for k in triggers)
+
 def _looks_like_estimate_query(text: str) -> bool:
     q = (text or "").lower()
     if _looks_like_staff_query(q):
         return False
     if _looks_like_document_query(q):
+        return False
+    if _looks_like_web_query(q): # Se sembra web, non è una stima interna standard
         return False
     if any(k in q for k in _STRONG_ESTIMATE):
         return True
@@ -287,23 +303,27 @@ Rispondi SOLO con JSON:
 def parse_intent_llm(llm, question: str, last_context: dict | None):
     """
     Ritorna dict con:
-      - intent in {"MATERIALI","STIMA","STAFF","DOCUMENTO","none"}
+      - intent in {"MATERIALI","STIMA","STAFF","DOCUMENTO","WEB_SEARCH","none"}
       - materials (se MATERIALI)
       - entities (se STIMA)
       - staff (schema StaffIntent per STAFF)
     """
     qtxt = question or ""
 
-    # 0) MATERIALI (priorità altissima se è presente SKU o trigger materiali)
+    # 0) WEB SEARCH (Controllo immediato per query ovvie)
+    if _looks_like_web_query(qtxt):
+        return {"intent": "WEB_SEARCH", "materials": None, "staff": None, "entities": {}}
+
+    # 1) MATERIALI (priorità altissima se è presente SKU o trigger materiali)
     if _looks_like_material_query(qtxt):
         mat = extract_material_query(qtxt)
         return {"intent": "MATERIALI", "materials": mat, "staff": None, "entities": {}}
 
-    # 1) DOCUMENT (priorità alta)
+    # 2) DOCUMENT (priorità alta)
     if _looks_like_document_query(qtxt):
         return {"intent": "DOCUMENTO", "materials": None, "staff": None, "entities": {}}
 
-    # 2) STIMA (euristico + entità)
+    # 3) STIMA (euristico + entità)
     if _looks_like_estimate_query(qtxt):
         return {
             "intent": "STIMA",
@@ -312,7 +332,7 @@ def parse_intent_llm(llm, question: str, last_context: dict | None):
             "entities": extract_estimate_entities(qtxt)
         }
 
-    # 3) STAFF via LLM (schema rigido)
+    # 4) STAFF via LLM (schema rigido)
     safe_ctx = {}
     if isinstance(last_context, dict):
         intent = last_context.get("intent") or {}
@@ -327,8 +347,8 @@ def parse_intent_llm(llm, question: str, last_context: dict | None):
             },
         }
 
-    # ✅ Se l'LLM non è disponibile, usa un fallback euristico per evitare crash
-    if llm is None:
+    # Fallback euristico se LLM mancante o errore
+    def _fallback_staff():
         ql = qtxt.lower()
         staffish = any(k in ql for k in [
             "dipendenti", "opera", "operai", "staff", "personale", "lavoratori",
@@ -352,6 +372,9 @@ def parse_intent_llm(llm, question: str, last_context: dict | None):
                 "entities": {}
             }
         return {"intent": "none", "materials": None, "staff": None, "entities": {}}
+
+    if llm is None:
+        return _fallback_staff()
 
     prompt = ChatPromptTemplate.from_messages([
         ("system", _SYSTEM),
@@ -365,30 +388,7 @@ def parse_intent_llm(llm, question: str, last_context: dict | None):
             "last_context": safe_ctx
         })
     except Exception:
-        # Fallback euristico minimo sullo STAFF
-        ql = qtxt.lower()
-        staffish = any(k in ql for k in [
-            "dipendenti", "opera", "operai", "staff", "personale", "lavoratori",
-            "impiegati", "organico", "forza lavoro", "ruoli", "ruolo", "liberi",
-            "elettric", "idraulic", "murator", "cartongess", "imbianchin", "serrament",
-            "piastrell", "capocantier", "capo muratore",
-        ])
-        if staffish:
-            return {
-                "intent": "STAFF",
-                "materials": None,
-                "staff": StaffIntent(
-                    topic="staff",
-                    operation="list",
-                    role=_norm_role(None),
-                    free_only=False,
-                    limit=25,
-                    free_hours_threshold=20.0,
-                    reuse_last=False,
-                ),
-                "entities": {}
-            }
-        return {"intent": "none", "materials": None, "staff": None, "entities": {}}
+        return _fallback_staff()
 
     data = raw
     if isinstance(raw, str):
@@ -401,12 +401,17 @@ def parse_intent_llm(llm, question: str, last_context: dict | None):
     staff = data.get("staff")
 
     if topic != "staff" or not isinstance(staff, dict):
+        # Ricontrollo euristico se l'LLM dice "none"
         if _looks_like_document_query(qtxt):
             return {"intent": "DOCUMENTO", "materials": None, "staff": None, "entities": {}}
         if _looks_like_estimate_query(qtxt):
             return {"intent": "STIMA", "materials": None, "staff": None, "entities": extract_estimate_entities(qtxt)}
+        # Ultimo check: se contiene "meteo" o simili sfuggiti prima
+        if _looks_like_web_query(qtxt):
+             return {"intent": "WEB_SEARCH", "materials": None, "staff": None, "entities": {}}
         return {"intent": "none", "materials": None, "staff": None, "entities": {}}
 
+    # Parsing risposta LLM Staff
     op = (staff.get("operation") or "list").strip().lower()
     role = _norm_role(staff.get("role"))
     free_only = _coerce_bool(staff.get("free_only"), False)
@@ -450,28 +455,13 @@ def parse_intent_llm(llm, question: str, last_context: dict | None):
 
 # ---------------- Convenience router ----------------
 def route(question: str, llm=None, last_context: dict | None = None) -> dict:
-    """
-    Entry-point usabile da routes/chat.py:
-      ritorna sempre: {
-        "intent": "...",            # MATERIALI | STIMA | STAFF | DOCUMENTO | none
-        "materials": {...}|None,    # se intent == MATERIALI
-        "entities": {...},          # se intent == STIMA
-        "staff": StaffIntent|None   # se intent == STAFF
-      }
-    """
     return parse_intent_llm(llm, question, last_context)
 
 # ---------------- Lightweight class wrapper ----------------
 class IntentRouter:
-    """
-    Wrapper compatibile con app.py/chat.py.
-    Puoi passarci un LLM (ad es. quello di ChatModel) oppure lasciarlo None:
-    - se llm è None, il routing userà solo le euristiche locali;
-    - se llm è presente, lo impiega per i casi STAFF con schema strutturato.
-    """
     def __init__(self, llm=None, api_key: str | None = None):
         self.llm = llm
-        self.api_key = api_key  # tenuto per compatibilità, non usato qui
+        self.api_key = api_key
 
     def route(self, question: str, last_context: dict | None = None) -> dict:
         return parse_intent_llm(self.llm, question, last_context)

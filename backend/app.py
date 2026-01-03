@@ -40,6 +40,26 @@ def _init_components(app: Flask) -> None:
     """Initialize shared components (VectorStore, LLM, Router, etc)."""
     cfg = app.config
     
+    web_retriever = None
+    enable_web = cfg.get("ENABLE_WEB_RETRIEVAL", False)
+    app.logger.info(f"🌐 Web Retrieval Config: ENABLE_WEB_RETRIEVAL={enable_web}, WebRetriever class available={WebRetriever is not None}")
+
+    if enable_web and WebRetriever:
+        try:
+            web_retriever = WebRetriever(
+                max_results=5,
+                timeout=cfg.get("WEB_TIMEOUT_SEC", 8),
+            )
+            app.logger.info("✅ WebRetriever initialized successfully")
+        except Exception as e:
+            app.logger.error(f"❌ WebRetriever init failed: {e}")
+            import traceback
+            app.logger.error(traceback.format_exc())
+    elif not enable_web:
+        app.logger.warning("⚠️ Web retrieval DISABLED (ENABLE_WEB_RETRIEVAL=False)")
+    elif not WebRetriever:
+        app.logger.warning("⚠️ WebRetriever class NOT AVAILABLE (import failed)")
+    
     required = [
         "GOOGLE_API_KEY", "MODEL_NAME", "EMBEDDING_MODEL",
         "EMBEDDING_DIMENSION", "QDRANT_PATH", "QDRANT_COLLECTION"
@@ -81,13 +101,6 @@ def _init_components(app: Flask) -> None:
         chunk_size=cfg.get("CHUNK_SIZE", 1200),
         chunk_overlap=cfg.get("CHUNK_OVERLAP", 120),
     )
-    
-    web_retriever = None
-    if cfg.get("ENABLE_WEB_RETRIEVAL", False) and WebRetriever:
-        web_retriever = WebRetriever(
-            max_results=5,
-            timeout=cfg.get("WEB_TIMEOUT_SEC", 8),
-        )
     
     router = IntentRouter(api_key=cfg["GOOGLE_API_KEY"])
     

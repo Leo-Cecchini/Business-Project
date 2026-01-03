@@ -9,7 +9,7 @@ from mongoengine.connection import get_db
 
 # Telemetria opzionale
 try:
-    from utils.telemetry import log_assignment_attempt
+    from backend.utils.telemetry import log_assignment_attempt
 except ImportError:
     def log_assignment_attempt(*args, **kwargs): pass
 

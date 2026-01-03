@@ -1,51 +1,53 @@
 # utils/web_retriever.py
 from __future__ import annotations
 
-from duckduckgo_search import DDGS
+from ddgs import DDGS
 import trafilatura
 from urllib.parse import urlparse
 from typing import List, Dict, Optional
 import os
+import re
 
 # -------------------------------------------------
-# Config (override da ENV se presenti)
+# Configurazione Domini
 # -------------------------------------------------
 DEFAULT_ALLOWED = {
-    # Portali e testate tecniche
     "edilportale.com", "ingenio-web.it", "ediltecnico.it", "biblus-net.it", "lavoripubblici.it",
-    # Istituzionali / norme / dati
-    "camcom.it", "uni.com", "mims.gov.it", "mit.gov.it", "mase.gov.it", "istat.it",
-    # News economiche utili per prezzi
+    "camcom.it", "uni.com", "mims.gov.it", "mit.gov.it", "istat.it", "gazzettaufficiale.it",
     "ilsole24ore.com", "ansa.it", "repubblica.it", "corriere.it",
-    # Prezzari e PA locali
-    "prezzario", "regione.", "provincia.", "comune.", "sardegnacat.it", "arpa.", "cittametropolitana.",
-    # Retail/grandi catene (come backup)
-    "leroymerlin.it", "selfitalia.it", "bricocenter.it", "bricobravo.com", "manomano.it",
-}
-DEFAULT_BLOCKED = {
-    "reddit.", "quora.", "pinterest.", "facebook.", "instagram.",
-    "tiktok.", "x.com", "twitter.com", "youtube."
+    "leroymerlin.it", "manomano.it", "bricoman.it", "tecnoedil.it",
+    "ilmeteo.it", "3bmeteo.com", "meteo.it", "aeronautica.difesa.it"
+    "habitissimo.it", "prontopro.it", "instapro.it" # Aggiunti portali preventivi utili
 }
 
-# override opzionali da ENV (virgola-separati)
+# Blocklist aggressiva per evitare risultati cinesi/spam
+DEFAULT_BLOCKED = {
+    "reddit", "quora", "pinterest", "facebook", "instagram",
+    "tiktok", "x.com", "twitter", "youtube", "vimeo",
+    "zhihu", "baidu", "weibo", "qq.com", "163.com", "sohu", "douban",
+    "tripadvisor", "booking", "alibaba", "temu", "shein"
+    # --- Nuovi filtri anti-spam e anti-cookie ---
+    "consent.", "accounts.", "login.", "signup.", "auth.", "support.", "help."
+}
+
 ENV_ALLOWED = {d.strip().lower() for d in os.getenv("WEB_ALLOWED_DOMAINS", "").split(",") if d.strip()}
 ENV_BLOCKED = {d.strip().lower() for d in os.getenv("WEB_BLOCKED_DOMAINS", "").split(",") if d.strip()}
 
 ALLOWED_DOMAINS = (ENV_ALLOWED or DEFAULT_ALLOWED)
 BLOCKED_DOMAINS = (ENV_BLOCKED or DEFAULT_BLOCKED)
 
-MAX_TEXT_CHARS = int(os.getenv("WEB_MAX_TEXT_CHARS", "6000"))
-SAFESEARCH = os.getenv("WEB_SAFESEARCH", "moderate")    # "off" | "moderate" | "strict"
-REGION = os.getenv("WEB_REGION", "it-it")               # area/language per la ricerca
-TIME_LIMIT = os.getenv("WEB_TIME_LIMIT", None)          # es. "y" (year), "m" (month), "w" (week), "d" (day)
+MAX_TEXT_CHARS = int(os.getenv("WEB_MAX_TEXT_CHARS", "8000"))
+SAFESEARCH = os.getenv("WEB_SAFESEARCH", "moderate")
+REGION = os.getenv("WEB_REGION", "it-it")
+TIME_LIMIT = os.getenv("WEB_TIME_LIMIT", None)
 STRICT_ALLOWLIST = os.getenv("WEB_STRICT_ALLOWLIST", "false").lower() == "true"
-DEBUG_LOG = os.getenv("WEB_DEBUG_LOG", "true").lower() == "true"
+DEBUG_LOG = True
 
-# -------------------------------------------------
-# Utils
-# -------------------------------------------------
 def _host(url: str) -> str:
-    return urlparse(url).netloc.lower()
+    try:
+        return urlparse(url).netloc.lower()
+    except:
+        return ""
 
 def _blocked(url: str) -> bool:
     host = _host(url)
@@ -53,78 +55,33 @@ def _blocked(url: str) -> bool:
 
 def _allowed(url: str) -> bool:
     host = _host(url)
-    return (any(d in host for d in ALLOWED_DOMAINS) and not _blocked(url))
+    return any(d in host for d in ALLOWED_DOMAINS)
 
 def _dedup_keep_best(items: List[Dict], key: str = "url") -> List[Dict]:
     seen = set()
     out = []
     for it in items:
         u = it.get(key)
-        if not u or u in seen:
-            continue
+        if not u or u in seen: continue
         seen.add(u)
         out.append(it)
     return out
 
-# parole chiave materiali per “liberare” i filtri quando cerchiamo prezzi
-MATERIAL_WORDS = {
-    "cemento", "calcestruzzo", "cls", "acciaio", "ferro", "bitume", "asfalto",
-    "rame", "sabbia", "ghiaia", "inerti", "malta", "premiscelato"
-}
+def _focus_query(query: str, focus: Optional[str] = None) -> str:
+    # 1. Pulizia caratteri
+    safe_q = query.replace("è", "e").replace("à", "a").replace("ò", "o").replace("ù", "u").replace("ì", "i")
+    base = safe_q.strip()
 
-def _is_relevant(text: str, snippet: str, focus: Optional[str]) -> bool:
-    """
-    Heuristica più permissiva:
-    - se focus=price: accetta se testo O snippet contengono pattern prezzo O parole materiale
-    - altri focus: usa chiavi classiche
-    - se non c'è focus: accetta (lascia al modello fare il resto)
-    """
-    low = (text or "").lower()
-    sn = (snippet or "").lower()
-
-    if focus == "price":
-        price_terms = ["€/kg", "€/m3", "euro/kg", "euro/m3", "listino", "prezzo", "costo", "quotazione"]
-        if any(w in low or w in sn for w in price_terms):
-            return True
-        if any(w in low or w in sn for w in MATERIAL_WORDS):
-            return True
-        return False
-
-    if focus == "weather":
-        return any(w in low or w in sn for w in ["meteo", "precipitazioni", "vento", "temperature", "allerte"])
-
-    if focus == "duration":
-        return any(w in low or w in sn for w in ["giorni", "settimane", "mesi", "ore", "durata", "lead time", "programmazione", "cronoprogramma"])
-
-    if focus == "standard":
-        return any(w in low or w in sn for w in ["uni", "classe", "resistenza", "norma", "cam", "mit", "mims"])
-
-    # no focus -> non filtrare
-    return True
-
-def _focus_query(query: str, focus: Optional[str]) -> str:
-    # mantieni la query originale; aggiungi booster per l'Italia e unità dove utile
-    base = query
-    if focus == "price":
-        base += " prezzo €/kg €/m3 listino materiale fornitore site:it"
-    elif focus == "weather":
-        base += " meteo previsioni lavori cantiere eseguibilità site:it"
-    elif focus == "duration":
-        base += " durata giorni settimane mesi tempi esecuzione cantiere site:it"
-    elif focus == "standard":
-        base += " norma UNI classe resistenza CAM MIT MIMS requisiti site:it"
+    # NOTA: Abbiamo RIMOSSO l'aggiunta forzata di "site:it". 
+    # Lasciamo che sia il parametro region="it-it" a fare il lavoro sporco.
+    # L'aggiunta manuale di site:it causava il ritorno di 0 risultati su query complesse.
+            
     return base
 
 # -------------------------------------------------
 # Retriever
 # -------------------------------------------------
 class WebRetriever:
-    """Retriever web 'libero' ma senza mischiare i dati:
-       - allowlist NON obbligatoria (si può allentare), blocklist sempre attiva
-       - rilevanza più permissiva per focus=price (accetta materiali)
-       - il payload web resta separato; l'unione con i documenti interni è gestita dalla UI/modello.
-    """
-
     def __init__(self, max_results: int = 5, timeout: float = 6.0):
         self.max_results = max_results
         self.timeout = timeout
@@ -132,65 +89,101 @@ class WebRetriever:
     def search(self, query: str, focus: str | None = None) -> List[Dict]:
         q = _focus_query(query, focus)
         if DEBUG_LOG:
-            print(f"[WebRetriever] 🔎 Query: {q} (focus={focus})  region={REGION} timelimit={TIME_LIMIT} strict={STRICT_ALLOWLIST}")
+            print(f"[WebRetriever] 🔎 Query: {q}")
+        
         raw: List[Dict] = []
+        
+        # Parole STOP italiane: usate come firewall per scartare risultati esteri/cinesi
+        # che sfuggono al filtro region="it-it"
+        ITA_STOPWORDS = {
+            " il ", " lo ", " la ", " i ", " gli ", " le ", " di ", " a ", " da ", 
+            " in ", " con ", " su ", " per ", " è ", " e ", " o ", " del ", " al ", 
+            " sono ", " hanno ", " normativa ", " legge ", " decreto ", " art ",
+            " euro ", " prezzo ", " costo ", " meteo ", " gradi "
+        }
 
-        # 1) Cerca con DuckDuckGo (aumentiamo un po' i risultati grezzi)
         try:
             with DDGS() as ddgs:
-                for r in ddgs.text(
+                # Richiediamo più risultati (20) perché il filtro lingua ne scarterà alcuni
+                results = ddgs.text(
                     q,
-                    max_results=max(self.max_results * 3, 12),
+                    max_results=20, 
                     safesearch=SAFESEARCH,
-                    region=REGION,
+                    region=REGION, # Qui agisce il filtro Italia
                     timelimit=TIME_LIMIT
-                ):
+                )
+                
+                for r in results:
                     url = r.get("href") or r.get("url")
-                    if not url:
-                        continue
-                    title = r.get("title") or url
-                    snippet = r.get("body") or r.get("snippet") or ""
-                    raw.append({"title": title, "url": url, "snippet": snippet})
+                    if not url: continue
+                    
+                    title = r.get("title", "")
+                    snippet = r.get("body") or r.get("snippet", "")
+                    
+                    # 1. Blocklist (Zhihu, ecc.)
+                    if _blocked(url): continue
+
+                    # 2. FILTRO LINGUA (Il Firewall)
+                    content_check = (title + " " + snippet).lower()
+                    
+                    # Logica:
+                    # - Se lo snippet è molto breve (< 50 chars) e contiene numeri (es. prezzi/meteo), lo accettiamo (rischio basso).
+                    # - Altrimenti, DEVE contenere almeno una stopword italiana.
+                    is_short_numeric = len(snippet) < 50 and any(c.isdigit() for c in snippet)
+                    
+                    if not is_short_numeric:
+                        # Controlla presenza di parole italiane
+                        if not any(sw in content_check for sw in ITA_STOPWORDS):
+                            # Se non ha nemmeno una parola italiana comune, è probabilmente spam estero
+                            continue
+
+                    raw.append({
+                        "title": title,
+                        "url": url,
+                        "snippet": snippet
+                    })
+
         except Exception as e:
-            if DEBUG_LOG:
-                print(f"[WebRetriever] ❌ Errore DDG: {e}")
+            print(f"[WebRetriever] ❌ Errore DDG: {e}")
             return []
 
-        # 2) Filtro domini: usa allowlist, ma se vuota e non strict, accetta tutto tranne i bloccati
-        filtered = [it for it in raw if _allowed(it["url"])]
-        if not filtered and not STRICT_ALLOWLIST:
-            filtered = [it for it in raw if not _blocked(it["url"])]
+        # Allowlist ordering
+        clean = raw
+        if STRICT_ALLOWLIST:
+            final_list = [it for it in clean if _allowed(it["url"])]
+        else:
+            trusted = [it for it in clean if _allowed(it["url"])]
+            others = [it for it in clean if not _allowed(it["url"])]
+            final_list = trusted + others
 
-        # 3) Deduplica
-        filtered = _dedup_keep_best(filtered, key="url")
+        final_list = _dedup_keep_best(final_list)[:self.max_results]
 
-        # 4) Fetch contenuto e filtro di rilevanza (più permissivo su price/materiali)
+        # Fetch Content
         out: List[Dict] = []
-        for it in filtered[: self.max_results]:
+        for it in final_list:
             url = it["url"]
+            text_content = ""
+            
+            # Tentativo di scaricare il contenuto completo
             try:
-                html = trafilatura.fetch_url(url, timeout=self.timeout)
-                text = trafilatura.extract(html) or ""
+                downloaded = trafilatura.fetch_url(url, timeout=self.timeout)
+                if downloaded:
+                    text_content = trafilatura.extract(downloaded) or ""
             except Exception:
-                text = ""
-            # se non c'è testo estratto, usiamo almeno lo snippet
-            if not text and it.get("snippet"):
-                text = it["snippet"]
-
-            if not _is_relevant(text, it.get("snippet", ""), focus):
-                continue
-
-            item = {
+                pass
+            
+            # Fallback sullo snippet se il download fallisce o è vuoto
+            # (Molto importante per meteo e prezzi rapidi)
+            if not text_content or len(text_content) < 100:
+                text_content = it["snippet"]
+            
+            out.append({
                 "title": it["title"],
-                "url": url,
-                "text": (text or "")[:MAX_TEXT_CHARS],
-                "snippet": (it.get("snippet") or "")[:300],
-            }
-            out.append(item)
+                "url": it["url"],
+                "text": text_content[:MAX_TEXT_CHARS],
+                "snippet": it["snippet"]
+            })
 
         if DEBUG_LOG:
-            print(f"[WebRetriever] ➜ risultati finali: {len(out)}")
-            for i, o in enumerate(out, 1):
-                print(f"  {i}. {o['title']}  ({o['url']})")
-
+            print(f"[WebRetriever] ➜ Trovati {len(out)} risultati validi.")
         return out
