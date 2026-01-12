@@ -165,7 +165,7 @@
     "unit": "m2",
     "materials": [
       {
-        "sku": "GRES_STD",
+        "sku": "GRES6060",
         "qty_per_unit": 1.05
       },
       {
@@ -203,7 +203,7 @@
     "unit": "m2",
     "materials": [
       {
-        "sku": "GRES_STD",
+        "sku": "GRES6060",
         "qty_per_unit": 1.05
       },
       {
@@ -1280,6 +1280,7 @@
     ],
     "primary_role": "operaio",
     "productivity_per_worker_per_hour": 30,
+    "productivity_basis": "per_worker",
     "roles_allowed": [
       "operaio",
       "addetto pulizie"
@@ -1318,6 +1319,7 @@
     "prerequisites": [],
     "primary_role": "escavatorista",
     "productivity_per_worker_per_hour": 20,
+    "productivity_basis": "per_worker",
     "roles_allowed": [
       "escavatorista",
       "operaio"
@@ -1351,6 +1353,7 @@
     ],
     "primary_role": "carpentiere",
     "productivity_per_worker_per_hour": 4,
+    "productivity_basis": "per_worker",
     "roles_allowed": [
       "carpentiere",
       "muratore"

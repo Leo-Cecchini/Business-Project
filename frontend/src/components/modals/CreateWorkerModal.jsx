@@ -26,12 +26,28 @@ const CITIES = [
     'Bologna', 'Firenze', 'Bari', 'Catania', 'Venezia', 'Verona',
 ];
 
+const CITY_TO_REGION = {
+    Roma: 'Lazio',
+    Milano: 'Lombardia',
+    Napoli: 'Campania',
+    Torino: 'Piemonte',
+    Palermo: 'Sicilia',
+    Genova: 'Liguria',
+    Bologna: 'Emilia-Romagna',
+    Firenze: 'Toscana',
+    Bari: 'Puglia',
+    Catania: 'Sicilia',
+    Venezia: 'Veneto',
+    Verona: 'Veneto',
+};
+
 export default function CreateWorkerModal({ isOpen, onClose }) {
     const [formData, setFormData] = useState({
         name: '',
         role: 'Operaio edile',
         hourly_rate: '',
         home_city: 'Roma',
+        home_region: CITY_TO_REGION['Roma'] || '',
         is_active: true,
     });
     const [errors, setErrors] = useState({});
@@ -40,10 +56,16 @@ export default function CreateWorkerModal({ isOpen, onClose }) {
 
     const handleChange = (e) => {
         const { name, value, type, checked } = e.target;
-        setFormData(prev => ({
-            ...prev,
-            [name]: type === 'checkbox' ? checked : value,
-        }));
+        setFormData(prev => {
+            const next = {
+                ...prev,
+                [name]: type === 'checkbox' ? checked : value,
+            };
+            if (name === 'home_city') {
+                next.home_region = CITY_TO_REGION[value] || '';
+            }
+            return next;
+        });
         if (errors[name]) {
             setErrors(prev => ({ ...prev, [name]: '' }));
         }
@@ -76,6 +98,7 @@ export default function CreateWorkerModal({ isOpen, onClose }) {
                 role: formData.role,
                 hourly_rate: parseFloat(formData.hourly_rate),
                 home_city: formData.home_city,
+                home_region: formData.home_region,
                 is_active: formData.is_active,
             };
 
@@ -88,6 +111,7 @@ export default function CreateWorkerModal({ isOpen, onClose }) {
                 role: 'Operaio edile',
                 hourly_rate: '',
                 home_city: 'Roma',
+                home_region: CITY_TO_REGION['Roma'] || '',
                 is_active: true,
             });
             setErrors({});
@@ -103,6 +127,7 @@ export default function CreateWorkerModal({ isOpen, onClose }) {
             role: 'Operaio edile',
             hourly_rate: '',
             home_city: 'Roma',
+            home_region: CITY_TO_REGION['Roma'] || '',
             is_active: true,
         });
         setErrors({});
@@ -151,6 +176,13 @@ export default function CreateWorkerModal({ isOpen, onClose }) {
                     onChange={handleChange}
                     options={CITIES.map(c => ({ value: c, label: c }))}
                     required
+                />
+
+                <Input
+                    label="Regione"
+                    name="home_region"
+                    value={formData.home_region}
+                    readOnly
                 />
 
                 <div className="flex items-center gap-3 p-3 border border-[var(--border)] rounded-xl">

@@ -1,7 +1,6 @@
 # routes/workers.py
 from flask import Blueprint, request, jsonify
 from services.workers_service import WorkerService
-from routes.company import company_overview
 import csv
 import io
 
@@ -22,7 +21,8 @@ def _serialize_worker(w):
         "name": w.name,
         "role": w.role,
         "available": w.available,
-        "home_city": getattr(w, "home_city", None),
+        "home_city": getattr(w, "home_city", None) or getattr(w, "city", None),
+        "home_region": getattr(w, "home_region", None),
         "hourly_rate": getattr(w, "hourly_rate", None),
         "skills": getattr(w, "skills", []) or [],
         "certifications": getattr(w, "certifications", []) or [],
@@ -34,15 +34,22 @@ def _serialize_worker(w):
 # ============================================
 
 @workers_bp.route('', methods=['GET'])
+@workers_bp.route('/', methods=['GET'])
 def list_workers():
     filters = {}
     if request.args.get('role'):
         filters['role'] = request.args.get('role')
     if request.args.get('available'):
         filters['available'] = _to_bool(request.args.get('available'))
+    # City filter (use a single field to avoid unintended AND filters)
     if request.args.get('city'):
-        filters['city'] = request.args.get('city')
-    
+        filters['home_city'] = request.args.get('city')
+
+    # Region filter (optional)
+    region = request.args.get('region') or request.args.get('home_region')
+    if region:
+        filters['home_region'] = region
+       
     page = int(request.args.get('page', 1))
     per_page = int(request.args.get('per_page', 50))
     
@@ -64,14 +71,32 @@ def get_worker(worker_id):
     return jsonify({"worker": _serialize_worker(worker)})
 
 @workers_bp.route('', methods=['POST'])
+@workers_bp.route('/', methods=['POST'])
 def create_worker():
     data = request.get_json() or {}
+    # Normalizzazione payload (frontend/backward-compat)
+    # Accetta sia city che home_city
+    if 'home_city' not in data and 'city' in data:
+        data['home_city'] = data.get('city')
+    if 'city' not in data and 'home_city' in data:
+        data['city'] = data.get('home_city')
+
+    # Accetta sia home_region che region
+    if 'home_region' not in data and 'region' in data:
+        data['home_region'] = data.get('region')
+    if 'region' not in data and 'home_region' in data:
+        data['region'] = data.get('home_region')
+
+    # Compat per seed/CSV: ID -> id
+    if 'id' not in data and 'ID' in data:
+        data['id'] = data.get('ID')
     try:
         worker = WorkerService.create_worker(data, user=None)
         
         # Gestione sicura overview (se fallisce non blocca la creazione)
         overview = {}
         try:
+            from routes.company import company_overview  # lazy import (avoid circular imports)
             ov_resp = company_overview()
             if hasattr(ov_resp, 'get_json'):
                 overview = ov_resp.get_json()
@@ -90,6 +115,22 @@ def create_worker():
 @workers_bp.route('/<worker_id>', methods=['PUT'])
 def update_worker(worker_id):
     data = request.get_json() or {}
+    # Normalizzazione payload (frontend/backward-compat)
+    # Accetta sia city che home_city
+    if 'home_city' not in data and 'city' in data:
+        data['home_city'] = data.get('city')
+    if 'city' not in data and 'home_city' in data:
+        data['city'] = data.get('home_city')
+
+    # Accetta sia home_region che region
+    if 'home_region' not in data and 'region' in data:
+        data['home_region'] = data.get('region')
+    if 'region' not in data and 'home_region' in data:
+        data['region'] = data.get('home_region')
+
+    # Compat per seed/CSV: ID -> id
+    if 'id' not in data and 'ID' in data:
+        data['id'] = data.get('ID')
     try:
         worker = WorkerService.update_worker(worker_id, data, user=None)
         if not worker:
@@ -97,8 +138,10 @@ def update_worker(worker_id):
         
         overview = {}
         try:
+            from routes.company import company_overview  # lazy import (avoid circular imports)
             overview = company_overview().get_json()
-        except: pass
+        except Exception:
+            pass
 
         return jsonify({
             "worker": _serialize_worker(worker),
@@ -107,6 +150,7 @@ def update_worker(worker_id):
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 
+@workers_bp.route('/<worker_id>/toggle', methods=['POST'])
 @workers_bp.route('/<worker_id>/availability', methods=['PATCH'])
 def toggle_availability(worker_id):
     # toggle_availability ritorna un dict semplice, non un Doc, ma controlliamo
@@ -122,8 +166,10 @@ def toggle_availability(worker_id):
 
     overview = {}
     try:
+        from routes.company import company_overview  # lazy import (avoid circular imports)
         overview = company_overview().get_json()
-    except: pass
+    except Exception:
+        pass
     
     return jsonify({
         "worker": worker_data,
@@ -140,8 +186,10 @@ def delete_worker(worker_id):
         
         overview = {}
         try:
+            from routes.company import company_overview  # lazy import (avoid circular imports)
             overview = company_overview().get_json()
-        except: pass
+        except Exception:
+            pass
         
         return jsonify({
             "success": True,

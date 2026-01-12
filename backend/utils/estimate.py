@@ -659,9 +659,60 @@ def _sum(rows: List[Dict[str, Any]], key: str = "totale") -> float:
     return round(sum((r.get(key) or 0) for r in rows), 2)
 
 
+
 # ------------------ Listini regionali/città (con fallback) ------------------
 # Usa PricelistDoc se presente: materials, wages, factors (es: {"historic_center":1.05})
 from functools import lru_cache
+
+
+def _db() -> Any:
+    """Return a raw PyMongo Database handle.
+    We prefer mongoengine.get_db() when available because it is already configured
+    to use the same connection settings as the rest of the app.
+    """
+    if get_db is None:
+        raise RuntimeError("Mongo DB handle not available (get_db is None)")
+    return get_db()
+
+
+def _get_material_by_sku_or_code(key: str):
+    key = (key or "").strip()
+    if not key:
+        return None
+    db = _db()
+    # NO $or: two simple and reliable queries
+    doc = db["materials"].find_one({"sku": key}, {"_id": 0})
+    if doc:
+        return doc
+    return db["materials"].find_one({"code": key}, {"_id": 0})
+
+
+def _material_name_unit(key: str) -> tuple[str, str]:
+    doc = _get_material_by_sku_or_code(key) or {}
+    name = doc.get("name") or key
+    unit = doc.get("unit") or "pz"
+    return str(name), _unit(str(unit))
+
+
+def _material_unit_price(region: str | None, city: str | None, key: str, tags: list[str] | None = None) -> float:
+    key = (key or "").strip()
+    if not key:
+        return 0.0
+    tags = tags or []
+
+    pl = _get_pricelist(region, city)
+    pl_price = float((pl.get("materials") or {}).get(key) or 0.0)
+
+    # if pricelist is 0/null => fallback to materials catalog
+    if pl_price > 0:
+        return float(_apply_factors(round(pl_price, 4), pl.get("factors", {}) or {}, tags))
+
+    doc = _get_material_by_sku_or_code(key) or {}
+    cat_price = float(doc.get("unit_price_eur_2025") or 0.0)
+    if cat_price > 0:
+        return float(_apply_factors(round(cat_price, 4), pl.get("factors", {}) or {}, tags))
+
+    return 0.0
 
 
 @lru_cache(maxsize=128)
@@ -776,6 +827,7 @@ def _lookup_material_price_by_code(code: str) -> Optional[float]:
 
     return None
 
+
 def price(code: str, default: float = 0.0, *, region: str|None=None, city: str|None=None, tags: list[str]|None=None) -> float:
     pl = _get_pricelist(region, city)
     val = None
@@ -796,17 +848,15 @@ def price(code: str, default: float = 0.0, *, region: str|None=None, city: str|N
         except Exception:
             val = None
 
-    # 3) Ultimo fallback diretto sul catalogo Materials (sku/code/name)
+    # 3) Ultimo fallback diretto sul catalogo Materials (sku/code)
     if val is None:
         try:
-            if MaterialDoc is not None:
-                m = (
-                    MaterialDoc.objects(sku__iexact=code).first()
-                    or MaterialDoc.objects(code__iexact=code).first()
-                    or MaterialDoc.objects(name__iexact=code).first()
-                )
-                if m and getattr(m, "unit_price_eur_2025", None) is not None:
-                    val = float(m.unit_price_eur_2025)
+            # use raw pymongo lookup to avoid $or edge-cases and keep behavior consistent
+            doc = _get_material_by_sku_or_code(code)
+            if doc and isinstance(doc.get("unit_price_eur_2025"), (int, float)):
+                v = float(doc.get("unit_price_eur_2025") or 0.0)
+                if v > 0:
+                    val = v
         except Exception:
             val = None
 
@@ -815,7 +865,7 @@ def price(code: str, default: float = 0.0, *, region: str|None=None, city: str|N
         val = default
 
     # 5) Apply territorial factors (only to positive prices)
-    return float(_apply_factors(val, pl.get("factors", {}), tags))
+    return float(_apply_factors(val, pl.get("factors", {}) or {}, tags))
 
 def wage(role: str, default: float = 25.0, *, region: str|None=None, city: str|None=None, tags: list[str]|None=None) -> float:
     pl = _get_pricelist(region, city)
@@ -949,26 +999,42 @@ def _resolve_geo_and_tags(data: Dict[str, Any]) -> Dict[str, Any]:
 # ------------------ Ricette semplici per le lavorazioni ------------------
 
 def _recipe_from_item(label: str, qty: float, unit: str, region: str|None=None, city: str|None=None, tags: List[str] | None=None, meta: Dict[str, Any] | None=None) -> Dict[str, Any]:
-    lab = (label or "").lower()
+    # Normalize inputs
+    meta = meta or {}
     um = _unit(unit)
     mats: List[Dict[str, Any]] = []
     labor: List[Dict[str, Any]] = []
 
-    meta = meta or {}
+    # --- IMPORTANT ---
+    # If the caller provides an explicit work code (e.g. meta={"code": "FLOOR_TILE"}),
+    # we must use that code to resolve the work in the catalog and NOT fallback to
+    # label-based heuristics (which can return legacy template codes like FLR-001/ADH-001).
+    meta_code = (meta.get("code") or meta.get("work_code") or meta.get("catalog_code")) if isinstance(meta, dict) else None
+    if isinstance(meta_code, str):
+        meta_code = meta_code.strip() or None
+
     try:
         avg_m = float(meta.get("avg_distance_m") or 0)
     except Exception:
         avg_m = 0.0
 
     # Resolve catalog code and crew requirements (if present in DB)
-    meta_code = (meta.get("code") or meta.get("work_code") or meta.get("catalog_code")) if isinstance(meta, dict) else None
-    if isinstance(meta_code, str):
-        meta_code = meta_code.strip() or None
-
     catalog_code = meta_code or _catalog_code_from_label(label, um)
     crew_req = _crew_requirements_for_code(catalog_code)
 
+    # Fetch work catalog item once
     wc = _work_catalog_item(catalog_code)
+
+    # If we successfully resolved a catalog work (especially via explicit meta_code),
+    # prefer the catalog-driven recipe and skip legacy label-based heuristics.
+    has_catalog_recipe = bool(wc) and (
+        bool(meta_code) or bool(wc.get("materials_template")) or bool(wc.get("materials"))
+    )
+
+    # Lowercased label is only used for legacy heuristics
+    lab = (label or "").lower()
+
+    # Labor from work catalog productivity (if present)
     if wc:
         try:
             prod = float(wc.get("productivity_per_worker_per_hour") or 0)
@@ -992,89 +1058,91 @@ def _recipe_from_item(label: str, qty: float, unit: str, region: str|None=None, 
         # piccola maggiorazione posa
         return round(max(avg_m_val, 0.0) * 1.05 * factor, 2)
 
-    # 1) Posa piastrelle pavimento (qty in m2)
-    if any(k in lab for k in ("posa piastrelle", "posa pavimento", "piastrelle")) and um == "m2":
-        area = qty
-        sfrido = 1.08  # 8% di sfrido
-        mats.append(_line("FLR-001", "Piastrelle gres 60x60", "m2", area*sfrido, price("FLR-001", region=region, city=city, tags=tags)))
-        # colla ~ 3.5 kg/m2
-        mats.append(_line("ADH-001", "Colla per piastrelle", "kg", area*3.5, price("ADH-001", region=region, city=city, tags=tags)))
-        # stucco ~ 0.15 kg/m2
-        mats.append(_line("STU-001", "Stucco fughe", "kg", area*0.15, price("STU-001", region=region, city=city, tags=tags)))
-        # manodopera ~ 0.7 h/m2
-        labor.append(_labor("piastrellista", area*0.7, wage("piastrellista", region=region, city=city, tags=tags)))
+    # Only run legacy heuristics if not has_catalog_recipe
+    if not has_catalog_recipe:
+        # 1) Posa piastrelle pavimento (qty in m2)
+        if any(k in lab for k in ("posa piastrelle", "posa pavimento", "piastrelle")) and um == "m2":
+            area = qty
+            sfrido = 1.08  # 8% di sfrido
+            mats.append(_line("FLR-001", "Piastrelle gres 60x60", "m2", area*sfrido, price("FLR-001", region=region, city=city, tags=tags)))
+            # colla ~ 3.5 kg/m2
+            mats.append(_line("ADH-001", "Colla per piastrelle", "kg", area*3.5, price("ADH-001", region=region, city=city, tags=tags)))
+            # stucco ~ 0.15 kg/m2
+            mats.append(_line("STU-001", "Stucco fughe", "kg", area*0.15, price("STU-001", region=region, city=city, tags=tags)))
+            # manodopera ~ 0.7 h/m2
+            labor.append(_labor("piastrellista", area*0.7, wage("piastrellista", region=region, city=city, tags=tags)))
 
-    # 2) Battiscopa (qty in m)
-    elif "battiscopa" in lab and um in ("m",):
-        lung = qty
-        mats.append(_line("BSK-001", "Battiscopa in gres", "m", lung, price("BSK-001", region=region, city=city, tags=tags)))
-        # manodopera ~ 0.15 h/m
-        labor.append(_labor("piastrellista", lung*0.15, wage("piastrellista", region=region, city=city, tags=tags)))
+        # 2) Battiscopa (qty in m)
+        elif "battiscopa" in lab and um in ("m",):
+            lung = qty
+            mats.append(_line("BSK-001", "Battiscopa in gres", "m", lung, price("BSK-001", region=region, city=city, tags=tags)))
+            # manodopera ~ 0.15 h/m
+            labor.append(_labor("piastrellista", lung*0.15, wage("piastrellista", region=region, city=city, tags=tags)))
 
-    # 3) Smaltimento macerie (qty in pz/sacchi)
-    elif ("smaltimento" in lab or "macerie" in lab) and um in ("pz",):
-        sacs = qty
-        mats.append(_line("WAS-001", "Sacchi macerie 25kg", "pz", sacs, price("WAS-001", region=region, city=city, tags=tags)))
-        # movimentazione ~ 0.25 h/sacco
-        labor.append(_labor("manovale", sacs*0.25, wage("manovale", region=region, city=city, tags=tags)))
+        # 3) Smaltimento macerie (qty in pz/sacchi)
+        elif ("smaltimento" in lab or "macerie" in lab) and um in ("pz",):
+            sacs = qty
+            mats.append(_line("WAS-001", "Sacchi macerie 25kg", "pz", sacs, price("WAS-001", region=region, city=city, tags=tags)))
+            # movimentazione ~ 0.25 h/sacco
+            labor.append(_labor("manovale", sacs*0.25, wage("manovale", region=region, city=city, tags=tags)))
 
-    # 4) Posa porta interna (qty in pz)
-    elif ("porta" in lab and "posa" in lab) and um in ("pz",):
-        pezzi = qty
-        # falegname ~ 1.2 h/porta (solo manodopera in preview)
-        labor.append(_labor("falegname", pezzi*1.2, wage("falegname", region=region, city=city, tags=tags)))
+        # 4) Posa porta interna (qty in pz)
+        elif ("porta" in lab and "posa" in lab) and um in ("pz",):
+            pezzi = qty
+            # falegname ~ 1.2 h/porta (solo manodopera in preview)
+            labor.append(_labor("falegname", pezzi*1.2, wage("falegname", region=region, city=city, tags=tags)))
 
-    # 5) Punto luce (qty in pz)
-    elif (("punto luce" in lab) or ("punti luce" in lab) or ("luci" in lab) or (("elettric" in lab) and ("luce" in lab))) and um in ("pz",):
-        punti = qty
-        # materiale puntuale
-        mats.append(_line("EL-PL", "Materiali punto luce", "pz", punti, price("EL-PL", region=region, city=city, tags=tags)))
-        # metraggi se specificata distanza media
-        if avg_m > 0:
-            cavo_m = _elec_len_base(avg_m) * punti
-            tubo_m = _tube_len_base(avg_m) * punti
-            mats.append(_line("EL-CAVO-3G1.5", "Cavo 3G1.5", "m", cavo_m, price("EL-CAVO-3G1.5", region=region, city=city, tags=tags)))
-            mats.append(_line("EL-TUBO-20", "Tubo corrugato Ø20", "m", tubo_m, price("EL-TUBO-20", region=region, city=city, tags=tags)))
-            deriv = math.ceil(punti / 10.0)
-            if deriv > 0:
-                mats.append(_line("EL-SCATOLA-DER", "Scatola derivazione", "pz", deriv, price("EL-SCATOLA-DER", region=region, city=city, tags=tags)))
-        # manodopera
-        labor.append(_labor("elettricista", punti*0.6, wage("elettricista", region=region, city=city, tags=tags)))
+        # 5) Punto luce (qty in pz)
+        elif (("punto luce" in lab) or ("punti luce" in lab) or ("luci" in lab) or (("elettric" in lab) and ("luce" in lab))) and um in ("pz",):
+            punti = qty
+            # materiale puntuale
+            mats.append(_line("EL-PL", "Materiali punto luce", "pz", punti, price("EL-PL", region=region, city=city, tags=tags)))
+            # metraggi se specificata distanza media
+            if avg_m > 0:
+                cavo_m = _elec_len_base(avg_m) * punti
+                tubo_m = _tube_len_base(avg_m) * punti
+                mats.append(_line("EL-CAVO-3G1.5", "Cavo 3G1.5", "m", cavo_m, price("EL-CAVO-3G1.5", region=region, city=city, tags=tags)))
+                mats.append(_line("EL-TUBO-20", "Tubo corrugato Ø20", "m", tubo_m, price("EL-TUBO-20", region=region, city=city, tags=tags)))
+                deriv = math.ceil(punti / 10.0)
+                if deriv > 0:
+                    mats.append(_line("EL-SCATOLA-DER", "Scatola derivazione", "pz", deriv, price("EL-SCATOLA-DER", region=region, city=city, tags=tags)))
+            # manodopera
+            labor.append(_labor("elettricista", punti*0.6, wage("elettricista", region=region, city=city, tags=tags)))
 
-    # 6) Punto presa (qty in pz)
-    elif (("punto presa" in lab) or ("punti presa" in lab) or ("prese" in lab) or (("elettric" in lab) and ("presa" in lab))) and um in ("pz",):
-        punti = qty
-        mats.append(_line("EL-PP", "Materiali punto presa", "pz", punti, price("EL-PP", region=region, city=city, tags=tags)))
-        if avg_m > 0:
-            cavo_m = _elec_len_base(avg_m) * punti
-            tubo_m = _tube_len_base(avg_m) * punti
-            mats.append(_line("EL-CAVO-3G2.5", "Cavo 3G2.5", "m", cavo_m, price("EL-CAVO-3G2.5", region=region, city=city, tags=tags)))
-            mats.append(_line("EL-TUBO-20", "Tubo corrugato Ø20", "m", tubo_m, price("EL-TUBO-20", region=region, city=city, tags=tags)))
-            mats.append(_line("EL-SCATOLA-503", "Scatola incasso 503", "pz", punti, price("EL-SCATOLA-503", region=region, city=city, tags=tags)))
-            deriv = math.ceil(punti / 10.0)
-            if deriv > 0:
-                mats.append(_line("EL-SCATOLA-DER", "Scatola derivazione", "pz", deriv, price("EL-SCATOLA-DER", region=region, city=city, tags=tags)))
-        labor.append(_labor("elettricista", punti*0.55, wage("elettricista", region=region, city=city, tags=tags)))
+        # 6) Punto presa (qty in pz)
+        elif (("punto presa" in lab) or ("punti presa" in lab) or ("prese" in lab) or (("elettric" in lab) and ("presa" in lab))) and um in ("pz",):
+            punti = qty
+            mats.append(_line("EL-PP", "Materiali punto presa", "pz", punti, price("EL-PP", region=region, city=city, tags=tags)))
+            if avg_m > 0:
+                cavo_m = _elec_len_base(avg_m) * punti
+                tubo_m = _tube_len_base(avg_m) * punti
+                mats.append(_line("EL-CAVO-3G2.5", "Cavo 3G2.5", "m", cavo_m, price("EL-CAVO-3G2.5", region=region, city=city, tags=tags)))
+                mats.append(_line("EL-TUBO-20", "Tubo corrugato Ø20", "m", tubo_m, price("EL-TUBO-20", region=region, city=city, tags=tags)))
+                mats.append(_line("EL-SCATOLA-503", "Scatola incasso 503", "pz", punti, price("EL-SCATOLA-503", region=region, city=city, tags=tags)))
+                deriv = math.ceil(punti / 10.0)
+                if deriv > 0:
+                    mats.append(_line("EL-SCATOLA-DER", "Scatola derivazione", "pz", deriv, price("EL-SCATOLA-DER", region=region, city=city, tags=tags)))
+            labor.append(_labor("elettricista", punti*0.55, wage("elettricista", region=region, city=city, tags=tags)))
 
-    # 7) Impianto idrico bagno (pacchetto per bagno)
-    elif ("impianto idrico bagno" in lab) and um in ("pz",):
-        bagni = int(qty)
-        mats.append(_line("IDR-BAGNO-PACK", "Kit impianto idrico bagno", "pz", bagni, price("IDR-BAGNO-PACK", region=region, city=city, tags=tags)))
-        labor.append(_labor("idraulico", bagni*12.0, wage("idraulico", region=region, city=city, tags=tags)))
+        # 7) Impianto idrico bagno (pacchetto per bagno)
+        elif ("impianto idrico bagno" in lab) and um in ("pz",):
+            bagni = int(qty)
+            mats.append(_line("IDR-BAGNO-PACK", "Kit impianto idrico bagno", "pz", bagni, price("IDR-BAGNO-PACK", region=region, city=city, tags=tags)))
+            labor.append(_labor("idraulico", bagni*12.0, wage("idraulico", region=region, city=city, tags=tags)))
 
-    # 7b) Punti idrici (qty in pz) con distanza opzionale
-    elif ("punto idrico" in lab or "punti idrici" in lab or ("idric" in lab and "punto" in lab)) and um in ("pz",):
-        punti = qty
-        if avg_m > 0:
-            ppr_m = round(avg_m * 2.0 * 1.10 * punti, 2)   # mandata+ritorno + scorta
-            scarico_m = round(avg_m * 0.40 * punti, 2)     # quota default scarico
-            mats.append(_line("IDR-TUBO-PPR-20", "Tubo PPR Ø20", "m", ppr_m, price("IDR-TUBO-PPR-20", region=region, city=city, tags=tags)))
-            mats.append(_line("IDR-SCARICO-HT-50", "Scarico HT Ø50", "m", scarico_m, price("IDR-SCARICO-HT-50", region=region, city=city, tags=tags)))
-            mats.append(_line("IDR-RACCORDI-PACK", "Kit raccordi", "pz", max(1, math.ceil(punti/2)), price("IDR-RACCORDI-PACK", region=region, city=city, tags=tags)))
-        else:
-            # fallback a pacchetto se non abbiamo lunghezze
-            mats.append(_line("IDR-BAGNO-PACK", "Kit impianto idrico punto", "pz", punti, price("IDR-BAGNO-PACK", region=region, city=city, tags=tags)))
-        labor.append(_labor("idraulico", punti * 1.20, wage("idraulico", region=region, city=city, tags=tags)))
+        # 7b) Punti idrici (qty in pz) con distanza opzionale
+        elif ("punto idrico" in lab or "punti idrici" in lab or ("idric" in lab and "punto" in lab)) and um in ("pz",):
+            punti = qty
+            if avg_m > 0:
+                ppr_m = round(avg_m * 2.0 * 1.10 * punti, 2)   # mandata+ritorno + scorta
+                scarico_m = round(avg_m * 0.40 * punti, 2)     # quota default scarico
+                mats.append(_line("IDR-TUBO-PPR-20", "Tubo PPR Ø20", "m", ppr_m, price("IDR-TUBO-PPR-20", region=region, city=city, tags=tags)))
+                mats.append(_line("IDR-SCARICO-HT-50", "Scarico HT Ø50", "m", scarico_m, price("IDR-SCARICO-HT-50", region=region, city=city, tags=tags)))
+                mats.append(_line("IDR-RACCORDI-PACK", "Kit raccordi", "pz", max(1, math.ceil(punti/2)), price("IDR-RACCORDI-PACK", region=region, city=city, tags=tags)))
+            else:
+                # fallback a pacchetto se non abbiamo lunghezze
+                mats.append(_line("IDR-BAGNO-PACK", "Kit impianto idrico punto", "pz", punti, price("IDR-BAGNO-PACK", region=region, city=city, tags=tags)))
+            labor.append(_labor("idraulico", punti * 1.20, wage("idraulico", region=region, city=city, tags=tags)))
 
     # Fallback generico: se non abbiamo materiali dalle regole euristiche,
     # prova a costruirli dal work_catalog (materials_template o materials)
@@ -1116,16 +1184,36 @@ def _recipe_from_item(label: str, qty: float, unit: str, region: str|None=None, 
                 if not code:
                     continue
 
-                qty_per_unit = _as_float(_pick(m, "qty_per_unit", "qty_per_m", "qty_per_m2", "qty_unit", "qta_per_unit", "qta_per_m", "qta_per_m2", default=0.0), 0.0)
+                qty_per_unit = _as_float(
+                    _pick(
+                        m,
+                        "qty_per_unit", "qty_per_m", "qty_per_m2", "qty_unit",
+                        "qta_per_unit", "qta_per_m", "qta_per_m2",
+                        default=0.0,
+                    ),
+                    0.0,
+                )
                 if qty_per_unit <= 0:
                     continue
 
-                descr = str(_pick(m, "descr", "description", "name", "label", default=code) or code).strip()
-                um_m = _normalize_um(_pick(m, "um", "unit", "uom", default="pz"))
+                # Enrich from materials catalog (name/unit) but let template override when present
+                cat_name, cat_unit = _material_name_unit(code)
+
+                descr = str(_pick(m, "descr", "description", "name", "label", default="") or "").strip()
+                if not descr:
+                    descr = str(cat_name)
+
+                um_raw = _pick(m, "um", "unit", "uom", default="")
+                um_m = _normalize_um(um_raw) if (um_raw not in (None, "")) else cat_unit
+                if not um_m:
+                    um_m = cat_unit
 
                 qta = float(qty) * float(qty_per_unit)
-                prezzo = price(code, 0.0, region=region, city=city, tags=tags)
-                rows.append(_line(code, descr, um_m, qta, prezzo))
+
+                # Price: prefer pricelist override for this region/city; fallback to materials catalog
+                prezzo = _material_unit_price(region, city, code, tags=tags)
+
+                rows.append(_line(code, descr, um_m, qta, float(prezzo or 0.0)))
 
         # B) formato dict: {"MAT-001": 0.2, "MAT-002": 1.5, ...}
         elif isinstance(mats_src, dict):
@@ -1133,16 +1221,70 @@ def _recipe_from_item(label: str, qty: float, unit: str, region: str|None=None, 
                 code = str(code or "").strip()
                 if not code:
                     continue
+
                 qpu = _as_float(qty_per_unit, 0.0)
                 if qpu <= 0:
                     continue
+
                 qta = float(qty) * float(qpu)
-                prezzo = price(code, 0.0, region=region, city=city, tags=tags)
-                rows.append(_line(code, code, "pz", qta, prezzo))
+
+                cat_name, cat_unit = _material_name_unit(code)
+                descr = str(cat_name)
+                um_m = cat_unit
+
+                prezzo = _material_unit_price(region, city, code, tags=tags)
+
+                rows.append(_line(code, descr, um_m, qta, float(prezzo or 0.0)))
 
         # Se abbiamo prodotto righe materiali dal catalogo, usale
         if rows:
             mats.extend(rows)
+
+    # --- EXTRA: ELEC_FIXTURE con avg_distance_m (aggiunge materiali lineari) ---
+    if catalog_code == "ELEC_FIXTURE" and um == "pz" and avg_m > 0:
+        existing = set((r.get("code") or "").strip() for r in mats if isinstance(r, dict))
+
+        def _elec_len_base(avg_m_val: float, factor: float = 1.0) -> float:
+            # andata/ritorno + 10% scorta
+            return round(max(avg_m_val, 0.0) * 2.0 * 1.10 * factor, 2)
+
+        def _tube_len_base(avg_m_val: float, factor: float = 1.0) -> float:
+            # piccola maggiorazione posa
+            return round(max(avg_m_val, 0.0) * 1.05 * factor, 2)
+
+        punti = float(qty)
+
+        # NOTE: usa i tuoi codici reali (underscore per 3G1_5)
+        cavo_code = "EL-CAVO-3G1_5"
+        tubo_code = "EL-TUBO-20"
+        scat_code = "EL-SCATOLA-503"
+        der_code  = "EL-SCATOLA-DER"
+
+        cavo_m = _elec_len_base(avg_m) * punti
+        tubo_m = _tube_len_base(avg_m) * punti
+
+        if cavo_code not in existing and cavo_m > 0:
+            name, unit_cat = _material_name_unit(cavo_code)
+            prezzo = _material_unit_price(region, city, cavo_code, tags=tags)
+            mats.append(_line(cavo_code, name, unit_cat, cavo_m, prezzo))
+
+        if tubo_code not in existing and tubo_m > 0:
+            name, unit_cat = _material_name_unit(tubo_code)
+            prezzo = _material_unit_price(region, city, tubo_code, tags=tags)
+            mats.append(_line(tubo_code, name, unit_cat, tubo_m, prezzo))
+
+        # scatole incasso (1 per punto)
+        if scat_code not in existing and punti > 0:
+            name, unit_cat = _material_name_unit(scat_code)
+            prezzo = _material_unit_price(region, city, scat_code, tags=tags)
+            mats.append(_line(scat_code, name, unit_cat, punti, prezzo))
+
+        # scatola derivazione ogni ~10 punti
+        deriv = int(math.ceil(punti / 10.0))
+        if der_code not in existing and deriv > 0:
+            name, unit_cat = _material_name_unit(der_code)
+            prezzo = _material_unit_price(region, city, der_code, tags=tags)
+            mats.append(_line(der_code, name, unit_cat, deriv, prezzo))
 
     # altri casi → preview vuota, verrà arricchita con listini/regole aggiuntive
     subtotal = _sum(mats) + _sum(labor)
