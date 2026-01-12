@@ -300,6 +300,16 @@ def _crew_requirements_for_code(code: str | None) -> dict:
         return out
     except Exception:
         return {}
+    
+def _work_catalog_item(code: str | None) -> dict:
+    if not code or get_db is None:
+        return {}
+    try:
+        db = get_db()
+        doc = db["work_catalog"].find_one({"code": code}, {"_id": 0}) or {}
+        return doc or {}
+    except Exception:
+        return {}
 
 # -------------------------
 # Calcolo manodopera (da DB o default)
@@ -834,6 +844,49 @@ def wage(role: str, default: float = 25.0, *, region: str|None=None, city: str|N
     # 4) Apply territorial factors (only to positive wages)
     return float(_apply_factors(val, pl.get("factors", {}), tags))
 
+def wage_for_work(code: str | None, role: str | None, default: float = 25.0, *, region: str|None=None, city: str|None=None, tags: list[str]|None=None) -> float:
+    """Tariffa oraria: prima per work-code, poi per ruolo, poi WorkerDoc, poi default."""
+    pl = _get_pricelist(region, city)
+    val = None
+
+    # 1) Wage indicizzata per work-code (es. 'ELEC_ROUGH')
+    try:
+        if code:
+            raw = (pl.get("wages") or {}).get(code)
+            if isinstance(raw, (int, float)) and raw > 0:
+                val = float(raw)
+    except Exception:
+        val = None
+
+    # 2) Wage indicizzata per ruolo (es. 'elettricista')
+    if val is None:
+        try:
+            if role:
+                raw = (pl.get("wages") or {}).get(role)
+                if isinstance(raw, (int, float)) and raw > 0:
+                    val = float(raw)
+        except Exception:
+            val = None
+
+    # 3) WorkerDoc fallback
+    if val is None:
+        try:
+            if role and WorkerDoc is not None:
+                w = WorkerDoc.objects(role__icontains=role).first()
+                if w and getattr(w, "hourly_rate", None) is not None:
+                    val = float(w.hourly_rate)
+        except Exception:
+            val = None
+
+    # 4) Default
+    if val is None:
+        if role and role in DEFAULT_WAGE:
+            val = float(DEFAULT_WAGE[role])
+        else:
+            val = float(default)
+
+    return float(_apply_factors(val, pl.get("factors", {}), tags))
+
 # ------------------ Auto-resolve geo & factors ------------------
 
 def _multiply_factors(factors: dict, tags: List[str]|None) -> float:
@@ -908,8 +961,28 @@ def _recipe_from_item(label: str, qty: float, unit: str, region: str|None=None, 
         avg_m = 0.0
 
     # Resolve catalog code and crew requirements (if present in DB)
-    catalog_code = _catalog_code_from_label(label, um)
+    meta_code = (meta.get("code") or meta.get("work_code") or meta.get("catalog_code")) if isinstance(meta, dict) else None
+    if isinstance(meta_code, str):
+        meta_code = meta_code.strip() or None
+
+    catalog_code = meta_code or _catalog_code_from_label(label, um)
     crew_req = _crew_requirements_for_code(catalog_code)
+
+    wc = _work_catalog_item(catalog_code)
+    if wc:
+        try:
+            prod = float(wc.get("productivity_per_worker_per_hour") or 0)
+        except Exception:
+            prod = 0.0
+
+        primary_role = wc.get("primary_role")
+        if isinstance(primary_role, str):
+            primary_role = primary_role.strip() or None
+
+        if prod > 0 and qty > 0 and primary_role:
+            hours = float(qty) / prod
+            hr = wage_for_work(catalog_code, primary_role, region=region, city=city, tags=tags)
+            labor.append(_labor(primary_role, hours, hr))
 
     def _elec_len_base(avg_m_val: float, factor: float = 1.0) -> float:
         # andata/ritorno + 10% scorta
@@ -1002,6 +1075,74 @@ def _recipe_from_item(label: str, qty: float, unit: str, region: str|None=None, 
             # fallback a pacchetto se non abbiamo lunghezze
             mats.append(_line("IDR-BAGNO-PACK", "Kit impianto idrico punto", "pz", punti, price("IDR-BAGNO-PACK", region=region, city=city, tags=tags)))
         labor.append(_labor("idraulico", punti * 1.20, wage("idraulico", region=region, city=city, tags=tags)))
+
+    # Fallback generico: se non abbiamo materiali dalle regole euristiche,
+    # prova a costruirli dal work_catalog (materials_template o materials)
+    # NOTE: supporta più convenzioni di chiavi (um/unit, descr/name/description, qty_per_unit/qty_per_m, ecc.)
+    if wc and not mats:
+        # 1) preferisci materials_template (più ricco), poi fallback su materials
+        template = wc.get("materials_template")
+        mats_src = template if isinstance(template, list) and template else wc.get("materials")
+
+        def _pick(d: dict, *keys, default=None):
+            for k in keys:
+                if k in d and d.get(k) not in (None, ""):
+                    return d.get(k)
+            return default
+
+        def _as_float(x, default=0.0):
+            try:
+                if x is None:
+                    return default
+                if isinstance(x, (int, float)):
+                    return float(x)
+                s = str(x).strip().replace(",", ".")
+                return float(s)
+            except Exception:
+                return default
+
+        def _normalize_um(u: Any) -> str:
+            return _unit(str(u or "pz"))
+
+        rows: List[dict] = []
+
+        # A) formato lista di dict: [{code/sku, descr, um/unit, qty_per_unit}, ...]
+        if isinstance(mats_src, list):
+            for m in mats_src:
+                if not isinstance(m, dict):
+                    continue
+
+                code = str(_pick(m, "sku", "code", "material_code", "material", "id") or "").strip()
+                if not code:
+                    continue
+
+                qty_per_unit = _as_float(_pick(m, "qty_per_unit", "qty_per_m", "qty_per_m2", "qty_unit", "qta_per_unit", "qta_per_m", "qta_per_m2", default=0.0), 0.0)
+                if qty_per_unit <= 0:
+                    continue
+
+                descr = str(_pick(m, "descr", "description", "name", "label", default=code) or code).strip()
+                um_m = _normalize_um(_pick(m, "um", "unit", "uom", default="pz"))
+
+                qta = float(qty) * float(qty_per_unit)
+                prezzo = price(code, 0.0, region=region, city=city, tags=tags)
+                rows.append(_line(code, descr, um_m, qta, prezzo))
+
+        # B) formato dict: {"MAT-001": 0.2, "MAT-002": 1.5, ...}
+        elif isinstance(mats_src, dict):
+            for code, qty_per_unit in mats_src.items():
+                code = str(code or "").strip()
+                if not code:
+                    continue
+                qpu = _as_float(qty_per_unit, 0.0)
+                if qpu <= 0:
+                    continue
+                qta = float(qty) * float(qpu)
+                prezzo = price(code, 0.0, region=region, city=city, tags=tags)
+                rows.append(_line(code, code, "pz", qta, prezzo))
+
+        # Se abbiamo prodotto righe materiali dal catalogo, usale
+        if rows:
+            mats.extend(rows)
 
     # altri casi → preview vuota, verrà arricchita con listini/regole aggiuntive
     subtotal = _sum(mats) + _sum(labor)

@@ -8,6 +8,7 @@
     "prerequisites": [],
     "primary_role": "elettricista",
     "productivity_per_worker_per_hour": 12,
+    "productivity_basis": "per_worker",
     "roles_allowed": [
       "elettricista"
     ],
@@ -17,7 +18,21 @@
       "tracce elettriche",
       "wiring"
     ],
-    "unit": "m"
+    "unit": "m",
+    "materials": [
+      {
+        "sku": "TC25",
+        "qty_per_unit": 1.05
+      },
+      {
+        "sku": "FG1615",
+        "qty_per_unit": 2.2
+      },
+      {
+        "sku": "SC503",
+        "qty_per_unit": 0.08
+      }
+    ]
   },
   {
     "code": "PLUMB_ROUGH",
@@ -28,6 +43,7 @@
     "prerequisites": [],
     "primary_role": "idraulico",
     "productivity_per_worker_per_hour": 10,
+    "productivity_basis": "per_worker",
     "roles_allowed": [
       "idraulico"
     ],
@@ -36,7 +52,21 @@
       "impianto idraulico",
       "posa tubi"
     ],
-    "unit": "m"
+    "unit": "m",
+    "materials": [
+      {
+        "sku": "MLT16",
+        "qty_per_unit": 1.05
+      },
+      {
+        "sku": "RAC16",
+        "qty_per_unit": 0.25
+      },
+      {
+        "sku": "COIB16",
+        "qty_per_unit": 1.05
+      }
+    ]
   },
   {
     "code": "WALL_BUILD",
@@ -47,6 +77,7 @@
     "prerequisites": [],
     "primary_role": "muratore",
     "productivity_per_worker_per_hour": 5,
+    "productivity_basis": "per_worker",
     "roles_allowed": [
       "muratore"
     ],
@@ -56,7 +87,21 @@
       "muratura",
       "tramezzi"
     ],
-    "unit": "m2"
+    "unit": "m2",
+    "materials": [
+      {
+        "sku": "MATFOR",
+        "qty_per_unit": 25
+      },
+      {
+        "sku": "MALM5",
+        "qty_per_unit": 12
+      },
+      {
+        "sku": "WAS-001",
+        "qty_per_unit": 0.2
+      }
+    ]
   },
   {
     "code": "PLASTER",
@@ -69,6 +114,7 @@
     ],
     "primary_role": "muratore",
     "productivity_per_worker_per_hour": 12,
+    "productivity_basis": "per_worker",
     "roles_allowed": [
       "muratore",
       "cartongessista"
@@ -78,7 +124,21 @@
       "rasatura",
       "finitura pareti"
     ],
-    "unit": "m2"
+    "unit": "m2",
+    "materials": [
+      {
+        "sku": "INTCIV",
+        "qty_per_unit": 8
+      },
+      {
+        "sku": "STUPAST",
+        "qty_per_unit": 1
+      },
+      {
+        "sku": "FISSACR",
+        "qty_per_unit": 0.15
+      }
+    ]
   },
   {
     "code": "FLOOR_TILE",
@@ -92,6 +152,7 @@
     ],
     "primary_role": "piastrellista",
     "productivity_per_worker_per_hour": 8,
+    "productivity_basis": "per_worker",
     "roles_allowed": [
       "piastrellista",
       "muratore"
@@ -101,7 +162,59 @@
       "piastrellatura",
       "pavimentazione gres"
     ],
-    "unit": "m2"
+    "unit": "m2",
+    "materials": [
+      {
+        "sku": "GRES_STD",
+        "qty_per_unit": 1.05
+      },
+      {
+        "sku": "COLC2TE",
+        "qty_per_unit": 4
+      },
+      {
+        "sku": "STUCG2",
+        "qty_per_unit": 0.5
+      }
+    ]
+  },
+  {
+    "code": "WALL_TILE",
+    "max_crew": 3,
+    "min_crew": 1,
+    "name": "Posa rivestimento pareti (Piastrelle/Gres)",
+    "notes": "Supporto pronto e planare; impermeabilizzazione eseguita in zone umide se prevista.",
+    "prerequisites": [
+      "PLASTER",
+      "WATERPROOF"
+    ],
+    "primary_role": "piastrellista",
+    "productivity_per_worker_per_hour": 6,
+    "productivity_basis": "per_worker",
+    "roles_allowed": [
+      "piastrellista",
+      "muratore"
+    ],
+    "synonyms": [
+      "rivestimento bagno",
+      "rivestimento cucina",
+      "posa piastrelle parete"
+    ],
+    "unit": "m2",
+    "materials": [
+      {
+        "sku": "GRES_STD",
+        "qty_per_unit": 1.05
+      },
+      {
+        "sku": "COLC2TE",
+        "qty_per_unit": 4
+      },
+      {
+        "sku": "STUCG2",
+        "qty_per_unit": 0.5
+      }
+    ]
   },
   {
     "code": "PAINT",
@@ -115,6 +228,7 @@
     ],
     "primary_role": "imbianchino",
     "productivity_per_worker_per_hour": 20,
+    "productivity_basis": "per_worker",
     "roles_allowed": [
       "imbianchino"
     ],
@@ -123,7 +237,21 @@
       "verniciatura",
       "pittura pareti"
     ],
-    "unit": "m2"
+    "unit": "m2",
+    "materials": [
+      {
+        "sku": "PL_BIA",
+        "qty_per_unit": 0.24
+      },
+      {
+        "sku": "FISSACR",
+        "qty_per_unit": 0.1
+      },
+      {
+        "sku": "NASTC50",
+        "qty_per_unit": 0.05
+      }
+    ]
   },
   {
     "code": "DEM_WALL",
@@ -134,6 +262,7 @@
     "prerequisites": [],
     "primary_role": "muratore",
     "productivity_per_worker_per_hour": 8,
+    "productivity_basis": "per_worker",
     "roles_allowed": [
       "muratore",
       "operaio"
@@ -144,7 +273,21 @@
       "buttare giù muro",
       "demolizioni"
     ],
-    "unit": "m2"
+    "unit": "m2",
+    "materials": [
+      {
+        "sku": "SAC70",
+        "qty_per_unit": 0.4
+      },
+      {
+        "sku": "GUANNIT",
+        "qty_per_unit": 0.02
+      },
+      {
+        "sku": "OCCHPROT",
+        "qty_per_unit": 0.01
+      }
+    ]
   },
   {
     "code": "DEM_FLOOR",
@@ -155,6 +298,7 @@
     "prerequisites": [],
     "primary_role": "muratore",
     "productivity_per_worker_per_hour": 10,
+    "productivity_basis": "per_worker",
     "roles_allowed": [
       "muratore",
       "operaio",
@@ -165,7 +309,21 @@
       "togliere pavimento",
       "demolizione pavimento"
     ],
-    "unit": "m2"
+    "unit": "m2",
+    "materials": [
+      {
+        "sku": "SAC70",
+        "qty_per_unit": 0.5
+      },
+      {
+        "sku": "GUANNIT",
+        "qty_per_unit": 0.02
+      },
+      {
+        "sku": "OCCHPROT",
+        "qty_per_unit": 0.01
+      }
+    ]
   },
   {
     "code": "DEM_PLUMB",
@@ -176,6 +334,7 @@
     "prerequisites": [],
     "primary_role": "idraulico",
     "productivity_per_worker_per_hour": 2,
+    "productivity_basis": "per_worker",
     "roles_allowed": [
       "idraulico",
       "muratore"
@@ -185,7 +344,21 @@
       "rimozione sanitari",
       "demolizione bagno"
     ],
-    "unit": "pz"
+    "unit": "pz",
+    "materials": [
+      {
+        "sku": "SAC70",
+        "qty_per_unit": 1.0
+      },
+      {
+        "sku": "GUANNIT",
+        "qty_per_unit": 0.1
+      },
+      {
+        "sku": "OCCHPROT",
+        "qty_per_unit": 0.05
+      }
+    ]
   },
   {
     "code": "WALL_DRY_FRAME",
@@ -196,6 +369,7 @@
     "prerequisites": [],
     "primary_role": "cartongessista",
     "productivity_per_worker_per_hour": 10,
+    "productivity_basis": "per_worker",
     "roles_allowed": [
       "cartongessista",
       "muratore"
@@ -206,7 +380,25 @@
       "guide cartongesso",
       "drywall frame"
     ],
-    "unit": "m2"
+    "unit": "m2",
+    "materials": [
+      {
+        "sku": "M50",
+        "qty_per_unit": 1.8
+      },
+      {
+        "sku": "U50",
+        "qty_per_unit": 0.9
+      },
+      {
+        "sku": "TAS860",
+        "qty_per_unit": 4
+      },
+      {
+        "sku": "VTR440",
+        "qty_per_unit": 6
+      }
+    ]
   },
   {
     "code": "WALL_DRY_PANEL",
@@ -221,6 +413,7 @@
     ],
     "primary_role": "cartongessista",
     "productivity_per_worker_per_hour": 15,
+    "productivity_basis": "per_worker",
     "roles_allowed": [
       "cartongessista",
       "muratore"
@@ -231,7 +424,17 @@
       "pannelli",
       "drywall panel"
     ],
-    "unit": "m2"
+    "unit": "m2",
+    "materials": [
+      {
+        "sku": "GKB12",
+        "qty_per_unit": 1.05
+      },
+      {
+        "sku": "VIT25",
+        "qty_per_unit": 20
+      }
+    ]
   },
   {
     "code": "WALL_DRY_FINISH",
@@ -244,6 +447,7 @@
     ],
     "primary_role": "cartongessista",
     "productivity_per_worker_per_hour": 10,
+    "productivity_basis": "per_worker",
     "roles_allowed": [
       "cartongessista",
       "imbianchino"
@@ -254,7 +458,21 @@
       "nastri cartongesso",
       "finitura drywall"
     ],
-    "unit": "m2"
+    "unit": "m2",
+    "materials": [
+      {
+        "sku": "STUGK",
+        "qty_per_unit": 0.8
+      },
+      {
+        "sku": "NASTC50",
+        "qty_per_unit": 0.25
+      },
+      {
+        "sku": "STUPAST",
+        "qty_per_unit": 0.3
+      }
+    ]
   },
   {
     "code": "STRU_SCREED",
@@ -268,6 +486,7 @@
     ],
     "primary_role": "muratore",
     "productivity_per_worker_per_hour": 8,
+    "productivity_basis": "per_worker",
     "roles_allowed": [
       "muratore",
       "piastrellista"
@@ -278,7 +497,17 @@
       "posa massetto",
       "caldana"
     ],
-    "unit": "m2"
+    "unit": "m2",
+    "materials": [
+      {
+        "sku": "MASPR",
+        "qty_per_unit": 80
+      },
+      {
+        "sku": "WAS-001",
+        "qty_per_unit": 0.5
+      }
+    ]
   },
   {
     "code": "PLUMB_FIXTURE",
@@ -293,6 +522,7 @@
     ],
     "primary_role": "idraulico",
     "productivity_per_worker_per_hour": 2,
+    "productivity_basis": "per_worker",
     "roles_allowed": [
       "idraulico"
     ],
@@ -304,7 +534,25 @@
       "montaggio rubinetti",
       "doccia"
     ],
-    "unit": "pz"
+    "unit": "pz",
+    "materials": [
+      {
+        "sku": "SILACET",
+        "qty_per_unit": 0.2
+      },
+      {
+        "sku": "TAS860",
+        "qty_per_unit": 4
+      },
+      {
+        "sku": "VTR440",
+        "qty_per_unit": 8
+      },
+      {
+        "sku": "WAS-001",
+        "qty_per_unit": 2
+      }
+    ]
   },
   {
     "code": "ELEC_FIXTURE",
@@ -318,6 +566,7 @@
     ],
     "primary_role": "elettricista",
     "productivity_per_worker_per_hour": 10,
+    "productivity_basis": "per_worker",
     "roles_allowed": [
       "elettricista"
     ],
@@ -328,7 +577,29 @@
       "montaggio lampadari",
       "frutti elettrici"
     ],
-    "unit": "pz"
+    "unit": "pz",
+    "materials": [
+      {
+        "sku": "PF3M",
+        "qty_per_unit": 1.0
+      },
+      {
+        "sku": "PLC3M",
+        "qty_per_unit": 1.0
+      },
+      {
+        "sku": "INTUNI",
+        "qty_per_unit": 0.6
+      },
+      {
+        "sku": "PRSK16",
+        "qty_per_unit": 0.3
+      },
+      {
+        "sku": "PRBIP",
+        "qty_per_unit": 0.3
+      }
+    ]
   },
   {
     "code": "HVAC_SPLIT",
@@ -343,6 +614,7 @@
     ],
     "primary_role": "idraulico",
     "productivity_per_worker_per_hour": 0.25,
+    "productivity_basis": "per_worker",
     "roles_allowed": [
       "idraulico",
       "frigorista",
@@ -355,7 +627,33 @@
       "posa clima",
       "HVAC"
     ],
-    "unit": "pz"
+    "unit": "pz",
+    "materials": [
+      {
+        "sku": "TC25",
+        "qty_per_unit": 5
+      },
+      {
+        "sku": "FG1634",
+        "qty_per_unit": 5
+      },
+      {
+        "sku": "SCHPU",
+        "qty_per_unit": 1
+      },
+      {
+        "sku": "SILAC",
+        "qty_per_unit": 0.5
+      },
+      {
+        "sku": "TAS860",
+        "qty_per_unit": 10
+      },
+      {
+        "sku": "VTR440",
+        "qty_per_unit": 20
+      }
+    ]
   },
   {
     "code": "FIN_WINDOW",
@@ -368,6 +666,7 @@
     ],
     "primary_role": "serramentista",
     "productivity_per_worker_per_hour": 0.5,
+    "productivity_basis": "per_worker",
     "roles_allowed": [
       "serramentista",
       "falegname",
@@ -379,20 +678,43 @@
       "infissi",
       "montaggio finestre"
     ],
-    "unit": "pz"
+    "unit": "pz",
+    "materials": [
+      {
+        "sku": "SCHPU",
+        "qty_per_unit": 1
+      },
+      {
+        "sku": "SILAC",
+        "qty_per_unit": 0.5
+      },
+      {
+        "sku": "TAS860",
+        "qty_per_unit": 10
+      },
+      {
+        "sku": "VTR440",
+        "qty_per_unit": 20
+      }
+    ]
   },
   {
     "code": "FIN_DOOR",
     "max_crew": 2,
     "min_crew": 1,
     "name": "Posa porte interne",
-    "notes": "Verifica livelli e squadro vano porta. Da posare dopo pavimenti e pittura.",
+    "notes": "Verifica livelli e squadro vano porta. Da posare dopo pavimento finito (piastrelle/parquet/resina) e pittura.",
     "prerequisites": [
-      "FLOOR_TILE",
       "PAINT"
+    ],
+    "prerequisites_any": [
+      "FLOOR_TILE",
+      "FLOOR_PARQUET",
+      "FLOOR_RESIN"
     ],
     "primary_role": "falegname",
     "productivity_per_worker_per_hour": 0.7,
+    "productivity_basis": "per_worker",
     "roles_allowed": [
       "falegname",
       "posatore"
@@ -403,7 +725,25 @@
       "telaio",
       "falsitelaio"
     ],
-    "unit": "pz"
+    "unit": "pz",
+    "materials": [
+      {
+        "sku": "SCHPU",
+        "qty_per_unit": 0.5
+      },
+      {
+        "sku": "SILAC",
+        "qty_per_unit": 0.2
+      },
+      {
+        "sku": "TAS860",
+        "qty_per_unit": 6
+      },
+      {
+        "sku": "VTR440",
+        "qty_per_unit": 20
+      }
+    ]
   },
   {
     "code": "FLOOR_PARQUET",
@@ -416,6 +756,7 @@
     ],
     "primary_role": "parquettista",
     "productivity_per_worker_per_hour": 3,
+    "productivity_basis": "per_worker",
     "roles_allowed": [
       "parquettista",
       "falegname"
@@ -425,21 +766,39 @@
       "pavimento in legno",
       "posa legno"
     ],
-    "unit": "m2"
+    "unit": "m2",
+    "materials": [
+      {
+        "sku": "TAV25200",
+        "qty_per_unit": 1.05
+      },
+      {
+        "sku": "PRIPU",
+        "qty_per_unit": 0.15
+      },
+      {
+        "sku": "BSK-001",
+        "qty_per_unit": 0.05
+      }
+    ]
   },
   {
     "code": "FIN_SKIRTING",
     "max_crew": 2,
     "min_crew": 1,
     "name": "Posa battiscopa",
-    "notes": "Tagli a 45° per angoli. Solitamente una delle ultime lavorazioni.",
+    "notes": "Tagli a 45° per angoli. Richiede pavimento finito (piastrelle/parquet/resina). Solitamente una delle ultime lavorazioni.",
     "prerequisites": [
+      "PAINT"
+    ],
+    "prerequisites_any": [
       "FLOOR_TILE",
       "FLOOR_PARQUET",
-      "PAINT"
+      "FLOOR_RESIN"
     ],
     "primary_role": "parquettista",
     "productivity_per_worker_per_hour": 20,
+    "productivity_basis": "per_worker",
     "roles_allowed": [
       "parquettista",
       "falegname",
@@ -450,7 +809,21 @@
       "battiscopa",
       "zoccolino"
     ],
-    "unit": "m"
+    "unit": "m",
+    "materials": [
+      {
+        "sku": "SILAC",
+        "qty_per_unit": 0.05
+      },
+      {
+        "sku": "TAS860",
+        "qty_per_unit": 1
+      },
+      {
+        "sku": "VTR440",
+        "qty_per_unit": 2
+      }
+    ]
   },
   {
     "code": "WATERPROOF",
@@ -464,6 +837,7 @@
     ],
     "primary_role": "piastrellista",
     "productivity_per_worker_per_hour": 10,
+    "productivity_basis": "per_worker",
     "roles_allowed": [
       "piastrellista",
       "muratore"
@@ -474,7 +848,21 @@
       "mapelastic",
       "guaina liquida"
     ],
-    "unit": "m2"
+    "unit": "m2",
+    "materials": [
+      {
+        "sku": "MAPELAS",
+        "qty_per_unit": 3
+      },
+      {
+        "sku": "NGRET",
+        "qty_per_unit": 0.2
+      },
+      {
+        "sku": "PRIPU",
+        "qty_per_unit": 0.1
+      }
+    ]
   },
   {
     "code": "SITE_PREP",
@@ -485,6 +873,7 @@
     "prerequisites": [],
     "primary_role": "operaio",
     "productivity_per_worker_per_hour": 50,
+    "productivity_basis": "per_worker",
     "roles_allowed": [
       "operaio",
       "muratore"
@@ -496,7 +885,21 @@
       "nylon",
       "delimitazione area"
     ],
-    "unit": "m2"
+    "unit": "m2",
+    "materials": [
+      {
+        "sku": "NASTC50",
+        "qty_per_unit": 0.1
+      },
+      {
+        "sku": "BSK-001",
+        "qty_per_unit": 0.02
+      },
+      {
+        "sku": "WAS-001",
+        "qty_per_unit": 0.1
+      }
+    ]
   },
   {
     "code": "SITE_WASTE",
@@ -510,6 +913,7 @@
     ],
     "primary_role": "operaio",
     "productivity_per_worker_per_hour": 1,
+    "productivity_basis": "per_worker",
     "roles_allowed": [
       "operaio",
       "muratore"
@@ -521,7 +925,17 @@
       "smaltimento",
       "calcinacci"
     ],
-    "unit": "m3"
+    "unit": "m3",
+    "materials": [
+      {
+        "sku": "SAC70",
+        "qty_per_unit": 8
+      },
+      {
+        "sku": "WAS-001",
+        "qty_per_unit": 0.5
+      }
+    ]
   },
   {
     "code": "HVAC_FLOOR_HEAT",
@@ -534,6 +948,7 @@
     ],
     "primary_role": "idraulico",
     "productivity_per_worker_per_hour": 10,
+    "productivity_basis": "per_worker",
     "roles_allowed": [
       "idraulico",
       "termoidraulico"
@@ -543,7 +958,21 @@
       "serpentine",
       "pannelli radianti"
     ],
-    "unit": "m2"
+    "unit": "m2",
+    "materials": [
+      {
+        "sku": "MLT16",
+        "qty_per_unit": 5
+      },
+      {
+        "sku": "RAC16",
+        "qty_per_unit": 0.2
+      },
+      {
+        "sku": "BSK-001",
+        "qty_per_unit": 0.05
+      }
+    ]
   },
   {
     "code": "STRU_SCREED_REINF",
@@ -556,6 +985,7 @@
     ],
     "primary_role": "muratore",
     "productivity_per_worker_per_hour": 6,
+    "productivity_basis": "per_worker",
     "roles_allowed": [
       "muratore"
     ],
@@ -564,7 +994,21 @@
       "rete elettrosaldata",
       "massetto con rete"
     ],
-    "unit": "m2"
+    "unit": "m2",
+    "materials": [
+      {
+        "sku": "MASPR",
+        "qty_per_unit": 90
+      },
+      {
+        "sku": "RETE6",
+        "qty_per_unit": 1.05
+      },
+      {
+        "sku": "FILLEG",
+        "qty_per_unit": 0.05
+      }
+    ]
   },
   {
     "code": "HVAC_BOILER",
@@ -578,6 +1022,7 @@
     ],
     "primary_role": "idraulico",
     "productivity_per_worker_per_hour": 0.2,
+    "productivity_basis": "per_worker",
     "roles_allowed": [
       "idraulico",
       "termoidraulico",
@@ -589,7 +1034,29 @@
       "scaldabagno",
       "centrale termica"
     ],
-    "unit": "pz"
+    "unit": "pz",
+    "materials": [
+      {
+        "sku": "MLT16",
+        "qty_per_unit": 5
+      },
+      {
+        "sku": "RAC16",
+        "qty_per_unit": 10
+      },
+      {
+        "sku": "FG1634",
+        "qty_per_unit": 5
+      },
+      {
+        "sku": "TC25",
+        "qty_per_unit": 5
+      },
+      {
+        "sku": "SILAC",
+        "qty_per_unit": 1
+      }
+    ]
   },
   {
     "code": "ELEC_PANEL",
@@ -603,6 +1070,7 @@
     ],
     "primary_role": "elettricista",
     "productivity_per_worker_per_hour": 0.25,
+    "productivity_basis": "per_worker",
     "roles_allowed": [
       "elettricista"
     ],
@@ -612,7 +1080,29 @@
       "salvavita",
       "magnetotermici"
     ],
-    "unit": "pz"
+    "unit": "pz",
+    "materials": [
+      {
+        "sku": "QDR8M",
+        "qty_per_unit": 1
+      },
+      {
+        "sku": "MT16C",
+        "qty_per_unit": 2
+      },
+      {
+        "sku": "RCD25",
+        "qty_per_unit": 1
+      },
+      {
+        "sku": "FG1625",
+        "qty_per_unit": 10
+      },
+      {
+        "sku": "TC25",
+        "qty_per_unit": 5
+      }
+    ]
   },
   {
     "code": "CEIL_SUSPEND",
@@ -625,6 +1115,7 @@
     ],
     "primary_role": "cartongessista",
     "productivity_per_worker_per_hour": 8,
+    "productivity_basis": "per_worker",
     "roles_allowed": [
       "cartongessista",
       "muratore"
@@ -635,7 +1126,25 @@
       "veletta",
       "botola"
     ],
-    "unit": "m2"
+    "unit": "m2",
+    "materials": [
+      {
+        "sku": "U50",
+        "qty_per_unit": 1.0
+      },
+      {
+        "sku": "M50",
+        "qty_per_unit": 1.5
+      },
+      {
+        "sku": "GKB12",
+        "qty_per_unit": 1.05
+      },
+      {
+        "sku": "VIT25",
+        "qty_per_unit": 18
+      }
+    ]
   },
   {
     "code": "EXT_EIFS",
@@ -646,6 +1155,7 @@
     "prerequisites": [],
     "primary_role": "muratore",
     "productivity_per_worker_per_hour": 4,
+    "productivity_basis": "per_worker",
     "roles_allowed": [
       "muratore",
       "facciatista"
@@ -656,7 +1166,29 @@
       "ETICS",
       "rasatura armata"
     ],
-    "unit": "m2"
+    "unit": "m2",
+    "materials": [
+      {
+        "sku": "LDR70",
+        "qty_per_unit": 1.05
+      },
+      {
+        "sku": "COLC2TE",
+        "qty_per_unit": 4
+      },
+      {
+        "sku": "TAS860",
+        "qty_per_unit": 6
+      },
+      {
+        "sku": "NGRET",
+        "qty_per_unit": 0.2
+      },
+      {
+        "sku": "INTCIV",
+        "qty_per_unit": 4
+      }
+    ]
   },
   {
     "code": "ROOF_WATERPROOF",
@@ -667,6 +1199,7 @@
     "prerequisites": [],
     "primary_role": "impermeabilizzatore",
     "productivity_per_worker_per_hour": 15,
+    "productivity_basis": "per_worker",
     "roles_allowed": [
       "impermeabilizzatore",
       "muratore",
@@ -678,7 +1211,21 @@
       "membrana bituminosa",
       "tetto piano"
     ],
-    "unit": "m2"
+    "unit": "m2",
+    "materials": [
+      {
+        "sku": "GBIT4A",
+        "qty_per_unit": 1.05
+      },
+      {
+        "sku": "PRIBIT",
+        "qty_per_unit": 0.3
+      },
+      {
+        "sku": "NASBUT100",
+        "qty_per_unit": 0.2
+      }
+    ]
   },
   {
     "code": "ROOF_TILE",
@@ -691,6 +1238,7 @@
     ],
     "primary_role": "coperturista",
     "productivity_per_worker_per_hour": 10,
+    "productivity_basis": "per_worker",
     "roles_allowed": [
       "coperturista",
       "muratore"
@@ -702,7 +1250,21 @@
       "manto",
       "tetto falda"
     ],
-    "unit": "m2"
+    "unit": "m2",
+    "materials": [
+      {
+        "sku": "TAVEL25",
+        "qty_per_unit": 4
+      },
+      {
+        "sku": "VTR440",
+        "qty_per_unit": 4
+      },
+      {
+        "sku": "NASBUT100",
+        "qty_per_unit": 0.1
+      }
+    ]
   },
   {
     "code": "SITE_CLEAN_FINAL",
@@ -727,7 +1289,25 @@
       "pulizie post-cantiere",
       "sgrosso"
     ],
-    "unit": "m2"
+    "unit": "m2",
+    "materials": [
+      {
+        "sku": "DETCE",
+        "qty_per_unit": 0.05
+      },
+      {
+        "sku": "SOLVIND",
+        "qty_per_unit": 0.005
+      },
+      {
+        "sku": "WAS-001",
+        "qty_per_unit": 0.2
+      },
+      {
+        "sku": "GUANNIT",
+        "qty_per_unit": 0.01
+      }
+    ]
   },
   {
     "code": "EXT_EXCAV",
@@ -748,7 +1328,17 @@
       "movimento terra",
       "scavi"
     ],
-    "unit": "m3"
+    "unit": "m3",
+    "materials": [
+      {
+        "sku": "WAS-001",
+        "qty_per_unit": 0.2
+      },
+      {
+        "sku": "CASCO",
+        "qty_per_unit": 0.005
+      }
+    ]
   },
   {
     "code": "STRU_FOUND_FORM",
@@ -770,7 +1360,21 @@
       "casseratura",
       "armatura fondazioni"
     ],
-    "unit": "m2"
+    "unit": "m2",
+    "materials": [
+      {
+        "sku": "PANF21",
+        "qty_per_unit": 1.1
+      },
+      {
+        "sku": "VTR440",
+        "qty_per_unit": 10
+      },
+      {
+        "sku": "TAS860",
+        "qty_per_unit": 6
+      }
+    ]
   },
   {
     "code": "STRU_FOUND_REBAR",
@@ -783,6 +1387,7 @@
     ],
     "primary_role": "ferraiolo",
     "productivity_per_worker_per_hour": 40,
+    "productivity_basis": "per_worker",
     "roles_allowed": [
       "ferraiolo",
       "carpentiere"
@@ -794,7 +1399,17 @@
       "posa ferro",
       "ferraiolo"
     ],
-    "unit": "kg"
+    "unit": "kg",
+    "materials": [
+      {
+        "sku": "B450D12",
+        "qty_per_unit": 1.0
+      },
+      {
+        "sku": "FILLEG",
+        "qty_per_unit": 0.01
+      }
+    ]
   },
   {
     "code": "STRU_FOUND_POUR",
@@ -807,6 +1422,7 @@
     ],
     "primary_role": "muratore",
     "productivity_per_worker_per_hour": 5,
+    "productivity_basis": "per_worker",
     "roles_allowed": [
       "muratore",
       "operaio",
@@ -819,7 +1435,17 @@
       "betoniera",
       "pompa cls"
     ],
-    "unit": "m3"
+    "unit": "m3",
+    "materials": [
+      {
+        "sku": "CLS2530",
+        "qty_per_unit": 1.0
+      },
+      {
+        "sku": "WAS-001",
+        "qty_per_unit": 5
+      }
+    ]
   },
   {
     "code": "STRU_SLAB",
@@ -832,6 +1458,7 @@
     ],
     "primary_role": "muratore",
     "productivity_per_worker_per_hour": 6,
+    "productivity_basis": "per_worker",
     "roles_allowed": [
       "muratore",
       "carpentiere"
@@ -842,7 +1469,21 @@
       "predalles",
       "posa solaio"
     ],
-    "unit": "m2"
+    "unit": "m2",
+    "materials": [
+      {
+        "sku": "TAVEL25",
+        "qty_per_unit": 8
+      },
+      {
+        "sku": "RETE6",
+        "qty_per_unit": 1.05
+      },
+      {
+        "sku": "B450D10",
+        "qty_per_unit": 2
+      }
+    ]
   },
   {
     "code": "STRU_STEEL",
@@ -855,6 +1496,7 @@
     ],
     "primary_role": "carpentiere metallico",
     "productivity_per_worker_per_hour": 100,
+    "productivity_basis": "per_worker",
     "roles_allowed": [
       "carpentiere metallico",
       "fabbro"
@@ -866,7 +1508,21 @@
       "struttura metallica",
       "putrelle"
     ],
-    "unit": "kg"
+    "unit": "kg",
+    "materials": [
+      {
+        "sku": "B450D12",
+        "qty_per_unit": 1.0
+      },
+      {
+        "sku": "TAS860",
+        "qty_per_unit": 0.05
+      },
+      {
+        "sku": "VTR440",
+        "qty_per_unit": 0.05
+      }
+    ]
   },
   {
     "code": "EXT_SEWER",
@@ -879,6 +1535,7 @@
     ],
     "primary_role": "idraulico",
     "productivity_per_worker_per_hour": 5,
+    "productivity_basis": "per_worker",
     "roles_allowed": [
       "idraulico",
       "muratore",
@@ -891,7 +1548,21 @@
       "allaccio fogna",
       "pozzetti"
     ],
-    "unit": "m"
+    "unit": "m",
+    "materials": [
+      {
+        "sku": "MLT16",
+        "qty_per_unit": 1.05
+      },
+      {
+        "sku": "RAC16",
+        "qty_per_unit": 0.1
+      },
+      {
+        "sku": "WAS-001",
+        "qty_per_unit": 0.05
+      }
+    ]
   },
   {
     "code": "INS_ACOUSTIC",
@@ -904,6 +1575,7 @@
     ],
     "primary_role": "cartongessista",
     "productivity_per_worker_per_hour": 15,
+    "productivity_basis": "per_worker",
     "roles_allowed": [
       "cartongessista",
       "isolatore"
@@ -914,7 +1586,17 @@
       "lana di roccia",
       "isolamento acustico"
     ],
-    "unit": "m2"
+    "unit": "m2",
+    "materials": [
+      {
+        "sku": "LDR50",
+        "qty_per_unit": 1.05
+      },
+      {
+        "sku": "NASTC50",
+        "qty_per_unit": 0.05
+      }
+    ]
   },
   {
     "code": "HVAC_VMC",
@@ -927,6 +1609,7 @@
     ],
     "primary_role": "idraulico",
     "productivity_per_worker_per_hour": 0.5,
+    "productivity_basis": "per_worker",
     "roles_allowed": [
       "idraulico",
       "installatore vmc",
@@ -939,7 +1622,29 @@
       "bocchette vmc",
       "recuperatore calore"
     ],
-    "unit": "pz"
+    "unit": "pz",
+    "materials": [
+      {
+        "sku": "TC25",
+        "qty_per_unit": 5
+      },
+      {
+        "sku": "SCHPU",
+        "qty_per_unit": 0.5
+      },
+      {
+        "sku": "SILAC",
+        "qty_per_unit": 0.3
+      },
+      {
+        "sku": "TAS860",
+        "qty_per_unit": 8
+      },
+      {
+        "sku": "VTR440",
+        "qty_per_unit": 12
+      }
+    ]
   },
   {
     "code": "ELEC_ALARM",
@@ -953,6 +1658,7 @@
     ],
     "primary_role": "elettricista",
     "productivity_per_worker_per_hour": 3,
+    "productivity_basis": "per_worker",
     "roles_allowed": [
       "elettricista",
       "tecnico sicurezza"
@@ -964,7 +1670,29 @@
       "contatti magnetici",
       "security"
     ],
-    "unit": "pz"
+    "unit": "pz",
+    "materials": [
+      {
+        "sku": "TC25",
+        "qty_per_unit": 10
+      },
+      {
+        "sku": "FG1615",
+        "qty_per_unit": 10
+      },
+      {
+        "sku": "SC503",
+        "qty_per_unit": 1
+      },
+      {
+        "sku": "PF3M",
+        "qty_per_unit": 1
+      },
+      {
+        "sku": "PLC3M",
+        "qty_per_unit": 1
+      }
+    ]
   },
   {
     "code": "ELEC_DOMOTICS",
@@ -978,6 +1706,7 @@
     ],
     "primary_role": "elettricista",
     "productivity_per_worker_per_hour": 1.5,
+    "productivity_basis": "per_worker",
     "roles_allowed": [
       "elettricista",
       "tecnico domotica"
@@ -989,7 +1718,25 @@
       "KNX",
       "attuatori"
     ],
-    "unit": "pz"
+    "unit": "pz",
+    "materials": [
+      {
+        "sku": "TC25",
+        "qty_per_unit": 10
+      },
+      {
+        "sku": "FG1615",
+        "qty_per_unit": 10
+      },
+      {
+        "sku": "PF3M",
+        "qty_per_unit": 2
+      },
+      {
+        "sku": "PLC3M",
+        "qty_per_unit": 2
+      }
+    ]
   },
   {
     "code": "FLOOR_RESIN",
@@ -1002,6 +1749,7 @@
     ],
     "primary_role": "posatore resina",
     "productivity_per_worker_per_hour": 3,
+    "productivity_basis": "per_worker",
     "roles_allowed": [
       "posatore resina",
       "imbianchino"
@@ -1012,20 +1760,39 @@
       "spatolato",
       "rivestimento bagno resina"
     ],
-    "unit": "m2"
+    "unit": "m2",
+    "materials": [
+      {
+        "sku": "PRIPU",
+        "qty_per_unit": 0.25
+      },
+      {
+        "sku": "FISSACR",
+        "qty_per_unit": 0.1
+      },
+      {
+        "sku": "BSK-001",
+        "qty_per_unit": 0.05
+      }
+    ]
   },
   {
     "code": "FIN_RAILING",
     "max_crew": 3,
     "min_crew": 2,
     "name": "Montaggio ringhiere / parapetti",
-    "notes": "Fissaggio a pavimento o parete. Include verifica piombo e sicurezza.",
+    "notes": "Fissaggio a pavimento o parete. Da posare dopo pavimento finito (piastrelle/parquet/resina) e pittura. Include verifica piombo e sicurezza.",
     "prerequisites": [
-      "FLOOR_TILE",
       "PAINT"
+    ],
+    "prerequisites_any": [
+      "FLOOR_TILE",
+      "FLOOR_PARQUET",
+      "FLOOR_RESIN"
     ],
     "primary_role": "fabbro",
     "productivity_per_worker_per_hour": 3,
+    "productivity_basis": "per_worker",
     "roles_allowed": [
       "fabbro",
       "carpentiere metallico",
@@ -1038,7 +1805,21 @@
       "fabbro",
       "corrimano"
     ],
-    "unit": "m"
+    "unit": "m",
+    "materials": [
+      {
+        "sku": "TAS860",
+        "qty_per_unit": 4
+      },
+      {
+        "sku": "VTR440",
+        "qty_per_unit": 6
+      },
+      {
+        "sku": "SILAC",
+        "qty_per_unit": 0.05
+      }
+    ]
   },
   {
     "code": "WALL_COVER",
@@ -1052,6 +1833,7 @@
     ],
     "primary_role": "posatore",
     "productivity_per_worker_per_hour": 5,
+    "productivity_basis": "per_worker",
     "roles_allowed": [
       "posatore",
       "imbianchino",
@@ -1063,7 +1845,25 @@
       "rivestimento legno",
       "wall covering"
     ],
-    "unit": "m2"
+    "unit": "m2",
+    "materials": [
+      {
+        "sku": "FISSACR",
+        "qty_per_unit": 0.1
+      },
+      {
+        "sku": "NASTC50",
+        "qty_per_unit": 0.05
+      },
+      {
+        "sku": "STUPAST",
+        "qty_per_unit": 0.5
+      },
+      {
+        "sku": "BSK-001",
+        "qty_per_unit": 0.02
+      }
+    ]
   },
   {
     "code": "EXT_PAVING",
@@ -1076,6 +1876,7 @@
     ],
     "primary_role": "muratore",
     "productivity_per_worker_per_hour": 6,
+    "productivity_basis": "per_worker",
     "roles_allowed": [
       "muratore",
       "piastrellista",
@@ -1088,6 +1889,20 @@
       "posa sassi",
       "vialetto"
     ],
-    "unit": "m2"
+    "unit": "m2",
+    "materials": [
+      {
+        "sku": "GHI408",
+        "qty_per_unit": 0.05
+      },
+      {
+        "sku": "SAB003",
+        "qty_per_unit": 0.03
+      },
+      {
+        "sku": "CEM325R",
+        "qty_per_unit": 5
+      }
+    ]
   }
 ]
