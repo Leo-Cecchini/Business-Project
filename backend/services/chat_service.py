@@ -182,6 +182,46 @@ class ChatService:
             "notes": "Anteprima non valorizzata (estimate service non disponibile)."
         }
 
+    def _format_estimate_message(self, ui_tables: dict, n_items: int) -> str:
+        """Crea un testo breve e ordinato quando sono presenti tabelle preventivo (UI)."""
+        try:
+            grand = ui_tables.get("grand_total")
+            subtotal = ui_tables.get("subtotal")
+            margin_pct = ui_tables.get("margin_pct")
+            margin_amount = ui_tables.get("margin_amount")
+
+            lines = []
+            lines.append(f"Preventivo calcolato per {n_items} lavorazioni.")
+
+            # Riepilogo lavori (max 12 righe per non esplodere in chat)
+            items = ui_tables.get("items") or []
+            if items:
+                lines.append("\nLavorazioni:")
+                for it in items[:12]:
+                    lab = it.get("label") or "voce"
+                    qty = it.get("qty")
+                    unit = it.get("unit")
+                    sub = it.get("subtotal")
+                    if qty is not None and unit:
+                        lines.append(f"- {lab} ({qty} {unit}) → {sub:.2f} €" if isinstance(sub, (int, float)) else f"- {lab} ({qty} {unit})")
+                    else:
+                        lines.append(f"- {lab} → {sub:.2f} €" if isinstance(sub, (int, float)) else f"- {lab}")
+                if len(items) > 12:
+                    lines.append(f"… e altre {len(items) - 12} lavorazioni")
+
+            # Totali
+            if isinstance(subtotal, (int, float)):
+                lines.append(f"\nSubtotale: {subtotal:.2f} €")
+            if isinstance(margin_pct, (int, float)) and isinstance(margin_amount, (int, float)):
+                lines.append(f"Margine aziendale: {margin_pct:.0f}% (+{margin_amount:.2f} €)")
+            if isinstance(grand, (int, float)):
+                lines.append(f"Totale: {grand:.2f} €")
+
+            lines.append("\nDettaglio completo in tabella qui sotto (materiali + manodopera per ogni lavorazione).")
+            return "\n".join(lines)
+        except Exception:
+            return "Ho calcolato il preventivo. Trovi il dettaglio completo in tabella qui sotto."
+
     def process_message(self, question: str, session_id: str, project_id: str = None, user_context: dict = None):
         """
         Main entry point per processare un messaggio chat.
@@ -312,18 +352,23 @@ class ChatService:
         # 8. Post-Processing
         key = "reply" if "reply" in res else "answer"
         res[key] = self._strip_calc_json(res.get(key, ""))
+        # Pulisci riferimenti WEB rumorosi nel testo (il dettaglio è in UI tables quando serve)
+        if key in res:
+            res[key] = re.sub(r"\[WEB\s*\d+\]", "", res[key])
+            res[key] = re.sub(r"(?i)^\s*fonti\s+web:.*$", "", res[key], flags=re.M)
+            res[key] = re.sub(r"\n{3,}", "\n\n", res[key]).strip()
         self._ensure_calc_block(res, auto_estimate, question)
 
         # 9. Multi-voce: aggiungi tabelle UI valorizzate
         if multi_items:
             res["parsed_items"] = multi_items
             res["ui_tables"] = self._build_ui_tables(multi_items, question)
-            
-            # Aggiungi nota al testo
-            if key in res:
-                res[key] += f"\n\nHo rilevato {len(multi_items)} lavorazioni. Trovi le tabelle dettagliate in basso."
 
-        res["intent"] = intent
+            # Se abbiamo tabelle (ui_tables), rendi il testo breve e ordinato
+            if key in res:
+                res[key] = self._format_estimate_message(res.get("ui_tables") or {}, len(multi_items))
+
+        # 10. Finalize
         return self._finalize(res, t0, session_id, question, project_id, intent)
 
     def _finalize(self, res, t0, sid, q, pid, intent):
@@ -332,9 +377,9 @@ class ChatService:
         res["latency_ms"] = latency
         res["intent"] = intent
         res.setdefault("ui_meta", {}).update({"sender": "assistant", "align": "left"})
-        
+
         self._save_analytics(sid, q, res, latency, pid, intent)
-        
+
         # Telemetry opzionale
         try:
             from services.telemetry import log_chat_metrics
@@ -348,5 +393,5 @@ class ChatService:
             })
         except Exception:
             pass
-        
+
         return res

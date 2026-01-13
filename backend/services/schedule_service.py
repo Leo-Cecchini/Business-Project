@@ -117,39 +117,84 @@ class ScheduleService:
             return 1
 
     @staticmethod
-    def _simple_topo_order(db, items: List[dict]) -> List[int]:
-        """Ordina lavorazioni per dipendenze (prerequisites)."""
-        code_map = defaultdict(list)
-        for i, it in enumerate(items):
-            if it.get("work_code"): code_map[it["work_code"].upper()].append(i)
-            
-        N = len(items)
-        indeg = [0]*N
-        adj = [[] for _ in range(N)]
-        
-        for i, it in enumerate(items):
-            wc = (it.get("work_code") or "").strip()
-            if not wc: continue
-            
-            cat = db["work_catalog"].find_one({"code": {"$regex": f"^{wc}$", "$options": "i"}})
-            pres = (cat or {}).get("prerequisites", [])
-            
-            for p in pres:
-                for j in code_map.get(p.upper(), []):
-                    adj[j].append(i)
-                    indeg[i] += 1
-                    
-        q = deque([i for i in range(N) if indeg[i] == 0])
-        out = []
-        while q:
-            u = q.popleft()
-            out.append(u)
-            for v in adj[u]:
-                indeg[v] -= 1
-                if indeg[v] == 0: q.append(v)
-                
-        return out if len(out) == N else list(range(N))
+    def _simple_topo_order(db, items):
+        """Topological order of work items based on prerequisites.
 
+        Supports:
+          - prerequisites_all (AND)     -> all are required
+          - prerequisites (legacy AND) -> treated like prerequisites_all
+          - prerequisites_any (OR)     -> list of lists; each inner list is an OR-group.
+            For planning we pick, for each OR-group, the first prerequisite that is
+            present among the selected works. If none are present, the OR-group is
+            ignored (the work remains schedulable).
+
+        Side-effect:
+          - stores the effective prerequisites list in each item as '_deps_effective'
+        """
+        codes = [it.get("code") for it in items]
+        codes_set = {c for c in codes if c}
+
+        eff_deps: dict[str, list[str]] = {}
+        for it in items:
+            c = it.get("code")
+            if not c:
+                continue
+
+            deps_all = it.get("prerequisites_all")
+            if deps_all is None:
+                deps_all = it.get("prerequisites") or []
+            if isinstance(deps_all, str):
+                deps_all = [deps_all]
+            deps_all = [str(x).strip() for x in (deps_all or []) if x and str(x).strip()]
+
+            deps_any = it.get("prerequisites_any") or []
+            # tolerate legacy: list[str] => one OR group
+            if isinstance(deps_any, list) and deps_any and all(isinstance(x, str) for x in deps_any):
+                deps_any = [deps_any]
+            if isinstance(deps_any, str):
+                deps_any = [[deps_any]]
+
+            chosen_any: list[str] = []
+            if isinstance(deps_any, list):
+                for grp in deps_any:
+                    if not grp:
+                        continue
+                    grp_list = grp if isinstance(grp, list) else [grp]
+                    grp_list = [str(x).strip() for x in grp_list if x and str(x).strip()]
+                    pick = next((p for p in grp_list if p in codes_set), None)
+                    if pick:
+                        chosen_any.append(pick)
+
+            eff = deps_all + chosen_any
+            eff_deps[c] = eff
+            it["_deps_effective"] = eff
+
+        graph = {c: set(eff_deps.get(c, [])) for c in codes_set}
+        indeg = {c: 0 for c in graph}
+        for c, deps in graph.items():
+            for p in deps:
+                if p in graph:
+                    indeg[c] += 1
+
+        q = [c for c, d in indeg.items() if d == 0]
+        out: list[str] = []
+        while q:
+            n = q.pop(0)
+            out.append(n)
+            for m in graph:
+                if n in graph[m]:
+                    indeg[m] -= 1
+                    if indeg[m] == 0:
+                        q.append(m)
+
+        # append leftovers (cycles/unknown refs) in stable order
+        if len(out) < len(codes_set):
+            for c in codes:
+                if c in codes_set and c not in out:
+                    out.append(c)
+
+        i2idx = {it.get("code"): i for i, it in enumerate(items) if it.get("code")}
+        return [i2idx[c] for c in out if c in i2idx]
     # --- PUBLIC METHODS ---
 
     @staticmethod
@@ -227,127 +272,184 @@ class ScheduleService:
         }
 
     @staticmethod
-    def generate_plan(items: List[dict], start_date: str, **kwargs) -> Dict[str, Any]:
-        """Genera piano (Auto-Plan)."""
-        db = get_db()
-        try:
-            cur_day = ScheduleService._parse_date(start_date)
-            if not cur_day: raise ValueError
-        except:
-            raise ValueError("Start date invalida")
+    def generate_plan(db, items: list[dict], start_date: str | None = None, max_days: int = 365, project_id: str | None = None) -> dict:
+        """Generate a day-based plan (works can run in parallel).
 
-        region = kwargs.get("region")
-        city = kwargs.get("city")
-        
-        # FIX: Gestione robusta dei valori None passati esplicitamente
-        daily_hours = int(kwargs.get("daily_hours") or 8)
-        
-        rf_val = kwargs.get("require_foreman")
-        req_foreman = True if rf_val is None else bool(rf_val)
+        Constraints (MVP):
+          - prerequisites_all / prerequisites (AND)
+          - prerequisites_any (OR-groups): for each group we choose the first prereq present in `items`
+          - a worker can work on at most ONE work per day (within the plan)
+          - a worker is also blocked if busy in other projects (via schedule_assignments)
+          - keep the same crew for the whole duration of a work (if possible)
+        """
+        if not isinstance(items, list) or not items:
+            return {"start_day": start_date, "plan": [], "notes": ["No items."]}
 
-        # 1. Arricchimento dati
-        enriched = []
+        start_dt = ScheduleService._parse_date(start_date) if start_date else ScheduleService._today()
+        start_s = ScheduleService._fmt_date(start_dt)
+
+        # Enrich works from catalog
+        codes = [it.get("code") for it in items if isinstance(it, dict) and it.get("code")]
+        cat_docs = {}
+        if codes:
+            for d in db["work_catalog"].find({"code": {"$in": codes}}, {"_id": 0}):
+                cat_docs[d["code"]] = d
+
+        work_items = []
         for it in items:
-            wc = (it.get("work_code") or "").strip()
-            if not wc: continue
-            
-            crew = ScheduleService._crew_from_catalog(db, wc)
-            roles = crew.get("crew_roles") or {}
-            prod, unit = ScheduleService._get_productivity(db, wc)
-            
-            enriched.append({
-                "work_code": wc,
-                "qty": float(it.get("qty") or 0),
-                "unit": it.get("unit") or unit,
-                "crew_roles": roles,
-                "prod": prod
+            if not isinstance(it, dict) or not it.get("code"):
+                continue
+            code = it["code"]
+            wc = cat_docs.get(code, {})
+            merged = {**wc, **it}  # user fields override catalog if present
+            merged["qty"] = float(merged.get("qty") or 1.0)
+            merged["unit"] = merged.get("unit") or wc.get("unit") or "pz"
+            work_items.append(merged)
+
+        # Topological order (also writes _deps_effective)
+        order_idx = ScheduleService._simple_topo_order(db, work_items)
+        ordered = [work_items[i] for i in order_idx]
+
+        # Worker pools: role -> list[worker_id]
+        worker_pools: dict[str, list[str]] = {}
+        for w in db["workers"].find({}, {"_id": 1, "role": 1}):
+            wid = str(w.get("_id"))
+            role = (w.get("role") or "").strip().lower()
+            if not wid or not role:
+                continue
+            worker_pools.setdefault(role, []).append(wid)
+
+        def pool_for_role(role: str) -> list[str]:
+            r = (role or "").strip().lower()
+            if not r:
+                return []
+            # simple contains matching (e.g. "elettricista senior" still counts)
+            out = []
+            for k, ids in worker_pools.items():
+                if r in k:
+                    out.extend(ids)
+            return out or worker_pools.get(r, [])
+
+        # Busy caches
+        global_busy_cache: dict[str, set[str]] = {}
+
+        def global_busy_any(day_s: str) -> set[str]:
+            if day_s not in global_busy_cache:
+                dt = ScheduleService._parse_date(day_s)
+                busy = ScheduleService._busy_workers_in_range(db, dt, dt)
+                global_busy_cache[day_s] = set(busy.get("_any") or set())
+            return global_busy_cache[day_s]
+
+        local_busy_any: dict[str, set[str]] = {}
+
+        def is_free(wid: str, day_s: str) -> bool:
+            if wid in global_busy_any(day_s):
+                return False
+            if wid in local_busy_any.get(day_s, set()):
+                return False
+            return True
+
+        def choose_crew(day0: str, duration: int, crew_roles: dict[str, int]) -> dict[str, list[str]] | None:
+            # list of days in span
+            days = []
+            cur = ScheduleService._parse_date(day0)
+            for _ in range(max(duration, 1)):
+                days.append(ScheduleService._fmt_date(cur))
+                cur = ScheduleService._add_days(cur, 1)
+
+            assigned: dict[str, list[str]] = {}
+            used = set()
+
+            for role, needed in (crew_roles or {}).items():
+                if not role or not isinstance(needed, int) or needed <= 0:
+                    continue
+                picked: list[str] = []
+                for wid in pool_for_role(role):
+                    if wid in used:
+                        continue
+                    if all(is_free(wid, d) for d in days):
+                        picked.append(wid)
+                        used.add(wid)
+                        if len(picked) >= needed:
+                            break
+                if len(picked) < needed:
+                    return None
+                assigned[role] = picked
+
+            return assigned
+
+        def mark_busy(day0: str, duration: int, assigned: dict[str, list[str]]):
+            cur = ScheduleService._parse_date(day0)
+            for _ in range(max(duration, 1)):
+                d = ScheduleService._fmt_date(cur)
+                s = local_busy_any.setdefault(d, set())
+                for ids in assigned.values():
+                    for wid in ids:
+                        s.add(wid)
+                cur = ScheduleService._add_days(cur, 1)
+
+        # schedule
+        end_by_code: dict[str, str] = {}
+        plan = []
+        notes = []
+
+        for w in ordered:
+            code = w.get("code")
+            deps = w.get("_deps_effective") or []
+            # earliest start based on deps
+            earliest = start_dt
+            for dep in deps:
+                dep_end = end_by_code.get(dep)
+                if dep_end:
+                    e = ScheduleService._add_days(ScheduleService._parse_date(dep_end), 1)
+                    if e > earliest:
+                        earliest = e
+
+            dur = ScheduleService._work_duration_days(w)
+            crew_roles = w.get("crew_roles") if isinstance(w.get("crew_roles"), dict) else {}
+            if not crew_roles:
+                pr = (w.get("primary_role") or "").strip()
+                mc = int(w.get("min_crew") or 1)
+                if pr:
+                    crew_roles = {pr: mc}
+
+            # search for first feasible start day (bounded)
+            try_dt = earliest
+            assigned = None
+            for _ in range(max_days):
+                day0 = ScheduleService._fmt_date(try_dt)
+                assigned = choose_crew(day0, dur, crew_roles)
+                if assigned is not None:
+                    break
+                try_dt = ScheduleService._add_days(try_dt, 1)
+
+            if assigned is None:
+                notes.append(f"No crew available for {code}")
+                continue
+
+            mark_busy(ScheduleService._fmt_date(try_dt), dur, assigned)
+
+            start2 = ScheduleService._fmt_date(try_dt)
+            end_dt = ScheduleService._add_days(try_dt, dur - 1)
+            end2 = ScheduleService._fmt_date(end_dt)
+            end_by_code[code] = end2
+
+            plan.append({
+                "code": code,
+                "label": w.get("label") or w.get("name") or code,
+                "start_day": start2,
+                "end_day": end2,
+                "duration_days": dur,
+                "deps": deps,
+                "crew_roles": crew_roles,
+                "assigned_workers": assigned,
             })
 
-        # 2. Ordinamento
-        order_idxs = ScheduleService._simple_topo_order(db, enriched)
-        
-        # 3. Pianificazione
-        plan = []
-        warnings = []
-        local_busy = defaultdict(lambda: defaultdict(set))
-
-        for idx in order_idxs:
-            it = enriched[idx]
-            roles = dict(it["crew_roles"])
-            if req_foreman: 
-                roles["capo cantiere"] = max(1, roles.get("capo cantiere", 0))
-            
-            crew_size = sum(v for k,v in roles.items() if k != "capo cantiere") or 1
-            duration = ScheduleService._estimate_duration_days(it["qty"], it["prod"], crew_size, daily_hours)
-            
-            found_start = None
-            assigned_map = defaultdict(list)
-            
-            check_day = cur_day
-            attempts = 0
-            while attempts < 365:
-                slot_valid = True
-                temp_assigned = defaultdict(list)
-                
-                for d_off in range(duration):
-                    day_dt = check_day + timedelta(days=d_off)
-                    day_str = day_dt.strftime("%Y-%m-%d")
-                    
-                    for role, needed in roles.items():
-                        candidates = ScheduleService._find_free_ids_for_role(db, role, region, city)
-                        
-                        global_busy_map = ScheduleService._busy_workers_in_range(db, day_dt, day_dt)
-                        global_busy = global_busy_map.get("_any", set())
-                        local_busy_set = local_busy[day_str][role]
-                        
-                        free = [x for x in candidates if x not in global_busy and x not in local_busy_set]
-                        
-                        if len(free) < needed:
-                            slot_valid = False
-                            break
-                        
-                        temp_assigned[role].extend(free[:needed])
-                        
-                    if not slot_valid: break
-                
-                if slot_valid:
-                    found_start = check_day
-                    for d_off in range(duration):
-                        day_str = (found_start + timedelta(days=d_off)).strftime("%Y-%m-%d")
-                        for r, ids in roles.items():
-                            unique_ids = list(set(temp_assigned[r]))[:roles[r]]
-                            for wid in unique_ids:
-                                local_busy[day_str][r].add(wid)
-                                if wid not in assigned_map[r]: assigned_map[r].append(wid)
-                    break
-                
-                check_day += timedelta(days=1)
-                attempts += 1
-            
-            if found_start:
-                end_dt = found_start + timedelta(days=duration-1)
-                plan.append({
-                    "work_code": it["work_code"],
-                    "qty": it["qty"],
-                    "unit": it["unit"],
-                    "status": "planned",
-                    "start": found_start.strftime("%Y-%m-%d"),
-                    "end": end_dt.strftime("%Y-%m-%d"),
-                    "duration_days": duration,
-                    "crew_roles": roles,
-                    "assigned": dict(assigned_map)
-                })
-                cur_day = end_dt + timedelta(days=1)
-            else:
-                warnings.append(f"Impossibile pianificare {it['work_code']} (capacità insufficiente)")
-                plan.append({
-                    "work_code": it["work_code"],
-                    "status": "unscheduled",
-                    "reason": "no_capacity"
-                })
-
-        return {"plan": plan, "warnings": warnings}
-
+        return {
+            "start_day": start_s,
+            "plan": plan,
+            "notes": notes,
+        }
     @staticmethod
     def commit_plan(project_id: str, plan_data: List[dict], site_id: str = None, assign: bool = False) -> Dict[str, Any]:
         """

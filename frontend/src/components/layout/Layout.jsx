@@ -9,13 +9,12 @@ export default function Layout() {
 
             <div className="pt-20 px-6">
                 <div className="max-w-[1600px] mx-auto grid grid-cols-[240px_1fr] gap-4">
-                    {/* Sidebar principale - STICKY come quella del cantiere */}
                     <div className="sticky top-20 self-start">
                         <Sidebar />
                     </div>
 
-                    {/* Contenuto principale */}
-                    <main>
+                    {/* ✅ la pagina può scrollare normalmente */}
+                    <main className="min-w-0">
                         <Outlet />
                     </main>
                 </div>

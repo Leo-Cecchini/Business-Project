@@ -4,7 +4,7 @@ services:
   # MongoDB Database
   mongodb:
     image: mongo:7
-    container_name: construction-mongodb
+    container_name: bpwork-mongodb
     restart: unless-stopped
     ports:
       - "27017:27017"
@@ -123,10 +123,10 @@ services:
 networks:
   app-network:
     driver: bridge
-    name: construction-network
+    name: bpwork-network
 
 volumes:
   mongodb_data:
-    name: construction-mongodb-data
+    name: bpwork-mongodb-data
   mongodb_config:
-    name: construction-mongodb-config
+    name: bpwork-mongodb-config

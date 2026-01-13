@@ -151,4 +151,12 @@ class CatalogService:
         update["$setOnInsert"] = set_on_insert
 
         res = db["pricelists"].update_one(filt, update, upsert=True)
+
+        # Invalidate cached pricelist lookups (estimate.py uses @lru_cache)
+        try:
+            from utils.estimate import _get_pricelist  # local import to avoid circular deps at import time
+            _get_pricelist.cache_clear()
+        except Exception:
+            pass
+
         return {"matched": res.matched_count, "modified": res.modified_count, "upserted": bool(res.upserted_id)}

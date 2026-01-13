@@ -7,12 +7,12 @@ export default defineConfig({
     port: 5173,
     proxy: {
       '/api': {
-        target: 'http://construction-backend:5001',  
+        target: 'http://construction-backend:5001',
         changeOrigin: true,
-        timeout: 60000, 
+        timeout: 60000,
       },
       '/analytics': {
-        target: 'http://construction-backend:5001', 
+        target: 'http://construction-backend:5001',
         changeOrigin: true,
       }
     }
