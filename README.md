@@ -5,7 +5,7 @@ We built a comprehensive, enterprise-grade solution designed to support construc
 
 This platform centralizes project specifications, work catalogs, and workforce data to address the common issue of fragmented information in the construction industry. The system utilizes natural language processing to allow site managers to directly query technical estimates (Computo Metrico Estimativo), check labor availability, and generate cost projections. By automating these lookups, the platform provides data-driven insights for calculating margins on work items and identifying available personnel by region.
 
-Keep in mind that our project is built for the italian construction systems, especially regarding the estimation feature that is based on italian regulations.
+🇮🇹 Keep in mind that our project is built for the italian construction systems, especially regarding the estimation feature that is based on italian regulations.
 
 ## 🛠️ Tech Stack
 ### Backend
@@ -27,7 +27,7 @@ Keep in mind that our project is built for the italian construction systems, esp
 * `/seed`: Initial datasets including material catalogs, price lists, and worker profiles for system initialization.
 * `/models`: Custom implementations for the vector store and the underlying LLM interfaces.
 
-## Setup Iniziale
+## Initial Setup
 
 ```bash
 git clone <repo-url>
@@ -41,19 +41,19 @@ docker-compose up --build
 
 ---
 
-## Comandi Base
+## Basic Commands
 
 ```bash
-# Avvio
+# Start
 docker-compose up
 
-# Avvio in background
+# Background start
 docker-compose up -d
 
 # Stop
 docker-compose down
 
-# Restart servizio
+# Service Restart
 docker-compose restart backend
 docker-compose restart frontend
 
@@ -64,11 +64,11 @@ docker-compose logs -f frontend
 
 ---
 
-## Modifiche Codice
+## Modify Code
 
-**Frontend/Backend:** Salva file → hot reload automatico
+**Frontend/Backend:** Salva file → automatic hot reload
 
-**Dipendenze cambiate (package.json / requirements.txt):**
+**Changed dependencies (package.json / requirements.txt):**
 ```bash
 docker-compose up --build frontend
 docker-compose up --build backend
@@ -78,7 +78,7 @@ docker-compose up --build backend
 
 ## Database
 
-**Accesso MongoDB:**
+**MongoDB Access:**
 ```bash
 docker-compose exec mongodb mongosh -u admin -p changeme123
 use business_project
@@ -100,22 +100,22 @@ docker-compose restart backend
 
 ---
 
-## Problemi
+## Problems
 
-**Port occupata:**
+**Occupied port:**
 ```bash
 netstat -ano | findstr :5001
 taskkill /PID <PID> /F
 ```
 
-**Rebuild completo:**
+**Complete rebuild:**
 ```bash
 docker-compose down -v
 docker-compose build --no-cache
 docker-compose up
 ```
 
-**Reset totale:**
+**Full Reset:**
 ```bash
 docker-compose down -v
 docker system prune -a
@@ -124,6 +124,6 @@ docker-compose up --build
 
 ---
 
-## Credenziali
+## Credentials
 
 **MongoDB:** admin / changeme123
