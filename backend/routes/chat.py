@@ -632,6 +632,7 @@ _RE_SOURCES_BLOCK = re.compile(
     re.IGNORECASE,
 )
 _RE_HO_RILEVATO = re.compile(r"\n?\s*Ho rilevato\s+\d+\s+lavorazioni\.[\s\S]*$", re.IGNORECASE)
+_RE_URL = re.compile(r"(https?://[^\s\)]+|www\.[^\s\)]+)", re.IGNORECASE)
 
 
 def _clean_answer_text(answer: str, has_items: bool) -> str:
@@ -645,6 +646,13 @@ def _clean_answer_text(answer: str, has_items: bool) -> str:
         out = _RE_HO_RILEVATO.sub("", out)
     # If sources are empty, remove the empty sources block
     out = _RE_SOURCES_BLOCK.sub("\n", out)
+
+    # If the model included web URLs but didn't format them under "Fonti web:", add a sources section.
+    urls = list(dict.fromkeys(_RE_URL.findall(out)))  # preserve order, remove duplicates
+    has_fonti_web = re.search(r"^\s*Fonti\s+web:\s*$", out, flags=re.IGNORECASE | re.MULTILINE) is not None
+    if urls and not has_fonti_web:
+        out = out.rstrip() + "\n\nFonti web:\n" + "\n".join([f"- {u}" for u in urls]) + "\n"
+
     # Normalize extra blank lines
     out = re.sub(r"\n{3,}", "\n\n", out).strip()
     return out

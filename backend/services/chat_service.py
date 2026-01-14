@@ -261,14 +261,7 @@ class ChatService:
             if res:
                 return self._finalize(res, t0, session_id, question, project_id, res.get("INTENT_DB"))
 
-        # 2. Parsing Multi-Voce
-        multi_items = []
-        try:
-            multi_items = parse_multi(question)
-        except Exception:
-            pass
-
-        # 3. Routing & RAG locale
+        # 2. Routing & RAG locale
         routed = {}
         if self.router:
             try:
@@ -278,6 +271,18 @@ class ChatService:
         
         intent = routed.get("intent", "none")
         entities = routed.get("entities", {})
+
+        # 2b. Parsing Multi-Voce (SOLO per richieste di STIMA)
+        # Nota: parse_multi è volutamente permissivo; se lo eseguiamo su qualsiasi domanda
+        # (es. meteo, normative, email, calcoli) rischia di generare "voci" fittizie e
+        # far scattare comunque l'anteprima preventivo. Quindi lo abilitiamo solo quando
+        # il router ha già deciso che l'utente sta chiedendo un preventivo.
+        multi_items = []
+        if intent == "STIMA":
+            try:
+                multi_items = parse_multi(question)
+            except Exception:
+                multi_items = []
 
         local_ctx = []
         if self.vector_store:
@@ -359,8 +364,8 @@ class ChatService:
             res[key] = re.sub(r"\n{3,}", "\n\n", res[key]).strip()
         self._ensure_calc_block(res, auto_estimate, question)
 
-        # 9. Multi-voce: aggiungi tabelle UI valorizzate
-        if multi_items:
+        # 9. Multi-voce: aggiungi tabelle UI valorizzate (SOLO STIMA)
+        if intent == "STIMA" and multi_items:
             res["parsed_items"] = multi_items
             res["ui_tables"] = self._build_ui_tables(multi_items, question)
 

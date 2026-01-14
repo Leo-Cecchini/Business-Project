@@ -6,6 +6,7 @@ from dataclasses import dataclass, asdict
 import time
 from typing import Dict, Any, List, Optional
 import os
+import re
 from flask import Blueprint, request, jsonify, g, current_app
 
 
@@ -44,6 +45,42 @@ DEFAULT_WAGE = {
     "idraulico": 32.0,
     "muratore": 26.0,
 }
+
+# Pricing strategy:
+# - "absolute" (default): use explicit per-region prices if present in Pricelist.
+# - "multiplier": base prices are the catalog ones; territorial multipliers are applied.
+PRICING_MODE = (os.getenv("PRICING_MODE", "absolute") or "absolute").strip().lower()
+
+# Default regional multipliers (editable). Used when PRICING_MODE == "multiplier" OR
+# when a Pricelist doc explicitly provides a multiplier.
+REGION_MULTIPLIERS = {
+    # Nord
+    "Valle d'Aosta": 1.10,
+    "Piemonte": 1.10,
+    "Liguria": 1.10,
+    "Lombardia": 1.10,
+    "Trentino-Alto Adige": 1.10,
+    "Veneto": 1.10,
+    "Friuli-Venezia Giulia": 1.10,
+    "Emilia-Romagna": 1.10,
+    # Centro
+    "Toscana": 1.03,
+    "Umbria": 1.03,
+    "Marche": 1.03,
+    "Lazio": 1.03,
+    # Sud
+    "Abruzzo": 0.95,
+    "Molise": 0.95,
+    "Campania": 0.95,
+    "Puglia": 0.95,
+    "Basilicata": 0.95,
+    "Calabria": 0.95,
+    # Isole
+    "Sicilia": 0.94,
+    "Sardegna": 0.94,
+}
+
+_REGION_MULTIPLIERS_LC = {str(k).strip().lower(): float(v) for k, v in REGION_MULTIPLIERS.items()}
 
 # Nel DB si cerca per "name ILIKE %token%"; puoi mappare sinonimi qui
 MATERIAL_ALIASES = {
@@ -257,6 +294,125 @@ WORK_LABEL_TO_CODE = {
     "punti idrici": "PLUMB_ROUGH",
 }
 
+# -------------------------
+# Robust catalog matching (label -> work_catalog.code)
+# -------------------------
+
+# Basic Italian stopwords for catalog matching (keep this small & safe)
+_CAT_STOPWORDS = {
+    "di", "del", "dello", "della", "dei", "degli", "delle",
+    "a", "ad", "da", "dal", "dall", "dalla", "dai", "dagli", "dalle",
+    "in", "su", "con", "senza", "per", "tra", "fra",
+    "il", "lo", "la", "i", "gli", "le", "un", "uno", "una",
+    "mq", "m2", "m3", "mc", "ml", "pz", "nr", "n",    "puoi",
+    "farmi",
+    "fammi",
+    "preventivo",
+    "preventivi",
+    "casa",
+    "abitazione",
+    "appartamento",
+    "villa",
+    "chiedo",
+    "richiedo",
+    "vorrei",
+    "potresti",
+
+}
+
+_CAT_WORD_RE = re.compile(r"[a-zàèéìòóù0-9]+", re.IGNORECASE)
+
+
+def _cat_tokens(label: str) -> List[str]:
+    toks = [t.lower() for t in _CAT_WORD_RE.findall(label or "")]
+    toks = [t for t in toks if len(t) >= 3 and t not in _CAT_STOPWORDS]
+    # keep order but remove duplicates
+    seen = set()
+    out = []
+    for t in toks:
+        if t not in seen:
+            seen.add(t)
+            out.append(t)
+    return out
+
+
+def _best_work_catalog_code(label: str, unit: str | None) -> Optional[str]:
+    """Best-effort match of a free label against work_catalog by name/synonyms.
+
+    NOTE: This is intentionally *not* an AND over all tokens:
+    chat sentences often contain irrelevant words ("puoi", "preventivo", ...), and an AND
+    would return empty results too often.
+
+    Strategy:
+      - tokenize + light token expansion (plural/singular heuristics)
+      - query by OR over a handful of tokens
+      - score by number of matched tokens (+unit bonus)
+    """
+    if get_db is None:
+        return None
+
+    base_toks = _cat_tokens(label)
+    if not base_toks:
+        return None
+
+    # light token expansion: handle common plurals (bagni->bagno) and add stems
+    toks: List[str] = []
+    for t in base_toks:
+        toks.append(t)
+        if t.endswith("i") and len(t) > 3:
+            toks.append(t[:-1])          # stem
+            toks.append(t[:-1] + "o")    # rough singular
+        elif t.endswith("e") and len(t) > 3:
+            toks.append(t[:-1])          # stem
+
+    # de-dup preserving order
+    seen = set()
+    dedup = []
+    for t in toks:
+        if t not in seen:
+            seen.add(t)
+            dedup.append(t)
+    toks = dedup
+
+    # Keep the most meaningful tokens first (prefer longer ones)
+    toks.sort(key=len, reverse=True)
+    toks = toks[:8]
+
+    try:
+        db = get_db()
+        or_terms = []
+        for tok in toks:
+            or_terms.append({"code": {"$regex": tok, "$options": "i"}})
+            or_terms.append({"name": {"$regex": tok, "$options": "i"}})
+            or_terms.append({"synonyms": {"$elemMatch": {"$regex": tok, "$options": "i"}}})
+
+        filt: Dict[str, Any] = {"$or": or_terms} if or_terms else {}
+        cur = list(db["work_catalog"].find(
+            filt,
+            {"_id": 0, "code": 1, "name": 1, "synonyms": 1, "unit": 1}
+        ).limit(80))
+
+        if not cur:
+            return None
+
+        def _score(doc: dict) -> int:
+            blob = (str(doc.get("code") or "") + " " + str(doc.get("name") or "") + " " + " ".join(doc.get("synonyms") or [])).lower()
+            s = 0
+            for t in toks:
+                if t and t in blob:
+                    s += 2
+            if unit and str(doc.get("unit") or "").lower() == str(unit).lower():
+                s += 5
+            if "impianto" in (label or "").lower() and "impianto" in blob:
+                s += 1
+            return s
+
+        cur.sort(key=_score, reverse=True)
+        best = cur[0]
+        return str(best.get("code") or "").strip() or None
+    except Exception:
+        return None
+
 def _catalog_code_from_label(label: str, unit: str) -> str | None:
     lab = (label or "").lower()
     # try direct contains matches in priority order
@@ -273,9 +429,13 @@ def _catalog_code_from_label(label: str, unit: str) -> str | None:
         return "SITE_WASTE"
     if ("elettric" in lab and ("luce" in lab or "presa" in lab)):
         return "ELEC_FIXTURE"
-    if ("idric" in lab and ("bagno" in lab or "punto" in lab)):
+    # plumbing: distinguish rough (tubazioni) vs fixtures (sanitari)
+    if ("impianto idric" in lab) or ("impianto idraul" in lab):
+        return "PLUMB_ROUGH"
+    if (("idric" in lab or "idraul" in lab) and (("bagno" in lab) or ("bagni" in lab) or ("sanitar" in lab) or ("rubinett" in lab) or ("punto" in lab) or ("wc" in lab))):
         return "PLUMB_FIXTURE"
-    return None
+    # DB search fallback (name/synonyms)
+    return _best_work_catalog_code(label, unit)
 
 def _crew_requirements_for_code(code: str | None) -> dict:
     """Fetches crew requirements (min_crew, crew_roles, pairing_rule) from work_catalog.
@@ -701,16 +861,23 @@ def _material_unit_price(region: str | None, city: str | None, key: str, tags: l
     tags = tags or []
 
     pl = _get_pricelist(region, city)
+    factors = pl.get("factors", {}) or {}
+    mul = _territorial_multiplier(region, pl)
+
     pl_price = float((pl.get("materials") or {}).get(key) or 0.0)
-
-    # if pricelist is 0/null => fallback to materials catalog
-    if pl_price > 0:
-        return float(_apply_factors(round(pl_price, 4), pl.get("factors", {}) or {}, tags))
-
     doc = _get_material_by_sku_or_code(key) or {}
     cat_price = float(doc.get("unit_price_eur_2025") or 0.0)
-    if cat_price > 0:
-        return float(_apply_factors(round(cat_price, 4), pl.get("factors", {}) or {}, tags))
+
+    # Pricing mode:
+    # - absolute: prefer explicit pricelist values when present
+    # - multiplier: base is catalog; pricelist acts as per-code override
+    if PRICING_MODE == "multiplier":
+        base = pl_price if pl_price > 0 else cat_price
+    else:
+        base = pl_price if pl_price > 0 else cat_price
+
+    if base > 0:
+        return float(_apply_factors(round(base * mul, 4), factors, tags))
 
     return 0.0
 
@@ -725,7 +892,7 @@ def _get_pricelist(region: str|None, city: str|None) -> dict:
       4) fallback vuoto
     Supporta sia MongoEngine (PricelistDoc) sia raw PyMongo (db['pricelists']).
     """
-    out = {"materials": {}, "wages": {}, "factors": {}}
+    out = {"materials": {}, "wages": {}, "factors": {}, "multiplier": None, "pricing_mode": None}
 
     # 1) MongoEngine (PricelistDoc), se disponibile
     if PricelistDoc is not None:
@@ -739,10 +906,15 @@ def _get_pricelist(region: str|None, city: str|None) -> dict:
             if (q is None) and city:
                 q = PricelistDoc.objects(city__iexact=city).first()
             if q:
+                # PricelistDoc schema doesn't include multiplier by default; keep it optional.
+                mul = getattr(q, "multiplier", None)
+                pmode = getattr(q, "pricing_mode", None)
                 return {
                     "materials": dict(getattr(q, "materials", {}) or {}),
                     "wages": dict(getattr(q, "wages", {}) or {}),
                     "factors": dict(getattr(q, "factors", {}) or {}),
+                    "multiplier": float(mul) if isinstance(mul, (int, float)) else None,
+                    "pricing_mode": str(pmode) if isinstance(pmode, str) and pmode.strip() else None,
                 }
         except Exception:
             pass
@@ -769,10 +941,16 @@ def _get_pricelist(region: str|None, city: str|None) -> dict:
                 doc = _find({"city": {"$regex": f"^{city}$", "$options": "i"}})
 
             if doc:
+                mul = doc.get("multiplier")
+                if mul is None:
+                    mul = doc.get("region_multiplier")
+                pmode = doc.get("pricing_mode") or doc.get("mode")
                 return {
                     "materials": dict(doc.get("materials") or {}),
                     "wages": dict(doc.get("wages") or {}),
                     "factors": dict(doc.get("factors") or {}),
+                    "multiplier": float(mul) if isinstance(mul, (int, float)) else None,
+                    "pricing_mode": str(pmode) if isinstance(pmode, str) and pmode.strip() else None,
                 }
         except Exception:
             pass
@@ -788,6 +966,25 @@ def _apply_factors(base: float, factors: dict, tags: list[str]|None) -> float:
         if isinstance(v, (int, float)):
             mul *= float(v)
     return round(base * mul, 4)
+
+
+def _territorial_multiplier(region: str | None, pricelist: dict) -> float:
+    """Returns a multiplier to apply to base prices.
+
+    Rules:
+    - If the pricelist doc defines an explicit multiplier, always use it.
+    - Else, if PRICING_MODE == "multiplier", use REGION_MULTIPLIERS mapping.
+    - Otherwise ("absolute" mode), do not apply extra multipliers.
+    """
+    mul = pricelist.get("multiplier") if isinstance(pricelist, dict) else None
+    if isinstance(mul, (int, float)) and mul > 0:
+        return float(mul)
+
+    if PRICING_MODE != "multiplier":
+        return 1.0
+
+    r = (region or "").strip().lower()
+    return float(_REGION_MULTIPLIERS_LC.get(r, 1.0))
 
 def _lookup_material_price_by_code(code: str) -> Optional[float]:
     """Fallback: risale a un Material in DB partendo dal codice preventivo.
@@ -864,8 +1061,9 @@ def price(code: str, default: float = 0.0, *, region: str|None=None, city: str|N
     if val is None:
         val = default
 
-    # 5) Apply territorial factors (only to positive prices)
-    return float(_apply_factors(val, pl.get("factors", {}) or {}, tags))
+    # 5) Apply territorial multiplier + factors
+    mul = _territorial_multiplier(region, pl)
+    return float(_apply_factors(val * mul, pl.get("factors", {}) or {}, tags))
 
 def wage(role: str, default: float = 25.0, *, region: str|None=None, city: str|None=None, tags: list[str]|None=None) -> float:
     pl = _get_pricelist(region, city)
@@ -891,8 +1089,9 @@ def wage(role: str, default: float = 25.0, *, region: str|None=None, city: str|N
     if val is None:
         val = DEFAULT_WAGE.get(role, default)
 
-    # 4) Apply territorial factors (only to positive wages)
-    return float(_apply_factors(val, pl.get("factors", {}), tags))
+    # 4) Apply territorial multiplier + factors
+    mul = _territorial_multiplier(region, pl)
+    return float(_apply_factors(val * mul, pl.get("factors", {}), tags))
 
 def wage_for_work(code: str | None, role: str | None, default: float = 25.0, *, region: str|None=None, city: str|None=None, tags: list[str]|None=None) -> float:
     """Tariffa oraria: prima per work-code, poi per ruolo, poi WorkerDoc, poi default."""
@@ -935,7 +1134,8 @@ def wage_for_work(code: str | None, role: str | None, default: float = 25.0, *, 
         else:
             val = float(default)
 
-    return float(_apply_factors(val, pl.get("factors", {}), tags))
+    mul = _territorial_multiplier(region, pl)
+    return float(_apply_factors(val * mul, pl.get("factors", {}), tags))
 
 # ------------------ Auto-resolve geo & factors ------------------
 
@@ -1254,11 +1454,12 @@ def _recipe_from_item(label: str, qty: float, unit: str, region: str|None=None, 
 
         punti = float(qty)
 
-        # NOTE: usa i tuoi codici reali (underscore per 3G1_5)
-        cavo_code = "EL-CAVO-3G1_5"
-        tubo_code = "EL-TUBO-20"
-        scat_code = "EL-SCATOLA-503"
-        der_code  = "EL-SCATOLA-DER"
+        # Usa SKU del catalogo materiali (seed/materials.json)
+        # (evitiamo codici legacy tipo EL-* che possono non esistere in DB)
+        cavo_code = "FG1615"   # Cavo FG16OR 3x1,5
+        tubo_code = "TC25"     # Tubo corrugato Ø25
+        scat_code = "SC503"    # Scatola 503
+        der_code  = None        # (non presente nel catalogo seed)
 
         cavo_m = _elec_len_base(avg_m) * punti
         tubo_m = _tube_len_base(avg_m) * punti
@@ -1280,20 +1481,27 @@ def _recipe_from_item(label: str, qty: float, unit: str, region: str|None=None, 
             mats.append(_line(scat_code, name, unit_cat, punti, prezzo))
 
         # scatola derivazione ogni ~10 punti
-        deriv = int(math.ceil(punti / 10.0))
-        if der_code not in existing and deriv > 0:
-            name, unit_cat = _material_name_unit(der_code)
-            prezzo = _material_unit_price(region, city, der_code, tags=tags)
-            mats.append(_line(der_code, name, unit_cat, deriv, prezzo))
+        # Se in futuro aggiungi una scatola derivazione a catalogo, puoi riattivare questa parte.
 
-    # altri casi → preview vuota, verrà arricchita con listini/regole aggiuntive
+    # Se non siamo riusciti a produrre nessuna riga (né materiali né manodopera),
+    # NON ritorniamo una preview "vuota": mettiamo almeno una riga placeholder
+    # con warning, così il frontend non mostra preventivi completamente vuoti.
+    if not mats and not labor:
+        mats.append(_line(None, f"{label} (non riconosciuto: verifica catalogo/sinonimi)", um, qty, 0.0))
+        assumptions = {
+            "warning": "Voce non riconosciuta dal catalogo: è stata inserita come placeholder (prezzi a 0).",
+            "suggestion": "Aggiungi sinonimi nel work_catalog o passa meta.code per forzare il match.",
+        }
+    else:
+        assumptions = None
+
     subtotal = _sum(mats) + _sum(labor)
     return {
         "materials": mats,
         "labor": labor,
         "subtotal": subtotal,
         "ready_to_commit": False,
-        "assumptions": None,
+        "assumptions": assumptions,
         "work_code": catalog_code,
         "crew_requirements": crew_req,
     }
@@ -1313,6 +1521,40 @@ def estimate_preview():
     region = ctx.get("region")
     city = ctx.get("city")
     tags = ctx.get("applied_factors") or []
+
+    raw_text = (data.get("text") or "") if isinstance(data.get("text"), str) else ""
+
+    # If region/city is not provided by the caller/router, try to infer region from raw text (e.g. "in Sicilia")
+    if raw_text and not region:
+        rt = raw_text.lower()
+        _region_map = {k.lower(): k for k in REGION_MULTIPLIERS.keys()}
+        for r_lc, r_name in _region_map.items():
+            if r_lc in rt:
+                region = r_name
+                ctx["region"] = region
+                break
+
+    # Special handling for natural-language plumbing requests.
+    # Chat users often write a full sentence; parse_multi would extract the first number (e.g. "2") and lose "100 mq".
+    # Here we build 2 catalog items explicitly: rough pipes (m) + fixtures (pz).
+    if raw_text:
+        rt = raw_text.lower()
+        if ("impianto idrico" in rt) or ("impianto idraul" in rt):
+            m_mq = re.search(r"(\d+)\s*mq", rt)
+            mq = int(m_mq.group(1)) if m_mq else 0
+            m_b = re.search(r"(\d+)\s*bagni?", rt)
+            n_bagni = int(m_b.group(1)) if m_b else 1
+
+            # Explainable heuristic for piping length
+            if mq > 0:
+                rough_m = max(30.0, (0.70 * float(mq)) + (max(n_bagni, 1) - 1) * 15.0)
+            else:
+                rough_m = 45.0 + (max(n_bagni, 1) - 1) * 15.0
+
+            items = [
+                {"label": "Impianto idraulico - tubazioni", "qty": round(rough_m, 1), "unit": "m", "meta": {"code": "PLUMB_ROUGH"}},
+                {"label": "Montaggio sanitari e rubinetteria", "qty": float(max(n_bagni, 1)), "unit": "pz", "meta": {"code": "PLUMB_FIXTURE"}},
+            ]
 
     # Supporto rapido: se arriva solo del testo, prova a usare il parser della chat
     if not items and data.get("text"):

@@ -19,18 +19,15 @@ from mongoengine.queryset.visitor import Q
 SYSTEM_PROMPT = """Sei un assistente per imprenditori edili.
 - Rispondi in italiano tecnico ma chiaro.
 - Se la domanda è poco specifica, fai al massimo 3 domande mirate (chi, cosa, quanto, dove).
-- Se ci sono numeri, dai SEMPRE un riepilogo tabellare e UNA stima finale.
-- Se usi fonti (documenti interni o web), elencale alla fine in "Fonti:".
-- Se non sei sicuro, di' cosa manca e proponi come stimarlo. Evita frasi vaghe.
-- Preferisci unità del settore (m, m², m³, kg, €/m², ore/uomo).
-- NON inventare prezzi: se non li hai, proponi fasce e il metodo di calcolo.
+- Se ci sono numeri e la domanda richiede calcoli/stime, fornisci un risultato numerico e un dettaglio (lista o tabella) + una stima finale.
+- Se usi fonti, separale sempre:
+  - "Fonti interne:" (solo se hai davvero fonti LOCAL)
+  - "Fonti web:" (solo se hai davvero fonti WEB)
+  Se non hai fonti per una categoria, NON scrivere quella sezione.
+- Non inventare prezzi: se non li hai, proponi fasce e metodo di calcolo.
 
-Formatta SEMPRE così:
-1) Risultato sintetico (1–3 frasi con numeri)
-2) Dettaglio (lista puntata o tabellina)
-3) Ipotesi e limiti (se applicabile)
-4) Prossimi passi (se applicabile)
-5) Fonti (bullet con titoli/URL o nomi file)
+Stile:
+- Niente formato fisso numerato: rispondi in modo naturale, diretto e utile.
 """
 
 # --- CLASSE CUSTOM PER EVITARE RESOURCE LEAK ---
@@ -236,7 +233,8 @@ class ChatModel:
              "ESTRATTI INTERNI:\n{local_blob}\n\n"
              "SUGGERIMENTI DB (non vincolanti):\n{db_hints}\n\n"
              "Regole aggiuntive:\n"
-             "- Usa SOLO le informazioni dei documenti interni.\n"
+             "- Dai priorità alle informazioni dei documenti interni (LOCAL).\n"
+             "- Se non trovi risposta nei documenti, puoi rispondere con conoscenza generale, indicando chiaramente che non proviene da LOCAL.\n"
              "- Se non trovi risposta nei documenti, dillo chiaramente e specifica quali dati mancano.\n"
              "- Quando citi, usa le sigle [LOCAL i]."
             ),
@@ -346,7 +344,7 @@ class ChatModel:
              "- Risposta concisa e pratica per il contesto edile.\n"
              "- Cita [LOCAL i] o [WEB j] quando usi una fonte.\n"
              "- Se c'è calc_json, i numeri chiave vengono da lì.\n"
-             "- Chiudi con due elenchi: 'Fonti interne:' e 'Fonti web:'."
+             "- Mostra le sezioni \"Fonti interne:\" e/o \"Fonti web:\" SOLO se hai effettivamente fonti da elencare; se una categoria è vuota, non stamparla."
             ),
             ("human", "{question}")
         ])

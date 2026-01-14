@@ -122,11 +122,27 @@ class CatalogService:
     def upsert_pricelist_codes(region: str, city: str, data: Dict[str, Any]) -> Dict[str, Any]:
         """Aggiorna puntualmente prezzi nel listino."""
         db = get_db()
-        filt = {}
-        if region: filt["region"] = {"$regex": f"^{region}$", "$options": "i"}
-        if city != "": filt["city"] = {"$regex": f"^{city}$", "$options": "i"}
+        # IMPORTANT:
+        # - city == "" means "regional pricelist" (not city-specific)
+        # - if we filter only by region we might match and update a *city* pricelist by mistake
+        #   causing inconsistent prices across territories.
+        filt: Dict[str, Any] = {}
+        if region:
+            filt["region"] = {"$regex": f"^{region}$", "$options": "i"}
+
+        if city is None:
+            city = ""
+
+        if city != "":
+            # city-specific pricelist
+            filt["city"] = {"$regex": f"^{city}$", "$options": "i"}
+        elif region:
+            # region-level pricelist (city empty/missing)
+            filt["$or"] = [{"city": {"$exists": False}}, {"city": {"$in": [None, ""]}}]
+
         # Fallback se non c'è regione ma c'è città
-        if not filt and city: filt["city"] = {"$regex": f"^{city}$", "$options": "i"}
+        if not filt and city:
+            filt["city"] = {"$regex": f"^{city}$", "$options": "i"}
 
         if not filt:
             raise ValueError("Region or City required")
@@ -146,8 +162,11 @@ class CatalogService:
         
         # Se stiamo creando un nuovo documento (upsert), impostiamo i campi base
         set_on_insert = {"created_at": datetime.utcnow()}
-        if region: set_on_insert["region"] = region
-        if city != "": set_on_insert["city"] = city
+        if region:
+            set_on_insert["region"] = region
+        # Persist "" for regional lists to make lookups deterministic
+        if city is not None:
+            set_on_insert["city"] = city
         update["$setOnInsert"] = set_on_insert
 
         res = db["pricelists"].update_one(filt, update, upsert=True)

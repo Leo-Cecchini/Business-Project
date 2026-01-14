@@ -103,11 +103,14 @@ def get_document_key(collection_name, doc):
     # Pricelists: (region, city)
     if collection_name == "pricelists":
         return {"region": doc.get("region"), "city": doc.get("city", "")}
-    
-    # Cataloghi/materiali: sku
-    if collection_name in ("work_catalog", "materials"):
+    # Work catalog: code
+    if collection_name == "work_catalog":
+        return {"code": doc.get("code")}
+
+    # Materials: sku
+    if collection_name == "materials":
         return {"sku": doc.get("sku")}
-    
+
     # Workers: id o (name, role, home_city)
     if collection_name == "workers":
         if doc.get("id"):
