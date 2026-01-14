@@ -117,7 +117,8 @@ class CompanyService:
             q_path = os.getenv("QDRANT_PATH", "./qdrant_data")
             q_col = os.getenv("QDRANT_COLLECTION", "documents")
             emb_model = os.getenv("EMBEDDING_MODEL", "sentence-transformers/all-MiniLM-L6-v2")
-            emb_dim = int(os.getenv("EMBEDDING_DIM", "384"))
+            # NOTE: usare SEMPRE la stessa variabile per la dimensione embeddings.
+            emb_dim = int(os.getenv("EMBEDDING_DIMENSION") or os.getenv("EMBEDDING_DIM") or "768")
 
             processor = FileProcessor()
             with open(filepath, 'rb') as f:

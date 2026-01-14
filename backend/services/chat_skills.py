@@ -1,5 +1,6 @@
 # services/chat_skills.py
 import re
+import json
 from datetime import datetime
 from typing import Dict, Any, Optional
 from pymongo.errors import OperationFailure
@@ -8,6 +9,7 @@ from mongoengine.queryset.visitor import Q
 from models_mongo.worker import WorkerDoc
 from models_mongo.project import ProjectDoc
 from models_mongo.material import MaterialDoc
+from models_mongo.computo import ComputoDoc
 
 # Optional imports
 try:
@@ -345,6 +347,547 @@ class ChatSkills:
         return {"INTENT_DB": "RECENT_PROJECTS", "answer": f"Ultimi {len(items)} cantieri: " + ", ".join(items)}
 
     # --- MATERIALS SKILLS ---
+
+    @staticmethod
+    def list_project_works(text: str, project_id: str):
+        """Elenca la sequenza lavori del cantiere direttamente dal DB (ProjectDoc.works).
+
+        Serve quando non esiste un PDF indicizzato: la chat deve comunque poter rispondere.
+        """
+        if not project_id:
+            return None
+
+        tl = (text or "").lower()
+        # Trigger: richieste di elenco lavori / lavorazioni / sequenza
+        if not any(k in tl for k in ("lavori", "lavorazioni", "sequenza")):
+            return None
+        if not any(k in tl for k in ("quali", "lista", "elenco", "mostra", "cosa", "da svolgere", "da fare")):
+            return None
+
+        p = ProjectDoc.objects(id=project_id).first()
+        if not p:
+            return {"INTENT_DB": "PROJECT_WORKS_LIST", "answer": "Cantiere non trovato."}
+
+        works = list(getattr(p, "works", None) or [])
+        if not works:
+            return {
+                "INTENT_DB": "PROJECT_WORKS_EMPTY",
+                "answer": "Per questo cantiere non c’è ancora una sequenza lavori. Prima genera/associa un computo e poi usa ‘Sequenza Lavori’."
+            }
+
+        lines = []
+        for w in works[:25]:
+            # Alcuni campi possono mancare a seconda dello schema/seed
+            name = getattr(w, "work_name", None) or getattr(w, "name", None) or "Lavorazione"
+            status = getattr(w, "status", None) or "planned"
+            sd = getattr(w, "start_date_planned", None)
+            ed = getattr(w, "end_date_planned", None)
+            sd_s = sd.strftime("%d/%m/%Y") if sd else "N/D"
+            ed_s = ed.strftime("%d/%m/%Y") if ed else "N/D"
+            nw = getattr(w, "number_of_workers", None)
+            nw_s = str(nw) if nw is not None else "N/D"
+            lines.append(f"- {name} ({status}, {sd_s} → {ed_s}, operai: {nw_s})")
+
+        ans = f"Nel cantiere {getattr(p, 'name', project_id)} risultano {len(works)} lavorazioni:\n" + "\n".join(lines)
+        if len(works) > 25:
+            ans += f"\n… e altre {len(works) - 25}."
+
+        return {"INTENT_DB": "PROJECT_WORKS_LIST", "answer": ans}
+
+    @staticmethod
+    def latest_computo_summary(text: str, project_id: str):
+        """Riassume l'ultimo computo associato al cantiere (ComputoDoc) dal DB.
+
+        Utile quando il computo non è un PDF ma è stato generato e salvato in Mongo.
+        """
+        if not project_id:
+            return None
+
+        tl = (text or "").lower()
+        if "computo" not in tl:
+            return None
+
+        p = ProjectDoc.objects(id=project_id).first()
+        if not p:
+            return {"INTENT_DB": "COMPUTO_NONE", "answer": "Cantiere non trovato."}
+
+        comp_ids = list(getattr(p, "metric_computation_id", None) or [])
+        if not comp_ids:
+            return {"INTENT_DB": "COMPUTO_NONE", "answer": "Non trovo un computo associato a questo cantiere."}
+
+        cid = comp_ids[-1]
+        c = ComputoDoc.objects(id=cid).first()
+        if not c:
+            return {"INTENT_DB": "COMPUTO_NONE", "answer": "Ho un riferimento al computo, ma il documento non è presente nel DB."}
+
+        boq = list(getattr(c, "bill_of_quantities", None) or [])
+        comp_code = getattr(c, "computo_code", None) or str(cid)
+        grand_total = getattr(c, "grand_total", None)
+
+        header = f"Ho trovato il computo {comp_code}."
+        if isinstance(grand_total, (int, float)):
+            header = f"Ho trovato il computo {comp_code} (totale: {grand_total:.2f} €)."
+
+        if not boq:
+            return {"INTENT_DB": "COMPUTO_SUMMARY", "answer": header + "\nNon trovo voci dettagliate nel computo."}
+
+        # Normalizza numeri se arrivano come stringhe
+        def _to_float(x):
+            if isinstance(x, (int, float)):
+                return float(x)
+            if isinstance(x, str):
+                xs = x.strip().replace("€", "").replace(" ", "")
+                # gestisce "1.234,56" e "1234,56"
+                if xs.count(",") == 1 and xs.count(".") >= 1:
+                    xs = xs.replace(".", "").replace(",", ".")
+                else:
+                    xs = xs.replace(",", ".")
+                try:
+                    return float(xs)
+                except Exception:
+                    return None
+            return None
+
+        lines = []
+
+        # Caso 1: computo per categorie (category/items)
+        max_categories = 6
+        is_categorized = bool(boq) and isinstance(boq[0], dict) and isinstance(boq[0].get("items"), list)
+
+        if is_categorized:
+            for cat in boq[:max_categories]:
+                if not isinstance(cat, dict):
+                    continue
+
+                cat_name = cat.get("category") or cat.get("categoria") or "Categoria"
+                cat_total = _to_float(cat.get("category_total") or cat.get("totale_categoria") or cat.get("total"))
+
+                cat_line = f"- {cat_name}"
+                if cat_total is not None:
+                    cat_line += f" (totale: {cat_total:.2f} €)"
+                # Riga vuota tra categorie per migliorare leggibilità (renderizzata con pre-wrap in UI)
+                if lines:
+                    lines.append("")
+                lines.append(cat_line)
+
+                items = cat.get("items") or []
+                for item in items[:2]:
+                    if not isinstance(item, dict):
+                        continue
+
+                    code = item.get("code") or item.get("codice") or item.get("reference") or item.get("ref")
+                    descr = (
+                        item.get("description")
+                        or item.get("descrizione")
+                        or item.get("voce")
+                        or item.get("lavorazione")
+                        or item.get("nome")
+                        or item.get("titolo")
+                        or item.get("label")
+                    )
+
+                    qty = item.get("qty") or item.get("quantita") or item.get("quantità") or item.get("qta")
+                    unit = item.get("unit") or item.get("um") or item.get("unita") or item.get("unità")
+                    tot = _to_float(item.get("total") or item.get("totale") or item.get("importo") or item.get("amount"))
+
+                    if not descr:
+                        try:
+                            descr = json.dumps(item, ensure_ascii=False)[:120]
+                        except Exception:
+                            descr = "Voce"
+
+                    sub = "  • "
+                    if code:
+                        sub += f"{code} - "
+                    sub += f"{descr}"
+
+                    if qty is not None and unit:
+                        sub += f" ({qty} {unit})"
+                    if tot is not None:
+                        sub += f" → {tot:.2f} €"
+
+                    lines.append(sub)
+
+            if len(boq) > max_categories:
+                lines.append(f"... e altre {len(boq) - max_categories} categorie.")
+
+        # Caso 2: computo piatto (lista di voci)
+        else:
+            for it in boq[:12]:
+                if not isinstance(it, dict):
+                    continue
+
+                descr = (
+                    it.get("descrizione")
+                    or it.get("description")
+                    or it.get("voce")
+                    or it.get("lavorazione")
+                    or it.get("nome")
+                    or it.get("titolo")
+                    or it.get("articolo")
+                    or it.get("testo")
+                    or it.get("label")
+                )
+
+                qty = it.get("quantita") or it.get("quantità") or it.get("qty") or it.get("qta")
+                unit = it.get("um") or it.get("unit") or it.get("unita") or it.get("unità")
+                tot = _to_float(it.get("totale") or it.get("total") or it.get("importo") or it.get("amount"))
+
+                if not descr:
+                    try:
+                        descr = json.dumps(it, ensure_ascii=False)[:120]
+                    except Exception:
+                        descr = "Voce"
+
+                line = f"- {descr}"
+                if qty is not None and unit:
+                    line += f" ({qty} {unit})"
+                if tot is not None:
+                    line += f" → {tot:.2f} €"
+                lines.append(line)
+
+        ans = header + "\nPrime voci:\n" + "\n".join(lines)
+        if len(boq) > 12:
+            ans += f"\n… e altre {len(boq) - 12} voci."
+
+        return {"INTENT_DB": "COMPUTO_SUMMARY", "answer": ans}
+
+
+    @staticmethod
+    def computo_category_items(text: str, project_id: str):
+        """Mostra tutte (o molte) voci di una specifica categoria del computo.
+
+        Esempi trigger:
+        - "mostrami tutte le voci della categoria impianto elettrico"
+        - "elenca le voci categoria demolizioni"
+        """
+        if not project_id:
+            return None
+
+        tl = (text or "").lower()
+        if "computo" not in tl and "categoria" not in tl:
+            return None
+
+        # Deve essere una richiesta di elenco voci
+        if not any(k in tl for k in ("mostra", "elenca", "lista", "tutte", "voci", "lavorazioni")):
+            return None
+        if "categoria" not in tl:
+            return None
+
+        # Estrai il nome categoria dal testo
+        m = re.search(r"categoria\s+([^\n\r]+)$", tl)
+        if not m:
+            # fallback: "della categoria X"
+            m = re.search(r"della\s+categoria\s+([^\n\r]+)$", tl)
+        if not m:
+            m = re.search(r"categoria\s+([a-zàèéìòù0-9\-\s]{3,})", tl)
+        if not m:
+            return None
+
+        cat_query = (m.group(1) or "").strip(" .,:;!?\t\n\r")
+        if len(cat_query) < 3:
+            return None
+
+        # Limite: "top 10" / "10 voci" / default
+        limit = 25
+        mnum = re.search(r"\b(\d{1,2})\b", tl)
+        if mnum:
+            try:
+                limit = max(1, min(60, int(mnum.group(1))))
+            except Exception:
+                pass
+        if "tutte" in tl:
+            limit = max(limit, 50)
+
+        # Recupera ultimo computo
+        p = ProjectDoc.objects(id=project_id).first()
+        if not p:
+            return {"INTENT_DB": "COMPUTO_CAT_ITEMS", "answer": "Cantiere non trovato."}
+
+        comp_ids = list(getattr(p, "metric_computation_id", None) or [])
+        if not comp_ids:
+            return {"INTENT_DB": "COMPUTO_CAT_ITEMS", "answer": "Non trovo un computo associato a questo cantiere."}
+
+        cid = comp_ids[-1]
+        c = ComputoDoc.objects(id=cid).first()
+        if not c:
+            return {"INTENT_DB": "COMPUTO_CAT_ITEMS", "answer": "Ho un riferimento al computo, ma il documento non è presente nel DB."}
+
+        boq = list(getattr(c, "bill_of_quantities", None) or [])
+        if not boq:
+            return {"INTENT_DB": "COMPUTO_CAT_ITEMS", "answer": "Il computo non contiene voci."}
+
+        # Cerca categoria (match per contenimento, robusto)
+        def _norm(s: str) -> str:
+            return re.sub(r"\s+", " ", (s or "").strip().lower())
+
+        cat_query_n = _norm(cat_query)
+        found = None
+        for cat in boq:
+            if not isinstance(cat, dict):
+                continue
+            name = cat.get("category") or cat.get("categoria")
+            if not name:
+                continue
+            if cat_query_n in _norm(name):
+                found = cat
+                break
+
+        if not found:
+            # fallback: match su parole principali (AND)
+            q_words = [w for w in re.split(r"\W+", cat_query_n) if len(w) >= 3]
+            for cat in boq:
+                if not isinstance(cat, dict):
+                    continue
+                name = _norm(cat.get("category") or cat.get("categoria") or "")
+                if not name:
+                    continue
+                if q_words and all(w in name for w in q_words):
+                    found = cat
+                    break
+
+        if not found:
+            # lista categorie disponibili
+            cats = []
+            for cat in boq:
+                if isinstance(cat, dict):
+                    nm = cat.get("category") or cat.get("categoria")
+                    if nm:
+                        cats.append(nm)
+            cats = cats[:12]
+            return {
+                "INTENT_DB": "COMPUTO_CAT_ITEMS",
+                "answer": "Non trovo quella categoria nel computo. Categorie disponibili: " + ", ".join(cats)
+            }
+
+        cat_name = found.get("category") or found.get("categoria") or "Categoria"
+        items = list(found.get("items") or [])
+        if not items:
+            return {"INTENT_DB": "COMPUTO_CAT_ITEMS", "answer": f"La categoria '{cat_name}' non contiene voci."}
+
+        # helper numerico
+        def _to_float(x):
+            if isinstance(x, (int, float)):
+                return float(x)
+            if isinstance(x, str):
+                xs = x.strip().replace("€", "").replace(" ", "")
+                if xs.count(",") == 1 and xs.count(".") >= 1:
+                    xs = xs.replace(".", "").replace(",", ".")
+                else:
+                    xs = xs.replace(",", ".")
+                try:
+                    return float(xs)
+                except Exception:
+                    return None
+            return None
+
+        lines = [f"Categoria: {cat_name} (voci: {len(items)})"]
+        for item in items[:limit]:
+            if not isinstance(item, dict):
+                continue
+            code = item.get("code") or item.get("codice") or item.get("reference") or item.get("ref")
+            descr = (
+                item.get("description")
+                or item.get("descrizione")
+                or item.get("voce")
+                or item.get("lavorazione")
+                or item.get("nome")
+                or item.get("titolo")
+                or item.get("label")
+            )
+            # Totale riga: prova campi espliciti, altrimenti qty * prezzo unitario
+            tot = _to_float(
+                item.get("total") or item.get("totale") or item.get("importo") or item.get("amount")
+                or item.get("prezzo_totale") or item.get("partial_total") or item.get("line_total")
+            )
+            if tot is None:
+                qty = _to_float(item.get("qty") or item.get("quantita") or item.get("quantità") or item.get("qta") or item.get("quantity"))
+                up = _to_float(
+                    item.get("unit_price") or item.get("prezzo_unitario") or item.get("prezzo") or item.get("price")
+                    or item.get("unit_cost") or item.get("unitCost") or item.get("costo_unitario")
+                )
+                if qty is not None and up is not None:
+                    tot = qty * up
+
+            if not descr:
+                try:
+                    descr = json.dumps(item, ensure_ascii=False)[:120]
+                except Exception:
+                    descr = "Voce"
+
+            row = "- "
+            if code:
+                row += f"{code} - "
+            row += descr
+            if tot is not None:
+                row += f" → {tot:.2f} €"
+            lines.append(row)
+
+        if len(items) > limit:
+            lines.append(f"… e altre {len(items) - limit} voci.")
+
+        return {"INTENT_DB": "COMPUTO_CAT_ITEMS", "answer": "\n".join(lines)}
+
+    @staticmethod
+    def computo_top_expensive(text: str, project_id: str):
+        """Mostra le voci più costose del computo (flatten di tutte le categorie)."""
+        if not project_id:
+            return None
+
+        tl = (text or "").lower()
+        if "computo" not in tl and not any(k in tl for k in ("più costose", "piu costose", "più care", "piu care", "più costosa", "piu costosa", "top")):
+            return None
+
+        if not any(k in tl for k in ("più cost", "piu cost", "più car", "piu car", "top")):
+            return None
+
+        # N richiesto
+        n = 5
+        mtop = re.search(r"\btop\s*(\d{1,2})\b", tl)
+        if mtop:
+            try:
+                n = int(mtop.group(1))
+            except Exception:
+                pass
+        else:
+            mnum = re.search(r"\b(\d{1,2})\s+(voci|lavorazioni)\b", tl)
+            if mnum:
+                try:
+                    n = int(mnum.group(1))
+                except Exception:
+                    pass
+        n = max(1, min(20, n))
+
+        p = ProjectDoc.objects(id=project_id).first()
+        if not p:
+            return {"INTENT_DB": "COMPUTO_TOP", "answer": "Cantiere non trovato."}
+
+        comp_ids = list(getattr(p, "metric_computation_id", None) or [])
+        if not comp_ids:
+            return {"INTENT_DB": "COMPUTO_TOP", "answer": "Non trovo un computo associato a questo cantiere."}
+
+        cid = comp_ids[-1]
+        c = ComputoDoc.objects(id=cid).first()
+        if not c:
+            return {"INTENT_DB": "COMPUTO_TOP", "answer": "Ho un riferimento al computo, ma il documento non è presente nel DB."}
+
+        boq = list(getattr(c, "bill_of_quantities", None) or [])
+        if not boq:
+            return {"INTENT_DB": "COMPUTO_TOP", "answer": "Il computo non contiene voci."}
+
+        def _to_float(x):
+            if isinstance(x, (int, float)):
+                return float(x)
+            if isinstance(x, str):
+                xs = x.strip().replace("€", "").replace(" ", "")
+                if xs.count(",") == 1 and xs.count(".") >= 1:
+                    xs = xs.replace(".", "").replace(",", ".")
+                else:
+                    xs = xs.replace(",", ".")
+                try:
+                    return float(xs)
+                except Exception:
+                    return None
+            return None
+
+        def _item_total(item: dict) -> float | None:
+            """Calcola il totale di una singola voce.
+
+            1) prova campi espliciti (total/totale/importo/...)
+            2) fallback: qty * prezzo unitario
+            """
+            if not isinstance(item, dict):
+                return None
+
+            tot = _to_float(
+                item.get("total") or item.get("totale") or item.get("importo") or item.get("amount")
+                or item.get("prezzo_totale") or item.get("partial_total") or item.get("line_total")
+            )
+            if tot is not None:
+                return tot
+
+            qty = _to_float(item.get("qty") or item.get("quantita") or item.get("quantità") or item.get("qta") or item.get("quantity"))
+            up = _to_float(
+                item.get("unit_price") or item.get("prezzo_unitario") or item.get("prezzo") or item.get("price")
+                or item.get("unit_cost") or item.get("unitCost") or item.get("costo_unitario")
+            )
+            if qty is not None and up is not None:
+                return qty * up
+
+            return None
+
+        # Flatten items
+        flat = []
+        for cat in boq:
+            if not isinstance(cat, dict):
+                continue
+            cat_name = cat.get("category") or cat.get("categoria") or "Categoria"
+            items = cat.get("items")
+            if isinstance(items, list):
+                for item in items:
+                    if not isinstance(item, dict):
+                        continue
+                    tot = _item_total(item)
+                    if tot is None:
+                        continue
+                    flat.append((tot, cat_name, item))
+            else:
+                # caso piatto
+                tot = _item_total(cat)
+                if tot is not None:
+                    flat.append((tot, "Computo", cat))
+
+        if not flat:
+            # Fallback: se non abbiamo importi per singola voce, ordiniamo le categorie per totale categoria
+            cats = []
+            for cat in boq:
+                if not isinstance(cat, dict):
+                    continue
+                cat_name = cat.get("category") or cat.get("categoria")
+                if not cat_name:
+                    continue
+                cat_tot = _to_float(cat.get("category_total") or cat.get("totale_categoria") or cat.get("total") or cat.get("totale"))
+                if cat_tot is not None:
+                    cats.append((cat_tot, cat_name))
+
+            if cats:
+                cats.sort(key=lambda x: x[0], reverse=True)
+                top_cats = cats[: min(n, len(cats))]
+                lines = ["Non trovo importi per singola voce: ti mostro le categorie più costose del computo:"]
+                for tot, name in top_cats:
+                    lines.append(f"- {tot:.2f} € | {name}")
+                return {"INTENT_DB": "COMPUTO_TOP", "answer": "\n".join(lines)}
+
+            return {"INTENT_DB": "COMPUTO_TOP", "answer": "Non trovo importi numerici nel computo."}
+
+        flat.sort(key=lambda x: x[0], reverse=True)
+        top = flat[:n]
+
+        lines = [f"Top {len(top)} voci più costose del computo:"]
+        for tot, cat_name, item in top:
+            code = item.get("code") or item.get("codice") or item.get("reference") or item.get("ref")
+            descr = (
+                item.get("description")
+                or item.get("descrizione")
+                or item.get("voce")
+                or item.get("lavorazione")
+                or item.get("nome")
+                or item.get("titolo")
+                or item.get("label")
+            )
+            if not descr:
+                try:
+                    descr = json.dumps(item, ensure_ascii=False)[:120]
+                except Exception:
+                    descr = "Voce"
+
+            row = f"- {tot:.2f} € | {cat_name}"
+            if code:
+                row += f" | {code}"
+            row += f" | {descr}"
+            lines.append(row)
+
+        return {"INTENT_DB": "COMPUTO_TOP", "answer": "\n".join(lines)}
 
     @staticmethod
     def _material_answer(mdoc: MaterialDoc) -> dict:

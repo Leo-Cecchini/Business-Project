@@ -7,6 +7,8 @@ import re
 from mongoengine.connection import get_db
 
 from services.chat_service import ChatService
+from bson import ObjectId
+from models_mongo.project import ProjectDoc
 
 log = logging.getLogger("chat")
 chat_bp = Blueprint("chat", __name__, url_prefix="/api")
@@ -70,6 +72,50 @@ def get_chat_service():
             log.warning(f"Failed to create router: {e}")
     
     return ChatService(vector_store=vs, chat_model=cm, web_retriever=wr, router=rt)
+
+
+# ----------------------
+# Project id normalization
+# ----------------------
+
+def normalize_project_id(pid: str | None) -> str | None:
+    """Normalize project identifiers coming from the frontend.
+
+    Accepts either a Mongo ObjectId (string) or a human-readable site/code.
+    If `pid` is not an ObjectId, we try to resolve it to the project's Mongo `_id`
+    by looking up the project in Mongo.
+
+    NOTE: In this repo, many UIs use the project `name` as a site/code (e.g. ROMA-54321).
+    """
+    if not pid:
+        return None
+
+    pid = str(pid).strip()
+
+    # 1) If it's already a valid ObjectId string, keep it
+    try:
+        ObjectId(pid)
+        return pid
+    except Exception:
+        pass
+
+    # 2) Otherwise try to resolve to the Mongo `_id`
+    try:
+        qs = ProjectDoc.objects
+
+        # Some deployments may have a dedicated `site_id` field; guard against missing schema.
+        p = None
+        if "site_id" in getattr(ProjectDoc, "_fields", {}):
+            p = qs(site_id=pid).first()
+
+        if not p:
+            # In this repo the site/code often corresponds to `name`
+            p = qs(name=pid).first()
+
+        return str(p.id) if p else pid
+    except Exception as e:
+        log.warning(f"normalize_project_id failed for '{pid}': {e}")
+        return pid
 
 
 # ----------------------
@@ -687,6 +733,9 @@ def chat_route():
     enforced_pid = data.get("__enforced_pid")
     if enforced_pid:
         project_id = enforced_pid
+
+    # Normalize project id so upload + chat use the same identifier
+    project_id = normalize_project_id(project_id)
     
     if not message:
         return jsonify({"error": "Messaggio vuoto"}), 422
@@ -727,6 +776,8 @@ def chat_project_route(pid):
     if not message:
         return jsonify({"error": "Messaggio vuoto"}), 422
     
+    pid = normalize_project_id(pid)
+
     quick = _quick_db_answer(message, project_id=pid)
     if quick:
         return jsonify(quick), 200

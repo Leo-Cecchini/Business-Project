@@ -4,13 +4,20 @@
 from qdrant_client import QdrantClient
 from qdrant_client.models import (
     Distance, VectorParams, PointStruct,
-    Filter, FieldCondition, MatchValue
+    Filter, FieldCondition, MatchValue, MatchAny
 )
 from sentence_transformers import SentenceTransformer
 from typing import List, Dict, Optional
 import uuid
 import math
 import re
+import os
+
+# Optional: Google embeddings (se EMBEDDING_MODEL è del tipo "models/text-embedding-004")
+try:
+    from langchain_google_genai import GoogleGenerativeAIEmbeddings
+except Exception:  # pragma: no cover
+    GoogleGenerativeAIEmbeddings = None
 
 # --- Heuristics di dominio per l'edilizia ------------------------------------
 PRIORITY_SOURCES = [
@@ -53,8 +60,28 @@ class VectorStore:
                 raise e
         
         self.collection_name = collection_name
-        self.embedding_model = SentenceTransformer(embedding_model)
-        self.embedding_dim = embedding_dim
+        self.embedding_dim = int(embedding_dim)
+
+        # Embeddings provider:
+        # - Default: SentenceTransformer (locale)
+        # - Se embedding_model sembra un modello Gemini embeddings (es. "models/text-embedding-004"),
+        #   prova ad usare GoogleGenerativeAIEmbeddings.
+        self._embedder_kind = "sentence_transformers"
+        self._st_model = None
+        self._g_embed = None
+
+        if isinstance(embedding_model, str) and embedding_model.strip().startswith("models/"):
+            if GoogleGenerativeAIEmbeddings is None:
+                raise RuntimeError(
+                    "GoogleGenerativeAIEmbeddings non disponibile. Installa/abilita langchain-google-genai."
+                )
+            api_key = os.getenv("GOOGLE_API_KEY")
+            if not api_key:
+                raise RuntimeError("GOOGLE_API_KEY mancante: necessario per embeddings Google")
+            self._g_embed = GoogleGenerativeAIEmbeddings(model=embedding_model.strip(), google_api_key=api_key)
+            self._embedder_kind = "google"
+        else:
+            self._st_model = SentenceTransformer(embedding_model)
         self._ensure_collection()
         print("Vector store initialized\n")
     
@@ -84,12 +111,23 @@ class VectorStore:
         for key, val in where.items():
             if val is None:
                 continue
-            must.append(
-                FieldCondition(
-                    key=f"metadata.{key}",
-                    match=MatchValue(value=val)
+            # Supporta sia match singolo che lista di valori (OR semplice).
+            # Esempio: {"project_id": ["123", 123]}
+            if isinstance(val, (list, tuple, set)):
+                from qdrant_client.models import MatchAny
+                must.append(
+                    FieldCondition(
+                        key=f"metadata.{key}",
+                        match=MatchAny(any=list(val))
+                    )
                 )
-            )
+            else:
+                must.append(
+                    FieldCondition(
+                        key=f"metadata.{key}",
+                        match=MatchValue(value=val)
+                    )
+                )
 
         if not must:
             return None
@@ -111,7 +149,12 @@ class VectorStore:
         if not texts:
             return 0
 
-        embeddings = self.embedding_model.encode(texts, show_progress_bar=False).tolist()
+        # Embeddings
+        if self._embedder_kind == "google":
+            # LangChain embeddings (batch)
+            embeddings = self._g_embed.embed_documents(texts)
+        else:
+            embeddings = self._st_model.encode(texts, show_progress_bar=False).tolist()
         
         points = []
         for text, embedding, metadata in zip(texts, embeddings, metadatas):
@@ -145,7 +188,10 @@ class VectorStore:
             return []
 
         # 1) Vettoriale
-        query_vector = self.embedding_model.encode([query], show_progress_bar=False)[0].tolist()
+        if self._embedder_kind == "google":
+            query_vector = self._g_embed.embed_query(query)
+        else:
+            query_vector = self._st_model.encode([query], show_progress_bar=False)[0].tolist()
         raw_limit = max(limit, 12)  # prendiamo più hit, poi rerankiamo
         q_filter = self._build_filter(where)
 

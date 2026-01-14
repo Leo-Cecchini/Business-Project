@@ -104,9 +104,9 @@ export default function SiteChat({ projectId }) {
                         </div>
                         <div className="flex-1">
                             <div
-                                className={`inline-block px-3 py-2 rounded-2xl text-sm max-w-full break-words ${msg.role === 'user'
-                                        ? 'bg-blue-600 text-white'
-                                        : 'bg-gray-200 text-gray-900'
+                                className={`inline-block px-3 py-2 rounded-2xl text-sm max-w-full break-words whitespace-pre-wrap ${msg.role === 'user'
+                                    ? 'bg-blue-600 text-white'
+                                    : 'bg-gray-200 text-gray-900'
                                     }`}
                             >
                                 {msg.text}

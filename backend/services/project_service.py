@@ -397,11 +397,14 @@ class ProjectService:
             chunks, metadatas = processor.process_file(file_data, filename, project_id=project_id)
             
             # Configura VectorStore (idealmente questi parametri verrebbero da config globale)
+            # NOTE: usare SEMPRE la stessa variabile per la dimensione embeddings,
+            # altrimenti Qdrant rifiuta upsert/search per mismatch dimensionale.
+            emb_dim = int(os.getenv("EMBEDDING_DIMENSION") or os.getenv("EMBEDDING_DIM") or "768")
             vector_store = VectorStore(
                 path=os.getenv("QDRANT_PATH", "./qdrant_data"),
                 collection_name=os.getenv("QDRANT_COLLECTION", "documents"),
                 embedding_model=os.getenv("EMBEDDING_MODEL", "sentence-transformers/all-MiniLM-L6-v2"),
-                embedding_dim=int(os.getenv("EMBEDDING_DIM", "384"))
+                embedding_dim=emb_dim
             )
             vector_store.add_documents(chunks, metadatas)
             indexed = True

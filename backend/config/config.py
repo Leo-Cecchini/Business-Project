@@ -44,10 +44,9 @@ class Config:
     TEMPERATURE = float(os.getenv('TEMPERATURE', '0.1'))
     
     # Web retrieval settings
-    #ENABLE_WEB_RETRIEVAL = os.getenv("ENABLE_WEB_RETRIEVAL", "false").lower() == "true"
-    ENABLE_WEB_RETRIEVAL = True
-    #WEB_TIMEOUT_SEC = int(os.getenv("WEB_TIMEOUT_SEC", "8"))
-    WEB_TIMEOUT_SEC = 8
+    # Default: disabilitato (per evitare che la chat "esca" dai documenti interni).
+    ENABLE_WEB_RETRIEVAL = os.getenv("ENABLE_WEB_RETRIEVAL", "false").lower() == "true"
+    WEB_TIMEOUT_SEC = int(os.getenv("WEB_TIMEOUT_SEC", "8"))
     
     # Bootstrap & Seeding
     BOOTSTRAP_DB = os.getenv("BOOTSTRAP_DB", "1") == "1"

@@ -22,14 +22,20 @@ class ChatService:
         
     # --- HELPERS ---
     def _is_greeting(self, text: str) -> bool:
-        """Rileva saluti semplici per evitare chiamate LLM costose."""
+        """Rileva solo saluti "puri" per evitare chiamate LLM costose.
+
+        IMPORTANTE: non deve scattare su frasi tipo "ciao, quali lavori...".
+        """
         t = (text or "").strip()
-        GREETING_RE = re.compile(r"\b(ciao|buongiorno|buonasera|salve|hey|hei|hi|hello)\b", re.IGNORECASE)
-        if len(t) <= 12 and GREETING_RE.search(t):
-            return True
-        if GREETING_RE.match(t):
-            return True
-        return False
+        if not t:
+            return False
+
+        # Considera greeting solo se il messaggio contiene SOLO il saluto (più punteggiatura/spazi)
+        GREET_ONLY_RE = re.compile(
+            r"^\s*(ciao|buongiorno|buonasera|salve|hey|hei|hi|hello)\b[\s\!\?\,\.\-–—:;]*\s*$",
+            re.IGNORECASE,
+        )
+        return bool(GREET_ONLY_RE.match(t))
 
     def _strip_calc_json(self, text: str) -> str:
         """Rimuove blocchi calc_json dal testo."""
@@ -87,11 +93,13 @@ class ChatService:
             return True
         
         # CASO 3: Score troppo basso nei risultati locali
+        # VectorStore usa cosine similarity (più alto = meglio). Usiamo il base_score (_base) quando disponibile.
         if intent in ("MATERIALI", "STIMA", "STAFF") and local_ctx:
-            top_score = local_ctx[0].get("score", 0.0)
-            # Assumiamo distanza L2: score > 0.75 = rilevanza bassa
-            if top_score > 0.75:
-                log.info(f"Web search attivato: score basso ({top_score})")
+            base = local_ctx[0].get("_base")
+            top_score = float(base) if base is not None else float(local_ctx[0].get("score", 0.0))
+            # Heuristica: sotto ~0.25 di cosine similarity tende a essere poco rilevante.
+            if top_score < 0.25:
+                log.info(f"Web search attivato: rilevanza locale bassa (cosine={top_score:.3f})")
                 return True
         
         return False
@@ -239,7 +247,15 @@ class ChatService:
         
         # Skills progetto (se abbiamo project_id)
         if project_id:
-            for skill_method in [ChatSkills.add_work_item, ChatSkills.plan_works, ChatSkills.auto_assign]:
+            for skill_method in [
+                ChatSkills.list_project_works,
+                ChatSkills.computo_category_items,
+                ChatSkills.computo_top_expensive,
+                ChatSkills.latest_computo_summary,
+                ChatSkills.add_work_item,
+                ChatSkills.plan_works,
+                ChatSkills.auto_assign,
+            ]:
                 res = skill_method(question, project_id)
                 if res:
                     return self._finalize(res, t0, session_id, question, project_id, res.get("INTENT_DB"))
@@ -286,7 +302,17 @@ class ChatService:
 
         local_ctx = []
         if self.vector_store:
-            where = {"project_id": int(project_id)} if project_id else None
+            # NOTE:
+            # - Nei metadata Qdrant, `project_id` viene salvato come stringa (vedi FileProcessor.process_file).
+            # - In passato alcuni seed/test potrebbero aver salvato un id numerico.
+            #   Per evitare "contesto vuoto" facciamo match su entrambi quando possibile.
+            where = None
+            if project_id:
+                pid_str = str(project_id)
+                if pid_str.isdigit():
+                    where = {"project_id": [pid_str, int(pid_str)]}
+                else:
+                    where = {"project_id": pid_str}
             try:
                 local_ctx = self.vector_store.search(question, limit=8, where=where)
             except Exception:
