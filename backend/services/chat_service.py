@@ -1,0 +1,430 @@
+# services/chat_service.py
+import time
+import json
+import re
+import logging
+from datetime import datetime, timezone
+from typing import Dict, List, Optional
+from flask import g, current_app
+
+from mongoengine.connection import get_db
+from utils.message_parser import parse_multi
+from config.prompt_templates import make_chat_prompt, SYSTEM_INSTRUCTIONS
+
+log = logging.getLogger("chat_service")
+
+class ChatService:
+    def __init__(self, vector_store, chat_model, web_retriever=None, router=None):
+        self.vector_store = vector_store
+        self.chat_model = chat_model
+        self.web_retriever = web_retriever
+        self.router = router
+        
+    # --- HELPERS ---
+    def _is_greeting(self, text: str) -> bool:
+        """Rileva solo saluti "puri" per evitare chiamate LLM costose.
+
+        IMPORTANTE: non deve scattare su frasi tipo "ciao, quali lavori...".
+        """
+        t = (text or "").strip()
+        if not t:
+            return False
+
+        # Considera greeting solo se il messaggio contiene SOLO il saluto (più punteggiatura/spazi)
+        GREET_ONLY_RE = re.compile(
+            r"^\s*(ciao|buongiorno|buonasera|salve|hey|hei|hi|hello)\b[\s\!\?\,\.\-–—:;]*\s*$",
+            re.IGNORECASE,
+        )
+        return bool(GREET_ONLY_RE.match(t))
+
+    def _strip_calc_json(self, text: str) -> str:
+        """Rimuove blocchi calc_json dal testo."""
+        if not text:
+            return ""
+        t = re.split(r"```calc_json[\s\S]*?```", text, flags=re.I)[0]
+        t = re.sub(r"\[calc_json\]", "", t, flags=re.I)
+        t = re.sub(r"(?i)\bcalc_json\b", "", t)
+        return t.rstrip()
+
+    def _ensure_calc_block(self, res: dict, auto_estimate: dict, question: str):
+        """Assicura che il calc_json sia presente nella risposta."""
+        if not auto_estimate:
+            return
+        try:
+            block = "\n\n```calc_json\n" + json.dumps(auto_estimate, ensure_ascii=False) + "\n```"
+            key = "reply" if "reply" in res else "answer"
+            if key in res and "```calc_json" not in res[key]:
+                res[key] += block
+        except Exception:
+            pass
+
+    def _extract_region_city(self, text: str) -> tuple:
+        """Estrae regione e città dal testo."""
+        t = text.lower()
+        reg, city = None, None
+        
+        # Regione: "in Lazio", "in Lombardia"
+        mreg = re.search(r"\bin\s+([a-zàèéìòù\-\s]{3,})", t)
+        if mreg:
+            reg = mreg.group(1).strip().title()
+        
+        # Città: "a Roma", "a Milano"
+        mcity = re.search(r"\ba\s+([a-zàèéìòù\-\s]{2,})", t)
+        if mcity:
+            city = mcity.group(1).strip().title()
+        
+        return reg, city
+
+    def _should_search_web(self, intent: str, local_ctx: list, question: str) -> bool:
+        """
+        Logica a 3 livelli per decidere quando cercare sul web:
+        1. Intent esplicito WEB_SEARCH (meteo, normative, etc.)
+        2. Fallback se documenti locali vuoti
+        3. Fallback se score documenti troppo basso
+        """
+        # CASO 1: Intent esplicito
+        if intent == "WEB_SEARCH":
+            log.info("Web search attivato: intent esplicito WEB_SEARCH")
+            return True
+        
+        # CASO 2: Nessun documento locale trovato
+        if not local_ctx and intent not in ("STAFF", "MATERIALI", "none"):
+            log.info("Web search attivato: nessun documento locale trovato")
+            return True
+        
+        # CASO 3: Score troppo basso nei risultati locali
+        # VectorStore usa cosine similarity (più alto = meglio). Usiamo il base_score (_base) quando disponibile.
+        if intent in ("MATERIALI", "STIMA", "STAFF") and local_ctx:
+            base = local_ctx[0].get("_base")
+            top_score = float(base) if base is not None else float(local_ctx[0].get("score", 0.0))
+            # Heuristica: sotto ~0.25 di cosine similarity tende a essere poco rilevante.
+            if top_score < 0.25:
+                log.info(f"Web search attivato: rilevanza locale bassa (cosine={top_score:.3f})")
+                return True
+        
+        return False
+
+    def _save_analytics(self, session_id, question, response, latency_ms, project_id, intent):
+        """Salva analytics in MongoDB."""
+        try:
+            db = get_db()
+            ans_text = response.get("reply") or response.get("answer") or ""
+            db["chat_analytics"].insert_one({
+                "session_id": session_id,
+                "question": question,
+                "answer": ans_text[:500],
+                "intent": intent,
+                "latency_ms": latency_ms,
+                "timestamp": datetime.utcnow(),
+                "site_id": project_id,
+                "had_error": False,
+            })
+        except Exception as e:
+            log.warning(f"Analytics fail: {e}")
+
+    def _call_estimate_preview(self, multi_items: list, question: str) -> dict:
+        """Chiamata server-side a estimate_preview per valorizzare tabelle."""
+        try:
+            reg_hint, city_hint = self._extract_region_city(question)
+            
+            from utils.estimate import estimate_preview as _preview_ep
+            preview_body = {"items": multi_items}
+            if reg_hint:
+                preview_body["region"] = reg_hint
+            if city_hint:
+                preview_body["city"] = city_hint
+
+            with current_app.test_request_context(json=preview_body):
+                _resp = _preview_ep()
+
+            # Normalizza risposta Flask
+            def _as_json(resp):
+                try:
+                    if isinstance(resp, tuple):
+                        resp_obj = resp[0]
+                    else:
+                        resp_obj = resp
+                    if hasattr(resp_obj, "get_json"):
+                        return resp_obj.get_json()
+                    txt = resp_obj.get_data(as_text=True)
+                    return json.loads(txt)
+                except Exception:
+                    return None
+
+            return _as_json(_resp) or {}
+        except Exception as e:
+            log.warning(f"Preview preventivo fallita: {e}")
+            return {}
+
+    def _build_ui_tables(self, multi_items: list, question: str) -> dict:
+        """Costruisce struttura tabellare per UI con valorizzazione preventivo."""
+        # 1) Struttura stub
+        ui_items = []
+        for it in multi_items:
+            ui_items.append({
+                "label": it.get("label", "voce"),
+                "qty": float(it.get("qty", 1.0)),
+                "unit": it.get("unit", "pz"),
+                "materials": {
+                    "columns": ["code", "descr", "um", "qta", "prezzo", "totale"],
+                    "rows": []
+                },
+                "labor": {
+                    "columns": ["ruolo", "ore", "tariffa", "totale"],
+                    "rows": []
+                },
+                "subtotal": 0.0
+            })
+
+        # 2) Valorizzazione via estimate_preview
+        preview_data = self._call_estimate_preview(multi_items, question)
+        ui_tables = preview_data.get("ui_tables")
+        
+        if ui_tables:
+            return ui_tables
+        
+        # Fallback: restituisci stub
+        return {
+            "items": ui_items,
+            "grand_total": 0.0,
+            "notes": "Anteprima non valorizzata (estimate service non disponibile)."
+        }
+
+    def _format_estimate_message(self, ui_tables: dict, n_items: int) -> str:
+        """Crea un testo breve e ordinato quando sono presenti tabelle preventivo (UI)."""
+        try:
+            grand = ui_tables.get("grand_total")
+            subtotal = ui_tables.get("subtotal")
+            margin_pct = ui_tables.get("margin_pct")
+            margin_amount = ui_tables.get("margin_amount")
+
+            lines = []
+            lines.append(f"Preventivo calcolato per {n_items} lavorazioni.")
+
+            # Riepilogo lavori (max 12 righe per non esplodere in chat)
+            items = ui_tables.get("items") or []
+            if items:
+                lines.append("\nLavorazioni:")
+                for it in items[:12]:
+                    lab = it.get("label") or "voce"
+                    qty = it.get("qty")
+                    unit = it.get("unit")
+                    sub = it.get("subtotal")
+                    if qty is not None and unit:
+                        lines.append(f"- {lab} ({qty} {unit}) → {sub:.2f} €" if isinstance(sub, (int, float)) else f"- {lab} ({qty} {unit})")
+                    else:
+                        lines.append(f"- {lab} → {sub:.2f} €" if isinstance(sub, (int, float)) else f"- {lab}")
+                if len(items) > 12:
+                    lines.append(f"… e altre {len(items) - 12} lavorazioni")
+
+            # Totali
+            if isinstance(subtotal, (int, float)):
+                lines.append(f"\nSubtotale: {subtotal:.2f} €")
+            if isinstance(margin_pct, (int, float)) and isinstance(margin_amount, (int, float)):
+                lines.append(f"Margine aziendale: {margin_pct:.0f}% (+{margin_amount:.2f} €)")
+            if isinstance(grand, (int, float)):
+                lines.append(f"Totale: {grand:.2f} €")
+
+            lines.append("\nDettaglio completo in tabella qui sotto (materiali + manodopera per ogni lavorazione).")
+            return "\n".join(lines)
+        except Exception:
+            return "Ho calcolato il preventivo. Trovi il dettaglio completo in tabella qui sotto."
+
+    def process_message(self, question: str, session_id: str, project_id: str = None, user_context: dict = None):
+        """
+        Main entry point per processare un messaggio chat.
+        Integra: skills, routing, RAG, web search, parsing multi-voce, preventivi.
+        """
+        t0 = time.perf_counter()
+        
+        # 0. SHORT-CIRCUIT: Saluti
+        if self._is_greeting(question):
+            res = {"answer": "Ciao! Dimmi pure cosa ti serve: materiali, personale o lavori del cantiere."}
+            return self._finalize(res, t0, session_id, question, project_id, "GREETING")
+
+        # 1. Tenta Skills deterministiche (delegate a ChatSkills)
+        from services.chat_skills import ChatSkills
+        
+        # Skills progetto (se abbiamo project_id)
+        if project_id:
+            for skill_method in [
+                ChatSkills.list_project_workers,
+                ChatSkills.work_deadline,
+                ChatSkills.list_project_works,
+                ChatSkills.computo_category_items,
+                ChatSkills.computo_top_expensive,
+                ChatSkills.latest_computo_summary,
+                ChatSkills.add_work_item,
+                ChatSkills.plan_works,
+                ChatSkills.auto_assign,
+            ]:
+                res = skill_method(question, project_id)
+                if res:
+                    return self._finalize(res, t0, session_id, question, project_id, res.get("INTENT_DB"))
+
+        # Skills lettura (sempre disponibili)
+        for skill_method in [
+            ChatSkills.headcount,
+            ChatSkills.role_lookup,
+            ChatSkills.list_by_role_intent,
+            ChatSkills.available_filtered,
+            ChatSkills.set_worker_region_city,
+            ChatSkills.capacity_check,
+            ChatSkills.toggle_worker_availability,
+            ChatSkills.project_counts,
+            ChatSkills.recent_projects,
+            ChatSkills.material_price
+        ]:
+            res = skill_method(question)
+            if res:
+                return self._finalize(res, t0, session_id, question, project_id, res.get("INTENT_DB"))
+
+        # 2. Routing & RAG locale
+        routed = {}
+        if self.router:
+            try:
+                routed = self.router.route(question)
+            except Exception:
+                pass
+        
+        intent = routed.get("intent", "none")
+        entities = routed.get("entities", {})
+
+        # 2b. Parsing Multi-Voce (SOLO per richieste di STIMA)
+        # Nota: parse_multi è volutamente permissivo; se lo eseguiamo su qualsiasi domanda
+        # (es. meteo, normative, email, calcoli) rischia di generare "voci" fittizie e
+        # far scattare comunque l'anteprima preventivo. Quindi lo abilitiamo solo quando
+        # il router ha già deciso che l'utente sta chiedendo un preventivo.
+        multi_items = []
+        if intent == "STIMA":
+            try:
+                multi_items = parse_multi(question)
+            except Exception:
+                multi_items = []
+
+        local_ctx = []
+        if self.vector_store:
+            # NOTE:
+            # - Nei metadata Qdrant, `project_id` viene salvato come stringa (vedi FileProcessor.process_file).
+            # - In passato alcuni seed/test potrebbero aver salvato un id numerico.
+            #   Per evitare "contesto vuoto" facciamo match su entrambi quando possibile.
+            where = None
+            if project_id:
+                pid_str = str(project_id)
+                if pid_str.isdigit():
+                    where = {"project_id": [pid_str, int(pid_str)]}
+                else:
+                    where = {"project_id": pid_str}
+            try:
+                local_ctx = self.vector_store.search(question, limit=8, where=where)
+            except Exception:
+                pass
+
+        # 4. Web Retrieval (logica a 3 livelli)
+        web_ctx = []
+        
+        # DEBUG: Log dello stato web retrieval
+        web_enabled = current_app.config.get("ENABLE_WEB_RETRIEVAL", False)
+        log.info(f"🌐 Web Retrieval - enabled={web_enabled}, retriever_present={self.web_retriever is not None}")
+        
+        if self.web_retriever and web_enabled:
+            should_search = self._should_search_web(intent, local_ctx, question)
+            log.info(f"🔍 Should search web: {should_search} (intent={intent}, local_docs={len(local_ctx)})")
+            
+            if should_search:
+                try:
+                    log.info(f"🚀 Executing web search for: '{question[:60]}'")
+                    web_ctx = self.web_retriever.search(question)
+                    log.info(f"✅ Web search completata: {len(web_ctx)} risultati")
+                    
+                    # Log primi risultati per debug
+                    for i, r in enumerate(web_ctx[:2], 1):
+                        log.info(f"   [{i}] {r.get('title', 'N/A')[:50]}")
+                        
+                except Exception as e:
+                    log.warning(f"❌ Web retriever fallito: {e}")
+                    import traceback
+                    log.warning(traceback.format_exc())
+        else:
+            if not self.web_retriever:
+                log.warning("⚠️ Web retriever NON INIZIALIZZATO (self.web_retriever is None)")
+            if not web_enabled:
+                log.warning("⚠️ Web retrieval DISABILITATO in config (ENABLE_WEB_RETRIEVAL=False)")
+
+        # 5. Stima automatica (se intent STIMA)
+        auto_estimate = None
+        if intent == "STIMA" and entities.get("qty"):
+            try:
+                from routes.estimate import estimate_from_entities
+                auto_estimate = estimate_from_entities(entities)
+            except ImportError:
+                pass
+            
+            if not auto_estimate:
+                try:
+                    from models.estimators import pick_and_estimate
+                    auto_estimate = pick_and_estimate(entities)
+                except ImportError:
+                    pass
+
+        # 6. Build context e prompt
+        from utils.retrieval import build_context
+        db_ctx = build_context(project_id) if project_id else {}
+        prompt = make_chat_prompt(db_ctx, question) if db_ctx else question
+        
+        # 7. LLM Call con dual context (local + web)
+        res = self.chat_model.answer_with_contexts(
+            session_id, 
+            SYSTEM_INSTRUCTIONS + "\n\n" + prompt,
+            local_ctx, 
+            web_ctx,
+            calc_json=auto_estimate,
+            site_id=project_id
+        )
+
+        # 8. Post-Processing
+        key = "reply" if "reply" in res else "answer"
+        res[key] = self._strip_calc_json(res.get(key, ""))
+        # Pulisci riferimenti WEB rumorosi nel testo (il dettaglio è in UI tables quando serve)
+        if key in res:
+            res[key] = re.sub(r"\[WEB\s*\d+\]", "", res[key])
+            res[key] = re.sub(r"(?i)^\s*fonti\s+web:.*$", "", res[key], flags=re.M)
+            res[key] = re.sub(r"\n{3,}", "\n\n", res[key]).strip()
+        self._ensure_calc_block(res, auto_estimate, question)
+
+        # 9. Multi-voce: aggiungi tabelle UI valorizzate (SOLO STIMA)
+        if intent == "STIMA" and multi_items:
+            res["parsed_items"] = multi_items
+            res["ui_tables"] = self._build_ui_tables(multi_items, question)
+
+            # Se abbiamo tabelle (ui_tables), rendi il testo breve e ordinato
+            if key in res:
+                res[key] = self._format_estimate_message(res.get("ui_tables") or {}, len(multi_items))
+
+        # 10. Finalize
+        return self._finalize(res, t0, session_id, question, project_id, intent)
+
+    def _finalize(self, res, t0, sid, q, pid, intent):
+        """Finalizza risposta con latency, analytics e metadati UI."""
+        latency = int((time.perf_counter() - t0) * 1000)
+        res["latency_ms"] = latency
+        res["intent"] = intent
+        res.setdefault("ui_meta", {}).update({"sender": "assistant", "align": "left"})
+
+        self._save_analytics(sid, q, res, latency, pid, intent)
+
+        # Telemetry opzionale
+        try:
+            from services.telemetry import log_chat_metrics
+            log_chat_metrics({
+                "intent": intent,
+                "tokens_in": len(q.split()),
+                "tokens_out": len((res.get("reply") or res.get("answer") or "").split()),
+                "latency_ms": latency,
+                "parsed_items": len(res.get("parsed_items") or []),
+                "had_error": False
+            })
+        except Exception:
+            pass
+
+        return res
