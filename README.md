@@ -32,12 +32,19 @@ This platform centralizes project specifications, work catalogs, and workforce d
 **0. Google API Key**
 
 You'll need a Google API Key to be added to the file .env
+
 0.1 Open https://aistudio.google.com/api-keys
+
 0.2 Log-in with your Google account
+
 0.3 Click on "Create API Key"
+
 0.4 Create a new project with the name that you prefer (doesn't matter)
+
 0.5 Click on "Create key"
+
 0.6 Now you'll have to click on the "Gemini API Key" on the row which has just appeared and you'll se entire API key
+
 0.7 In the file `.env` (in the main folder), ```"GOOGLE_API_KEY=your_google_api_key"``` replace ```"your_google_api_key"``` with your key 
 
 **1. Import and create Docker containers**
@@ -59,6 +66,7 @@ In the folder `./seed` there are some initial datasets (all of them are AI gener
 To load them you can use the script `init_db.py` in the main folder.
 
 **4. Enjoy!**
+
 ---
 
 ## Basic Commands
