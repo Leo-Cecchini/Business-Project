@@ -171,19 +171,42 @@ class ComputoService:
             
         # Generazione pipeline tramite processor
         computo_data = computo.to_dict()
-        
+
+        # NOTE: anche senza chiave Google o con chiave non valida, il processor
+        # è in grado di generare una pipeline *fallback*. Qui rendiamo robusto
+        # il parsing per evitare errori/"piano vuoto".
         pipeline_json = computo_processor.generate_work_pipeline(
             model=ai_model,
             metric_data=computo_data,
-            start_date=start_date
+            start_date=start_date,
         )
-        
+
+        # Alcune versioni possono restituire un dict (es. {items:[...]})
+        if isinstance(pipeline_json, dict):
+            pipeline_json = (
+                pipeline_json.get("items")
+                or pipeline_json.get("plan")
+                or pipeline_json.get("works")
+                or []
+            )
+
+        # Se ancora vuoto, prova fallback esplicito (se disponibile)
         if not pipeline_json:
-            raise ValueError("L'AI non ha prodotto una pipeline valida")
+            if hasattr(computo_processor, "generate_pipeline_fallback"):
+                pipeline_json = computo_processor.generate_pipeline_fallback(computo_data, start_date)
+            elif hasattr(computo_processor, "generate_pipeline_from_computo"):
+                pipeline_json = computo_processor.generate_pipeline_from_computo(computo_data, start_date)
+
+        if not pipeline_json:
+            raise ValueError("Pipeline lavori vuota: genera prima la sequenza lavori (" \
+                             "oppure configura GOOGLE_API_KEY per pianificazione AI)")
             
         # Conversione in WorkItem e salvataggio
         work_items = []
         for item in pipeline_json:
+            if not isinstance(item, dict):
+                # Evita crash se arriva una lista di stringhe/chiavi
+                continue
             valid_fields = {k: v for k, v in item.items() if k in WorkItem._fields}
             
             # FIX: Converti le date stringa in oggetti date python se necessario

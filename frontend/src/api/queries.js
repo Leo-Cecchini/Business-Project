@@ -68,7 +68,11 @@ export function useWorkers(params = {}) {
     return useQuery({
         queryKey: ['workers', params],
         queryFn: () => {
+            // Ensure we fetch enough workers so UI can resolve worker names by id
+            // (otherwise WorkCard falls back to `Worker xxxx` for workers not in the first page)
             const searchParams = new URLSearchParams(params);
+            if (!searchParams.get('page')) searchParams.set('page', '1');
+            if (!searchParams.get('per_page')) searchParams.set('per_page', '500');
             return getAPI(`/api/workers?${searchParams}`);
         },
         select: (data) => data.items || data || [],  // ✅ Estrae items dall'API

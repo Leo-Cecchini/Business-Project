@@ -349,6 +349,155 @@ class ChatSkills:
     # --- MATERIALS SKILLS ---
 
     @staticmethod
+    def list_project_workers(text: str, project_id: str):
+        """Elenca operai assegnati nel cantiere (da ProjectDoc.works[*].workers).
+
+        Trigger: domande del tipo "quali/chi sono gli operai nel cantiere", "chi sta lavorando".
+        """
+        if not project_id:
+            return None
+
+        tl = (text or "").lower()
+
+        # evita conflitto con azioni ("assegna operai")
+        if re.search(r"\b(assegna|programma)\b.*\boperai\b", tl):
+            return None
+
+        wants_people = any(k in tl for k in ("operai", "dipendenti", "personale", "chi lavora", "lavorano", "workers"))
+        wants_list = any(k in tl for k in ("quali", "chi", "elenco", "lista", "mostra", "dimm"))
+        if not (wants_people and wants_list):
+            return None
+
+        p = ProjectDoc.objects(id=project_id).first()
+        if not p:
+            return {"INTENT_DB": "PROJECT_WORKERS", "answer": "Cantiere non trovato."}
+
+        works = list(getattr(p, "works", None) or [])
+        worker_ids = []
+        for w in works:
+            for wid in (getattr(w, "workers", None) or []):
+                if wid and str(wid) not in worker_ids:
+                    worker_ids.append(str(wid))
+
+        # foreman (se presente) può essere salvato in meta_extra
+        meta = dict(getattr(p, "meta_extra", None) or {})
+        foreman_id = meta.get("foreman_id") or meta.get("capo_cantiere_id")
+        if foreman_id and str(foreman_id) not in worker_ids:
+            worker_ids.insert(0, str(foreman_id))
+
+        if not worker_ids:
+            return {
+                "INTENT_DB": "PROJECT_WORKERS_EMPTY",
+                "answer": "Non risultano operai assegnati a questo cantiere. Prima pianifica i lavori e poi usa ‘Assegna operai’."
+            }
+
+        # lookup dettagli workers
+        try:
+            from bson import ObjectId
+            oids = []
+            for x in worker_ids:
+                try:
+                    oids.append(ObjectId(str(x)))
+                except Exception:
+                    pass
+            ws = WorkerDoc.objects(id__in=oids) if oids else []
+        except Exception:
+            ws = []
+
+        if not ws:
+            return {
+                "INTENT_DB": "PROJECT_WORKERS",
+                "answer": f"Nel cantiere risultano {len(worker_ids)} assegnazioni, ma non riesco a leggere i dettagli anagrafici dal DB (ids: {', '.join(worker_ids[:6])})."
+            }
+
+        lines = []
+        for wkr in ws:
+            role = (wkr.role or "").strip() or "operaio"
+            name = (wkr.name or "").strip() or str(wkr.id)
+            tag = " (capo cantiere)" if str(wkr.id) == str(foreman_id) else ""
+            lines.append(f"- {name} — {role}{tag}")
+
+        ans = f"Operai assegnati nel cantiere {getattr(p, 'name', project_id)} ({len(ws)}):\n" + "\n".join(lines)
+        return {"INTENT_DB": "PROJECT_WORKERS", "answer": ans}
+
+    @staticmethod
+    def work_deadline(text: str, project_id: str):
+        """Risponde a domande su scadenza/data fine di una lavorazione specifica."""
+        if not project_id:
+            return None
+
+        tl = (text or "").lower()
+        if not ("scaden" in tl or "data fine" in tl or "quando fin" in tl or "deadline" in tl or "entro quando" in tl):
+            return None
+
+        p = ProjectDoc.objects(id=project_id).first()
+        if not p:
+            return {"INTENT_DB": "WORK_DEADLINE", "answer": "Cantiere non trovato."}
+
+        works = list(getattr(p, "works", None) or [])
+        if not works:
+            return {"INTENT_DB": "WORK_DEADLINE", "answer": "Non trovo lavorazioni pianificate per questo cantiere."}
+
+        # Estrai possibile nome lavoro: tra virgolette oppure dopo la parola "lavoro"
+        target = None
+        m = re.search(r"[\"\']([^\"\']{3,80})[\"\']", text)
+        if m:
+            target = m.group(1).strip()
+        if not target:
+            m2 = re.search(r"\blavoro\b\s+(.{3,80})", text, re.IGNORECASE)
+            if m2:
+                target = re.split(r"[\?\!\.,;]", m2.group(1))[0].strip()
+
+        # Se non ho un target esplicito, usa i token della domanda
+        stop = {"quando", "finisce", "finira", "finirà", "scadenza", "data", "fine", "lavoro", "lavorazione", "del", "della", "dei", "delle", "nel", "in", "a", "di", "che", "il", "la", "un", "una", "questo", "questa"}
+        tokens = [t for t in re.findall(r"[a-zàèéìòù0-9]{3,}", tl) if t not in stop]
+
+        def score(wname: str) -> int:
+            wn = (wname or "").lower()
+            s = 0
+            if target:
+                # match diretto substring
+                if target.lower() in wn:
+                    s += 5
+                # token overlap del target
+                for t in re.findall(r"[a-zàèéìòù0-9]{3,}", target.lower()):
+                    if t in wn:
+                        s += 2
+            for t in tokens:
+                if t in wn:
+                    s += 1
+            return s
+
+        best = None
+        best_s = 0
+        for w in works:
+            name = getattr(w, "work_name", None) or getattr(w, "name", None) or ""
+            s = score(name)
+            if s > best_s:
+                best_s = s
+                best = w
+
+        if not best or best_s <= 0:
+            return {
+                "INTENT_DB": "WORK_DEADLINE",
+                "answer": "Quale lavorazione intendi? Dimmi il nome esatto (o scrivilo tra virgolette)."
+            }
+
+        name = getattr(best, "work_name", None) or "Lavorazione"
+        status = getattr(best, "status", None) or "planned"
+        ed = getattr(best, "end_date_planned", None) or getattr(best, "end_date", None)
+        sd = getattr(best, "start_date_planned", None) or getattr(best, "start_date", None)
+
+        def _fmt(d):
+            try:
+                return d.strftime("%d/%m/%Y")
+            except Exception:
+                return str(d) if d else "N/D"
+
+        ans = f"La lavorazione ‘{name}’ è pianificata { _fmt(sd) } → { _fmt(ed) } (stato: {status})."
+        return {"INTENT_DB": "WORK_DEADLINE", "answer": ans}
+
+    @staticmethod
     def list_project_works(text: str, project_id: str):
         """Elenca la sequenza lavori del cantiere direttamente dal DB (ProjectDoc.works).
 

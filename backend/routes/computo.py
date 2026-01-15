@@ -85,7 +85,14 @@ def plan_works_from_computo(pid):
         return jsonify({"error": "Data inizio (start_date) richiesta"}), 400
         
     try:
-        model = get_ai_model()
+        # Per la pianificazione (sequenza lavori) vogliamo poter funzionare
+        # anche senza API key (es. valutazione/professore). In quel caso il
+        # ComputoProcessor userà una strategia di fallback deterministica.
+        try:
+            model = get_ai_model()
+        except Exception:
+            model = None
+
         works = ComputoService.plan_works_from_computo(pid, start_date, model)
         
         # Serializza i WorkItem

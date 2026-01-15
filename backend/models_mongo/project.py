@@ -21,6 +21,9 @@ class Address(EmbeddedDocument):
 
 class WorkItem(EmbeddedDocument):
     """Embedded work item within project."""
+    meta = {
+        "strict": False,  # ✅ accetta campi extra nei works (evita FieldDoesNotExist)
+    }
     work_name = StringField(required=True)
     status = StringField(default="planned")
     start_date_planned = DateField()
@@ -31,6 +34,16 @@ class WorkItem(EmbeddedDocument):
     duration_actual_hours = FloatField()  # ✅ Aggiungi campo actual
     number_of_workers = FloatField()
     workers = ListField(StringField(), default=list)  # List of worker ObjectIds as strings
+
+    # --- Campi opzionali usati da pianificazione/assegnazione (compatibilità) ---
+    work_code = StringField()
+    qty = FloatField()
+    unit = StringField()
+    primary_role = StringField()
+    roles_allowed = ListField(StringField(), default=list)
+    crew_size_planned = FloatField()
+    hours_estimated = FloatField()
+    notes = StringField()
 
 
 class ProjectDoc(Document):
@@ -98,6 +111,14 @@ class ProjectDoc(Document):
                     "duration_actual_hours": w.duration_actual_hours if hasattr(w, 'duration_actual_hours') else None,  # ✅
                     "number_of_workers": w.number_of_workers,
                     "workers": w.workers,
+                    "work_code": getattr(w, "work_code", None),
+                    "qty": getattr(w, "qty", None),
+                    "unit": getattr(w, "unit", None),
+                    "primary_role": getattr(w, "primary_role", None),
+                    "roles_allowed": getattr(w, "roles_allowed", None) or [],
+                    "crew_size_planned": getattr(w, "crew_size_planned", None),
+                    "hours_estimated": getattr(w, "hours_estimated", None),
+                    "notes": getattr(w, "notes", None),
                 }
                 for w in self.works
             ],

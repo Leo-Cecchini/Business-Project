@@ -200,6 +200,123 @@ def generate_computo_from_description(model, project_description: str, metadata:
 
 # --- Logica Cella 3: Pianificazione Lavori ---
 
+def _is_weekend(d: date) -> bool:
+    return d.weekday() >= 5  # 5=Sat, 6=Sun
+
+
+def _add_workdays(start: date, workdays: int) -> date:
+    """Return the date obtained by moving forward `workdays` working days (Mon–Fri).
+    If workdays is 0, returns start.
+    """
+    d = start
+    remaining = workdays
+    while remaining > 0:
+        d = d.fromordinal(d.toordinal() + 1)
+        if not _is_weekend(d):
+            remaining -= 1
+    return d
+
+
+def _infer_primary_role(text: str) -> str:
+    """Very lightweight heuristic role inference from category/description."""
+    t = (text or "").lower()
+    if any(k in t for k in ["elettric", "quadro", "presa", "interrutt", "impianto elettric"]):
+        return "elettricista"
+    if any(k in t for k in ["idrico", "scarico", "rubinet", "sanitar", "impianto idric", "doccia"]):
+        return "idraulico"
+    if any(k in t for k in ["piastrel", "gres", "rivest", "paviment"]):
+        return "piastrellista"
+    if any(k in t for k in ["tinteggi", "pittura", "vernici"]):
+        return "imbianchino"
+    if any(k in t for k in ["infissi", "porte", "finestr", "legno", "fabbro", "serrament"]):
+        return "falegname"
+    if any(k in t for k in ["cartongesso", "tramezz", "intonac", "massetto", "muratur", "demol", "rasch", "stucc"]):
+        return "muratore"
+    return "operaio edile"
+
+
+def _fallback_generate_work_pipeline(metric_data: Dict[str, Any], start_date: str) -> List[Dict[str, Any]]:
+    """Offline fallback pipeline generator (no AI required).
+
+    Strategy:
+    - create 1 work per category (or per item if no categories)
+    - estimate hours from money totals as a rough proxy
+    - schedule sequentially Mon–Fri, 8h/day
+    """
+    bill = metric_data.get("bill_of_quantities", []) or []
+
+    try:
+        cur = date.fromisoformat(start_date)
+    except Exception:
+        cur = date.today()
+
+    # move to next weekday if weekend
+    while _is_weekend(cur):
+        cur = _add_workdays(cur, 1)
+
+    works: List[Dict[str, Any]] = []
+
+    # If bill is empty, return empty list
+    if not bill:
+        return works
+
+    for section in bill:
+        cat_name = section.get("category") or "LAVORAZIONI"
+        items = section.get("items") or []
+
+        # Estimate "effort" using totals; keep it deterministic
+        cat_total = float(section.get("category_total") or 0.0)
+        if cat_total <= 0 and items:
+            cat_total = float(sum(float(i.get("item_total") or 0.0) for i in items))
+
+        # Heuristic: 1 workday per ~400€ of category total, minimum 1 day, max 10 days
+        est_days = 1
+        if cat_total > 0:
+            est_days = max(1, min(10, int(round(cat_total / 400.0))))
+
+        est_hours = est_days * 8
+
+        # Heuristic workers: 1 worker per ~3 days, cap 4
+        num_workers = max(1, min(4, int(round(est_days / 3.0)) or 1))
+
+        # Role inference
+        role_hint_text = cat_name + " " + " ".join((i.get("description") or "") for i in items[:3])
+        primary_role = _infer_primary_role(role_hint_text)
+
+        start_planned = cur
+        # end date is inclusive: start + (est_days-1) workdays
+        end_planned = _add_workdays(start_planned, max(0, est_days - 1))
+
+        work = {
+            "work_name": cat_name,
+            "status": "planned",
+            "start_date_planned": start_planned.isoformat(),
+            "end_date_planned": end_planned.isoformat(),
+            "start_date_actual": None,
+            "end_date_actual": None,
+            "duration_estimated_hours": float(est_hours),
+            "duration_actual_hours": None,
+            "number_of_workers": float(num_workers),
+            "workers": [],
+
+            # Optional fields (safe if your WorkItem schema includes them)
+            "primary_role": primary_role,
+            "roles_allowed": [primary_role],
+            "crew_size_planned": float(num_workers),
+            "hours_estimated": float(est_hours),
+            "unit": None,
+            "qty": None,
+            "work_code": None,
+            "notes": "auto-fallback: generated without AI"
+        }
+        works.append(work)
+
+        # next work starts next weekday after end
+        cur = _add_workdays(end_planned, 1)
+
+    return works
+
+
 def generate_work_pipeline(model, metric_data: Dict[str, Any], start_date: str) -> List[Dict[str, Any]]:
     """
     Funzione principale della Fase 2 (Pianificazione).
@@ -253,21 +370,31 @@ def generate_work_pipeline(model, metric_data: Dict[str, Any], start_date: str) 
     try:
         response = model.generate_content(prompt)
         work_pipeline = json.loads(response.text)
-        
-        if isinstance(work_pipeline, list):
+
+        if isinstance(work_pipeline, list) and len(work_pipeline) > 0:
             log.info(f"Pipeline lavori generata ({len(work_pipeline)} voci).")
             return work_pipeline
-        else:
-            log.error("Errore: L'IA non ha restituito una lista JSON per la pipeline.")
-            log.debug(f"--- RISPOSTA GREZZA (DEBUG) ---\n{response.text}\n--------------------------")
-            return None
+
+        log.warning("Pipeline AI vuota o non valida: uso fallback offline.")
+        try:
+            return _fallback_generate_work_pipeline(metric_data, start_date)
+        except Exception as fe:
+            log.error(f"Fallback pipeline fallito: {fe}")
+            return []
+
     except Exception as e:
         log.error(f"Errore chiamata API (Fase 2 Pianificazione): {e}")
         try:
             log.debug(f"--- RISPOSTA GREZZA (DEBUG) ---\n{response.text}\n--------------------------")
-        except:
+        except Exception:
             pass
-        raise ValueError(f"Errore API AI: {e}")
+
+        log.warning("Chiamata AI fallita: uso fallback offline per pipeline lavori.")
+        try:
+            return _fallback_generate_work_pipeline(metric_data, start_date)
+        except Exception as fe:
+            log.error(f"Fallback pipeline fallito: {fe}")
+            return []
 
 
 # --- Logica Cella 7: Generazione PDF ---

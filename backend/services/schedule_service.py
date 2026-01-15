@@ -3,6 +3,8 @@ from datetime import datetime, timedelta
 from collections import defaultdict, deque
 from uuid import uuid4
 import math
+import re
+import traceback
 from typing import List, Dict, Any, Optional
 from bson import ObjectId
 from mongoengine.connection import get_db
@@ -29,6 +31,24 @@ class ScheduleService:
             return datetime.strptime(str(s)[:10], "%Y-%m-%d")
         except ValueError:
             return None
+
+    @staticmethod
+    def _norm_role(s: Any) -> str:
+        """Normalize role strings (e.g. 'capo cantiere', 'capo_cantiere', 'capocantiere')."""
+        return "".join(ch for ch in str(s or "").lower().strip() if ch.isalnum())
+
+    @staticmethod
+    def _role_regex(role: Any) -> str:
+        """Build a tolerant regex for role matching (spaces/underscores/hyphens treated as optional)."""
+        r = str(role or "").strip().lower()
+        if not r:
+            return ""
+        esc = re.escape(r)
+        # make separators flexible
+        esc = esc.replace("\\ ", r"[\\s_-]*")
+        esc = esc.replace("\\_", r"[\\s_-]*")
+        esc = esc.replace("\\-", r"[\\s_-]*")
+        return esc
 
     @staticmethod
     def _daterange(d0: datetime, d1: datetime):
@@ -60,7 +80,9 @@ class ScheduleService:
 
     @staticmethod
     def _find_free_ids_for_role(db, role: str, region: str = None, city: str = None) -> List[str]:
-        filt = {"available": True, "role": {"$regex": f"^{role}$", "$options": "i"}}
+        # tolerant role matching (handles 'capo cantiere' vs 'capocantiere' vs 'capo_cantiere', and 'senior' variants)
+        role_rx = ScheduleService._role_regex(role)
+        filt = {"available": True, "role": {"$regex": role_rx, "$options": "i"}}
         if region: filt["home_region"] = {"$regex": f"^{region}$", "$options": "i"}
         if city: filt["home_city"] = {"$regex": f"^{city}$", "$options": "i"}
         
@@ -310,25 +332,25 @@ class ScheduleService:
         order_idx = ScheduleService._simple_topo_order(db, work_items)
         ordered = [work_items[i] for i in order_idx]
 
-        # Worker pools: role -> list[worker_id]
+        # Worker pools: normalized_role -> list[worker_id] (only available workers)
         worker_pools: dict[str, list[str]] = {}
-        for w in db["workers"].find({}, {"_id": 1, "role": 1}):
+        for w in db["workers"].find({"available": True}, {"_id": 1, "role": 1, "available": 1}):
             wid = str(w.get("_id"))
-            role = (w.get("role") or "").strip().lower()
-            if not wid or not role:
+            role_norm = ScheduleService._norm_role(w.get("role") or "")
+            if not wid or not role_norm:
                 continue
-            worker_pools.setdefault(role, []).append(wid)
+            worker_pools.setdefault(role_norm, []).append(wid)
 
         def pool_for_role(role: str) -> list[str]:
-            r = (role or "").strip().lower()
-            if not r:
+            r_norm = ScheduleService._norm_role(role)
+            if not r_norm:
                 return []
-            # simple contains matching (e.g. "elettricista senior" still counts)
-            out = []
-            for k, ids in worker_pools.items():
-                if r in k:
+            # contains matching (e.g. request "elettricista" matches stored "elettricistasenior")
+            out: list[str] = []
+            for k_norm, ids in worker_pools.items():
+                if r_norm in k_norm:
                     out.extend(ids)
-            return out or worker_pools.get(r, [])
+            return out or worker_pools.get(r_norm, [])
 
         # Busy caches
         global_busy_cache: dict[str, set[str]] = {}
@@ -450,395 +472,368 @@ class ScheduleService:
             "plan": plan,
             "notes": notes,
         }
+
+    # --- SAVE/ASSIGN/UPDATE WORKS (used by projects routes) ---
+
     @staticmethod
     def commit_plan(project_id: str, plan_data: List[dict], site_id: str = None, assign: bool = False) -> Dict[str, Any]:
-        """
-        Salva il piano nel progetto come WorkItems.
-        
-        Args:
-            project_id: ObjectId string del progetto
-            plan_data: Output di generate_plan
-            site_id: Opzionale, non usato (legacy)
-            assign: Se True, popola workers array con IDs assegnati
-        
-        Returns:
-            Dict con statistiche operazione
+        """Salva il piano nel progetto come WorkItems.
+
+        Chiamata da:
+        - POST /api/schedule/commit_plan
+        - POST /api/projects/<project_id>/schedule/assign
+
+        Supporta formati:
+        - generate_plan: code/label, start_day/end_day, duration_days, crew_roles, assigned_workers
+        - legacy: work_code/work_name, start/end
+
+        Se `assign=True`, salva anche i worker_ids nei singoli works.
         """
         db = get_db()
-        
-        # ✅ Converti project_id in ObjectId
         try:
-            oid = ObjectId(project_id)
-        except Exception:
-            raise ValueError(f"project_id invalido: {project_id}")
-        
-        # Verifica che il progetto esista
-        project = db["projects"].find_one({"_id": oid}, {"_id": 1})
-        if not project:
-            raise ValueError(f"Progetto {project_id} non trovato")
-        
-        # ✅ Converti plan_data in formato WorkItem
-        works_to_save = []
-        total_assigned = 0
-        
-        for it in plan_data:
-            if it.get("status") != "planned": 
-                continue
-            
-            # Parse date
-            start_dt = ScheduleService._parse_date(it.get("start"))
-            end_dt = ScheduleService._parse_date(it.get("end"))
-            
-            if not start_dt or not end_dt:
-                continue
-            
-            # Calcola ore stimate (duration_days * 8 ore)
-            duration_days = it.get("duration_days", 1)
-            duration_hours = duration_days * 8.0
-            
-            # Calcola numero workers (somma crew_roles)
-            crew_roles = it.get("crew_roles", {})
-            num_workers = sum(crew_roles.values()) if crew_roles else 1
-            
-            # ✅ Raccogli worker IDs se assign=True
-            worker_ids = []
-            if assign and it.get("assigned"):
-                # assigned = {"muratore": ["id1", "id2"], "elettricista": ["id3"]}
-                for role, ids in it["assigned"].items():
-                    worker_ids.extend(ids)
-                # Rimuovi duplicati mantenendo ordine
-                worker_ids = list(dict.fromkeys(worker_ids))
-                total_assigned += len(worker_ids)
-            
-            # ✅ Crea WorkItem secondo il modello
-            work_item = {
-                "work_name": it.get("work_code"),  # work_code diventa work_name
-                "status": "planned",
-                "start_date_planned": start_dt,
-                "end_date_planned": end_dt,
-                "duration_estimated_hours": duration_hours,
-                "number_of_workers": float(num_workers),
-                "workers": worker_ids  # Array di worker ObjectId strings
+            # project_id -> ObjectId
+            try:
+                oid = ObjectId(str(project_id))
+            except Exception:
+                raise ValueError(f"project_id invalido: {project_id}")
+
+            project = db["projects"].find_one({"_id": oid}, {"_id": 1})
+            if not project:
+                raise ValueError("Progetto non trovato")
+
+            # If frontend calls /schedule/assign with an empty body, try to reuse an existing plan.
+            if not isinstance(plan_data, list) or not plan_data:
+                # Prefer a previously generated plan in meta_extra.plan, otherwise fallback to existing works
+                proj_full = db["projects"].find_one(
+                    {"_id": oid},
+                    {"works": 1, "meta_extra": 1}
+                ) or {}
+
+                meta_extra = proj_full.get("meta_extra") or {}
+                fallback_plan = meta_extra.get("plan")
+
+                if isinstance(fallback_plan, list) and fallback_plan:
+                    plan_data = fallback_plan
+                else:
+                    fallback_works = proj_full.get("works")
+                    if isinstance(fallback_works, list) and fallback_works:
+                        plan_data = fallback_works
+
+            if not isinstance(plan_data, list) or not plan_data:
+                raise ValueError("Piano vuoto: nessun item da salvare")
+
+            works_to_save: list[dict] = []
+            total_assigned = 0
+
+            for it in plan_data:
+                if not isinstance(it, dict):
+                    continue
+
+                # accetta start_day/end_day oppure start/end
+                # + supporta WorkItem già salvati (start_date_planned/end_date_planned, start_date_actual/end_date_actual)
+                start_s = (
+                    it.get("start")
+                    or it.get("start_day")
+                    or it.get("start_date")
+                    or it.get("from")
+                    or it.get("start_date_planned")
+                    or it.get("start_date_actual")
+                )
+                end_s = (
+                    it.get("end")
+                    or it.get("end_day")
+                    or it.get("end_date")
+                    or it.get("to")
+                    or it.get("end_date_planned")
+                    or it.get("end_date_actual")
+                )
+
+                start_dt = ScheduleService._parse_date(start_s)
+                end_dt = ScheduleService._parse_date(end_s)
+                if not start_dt or not end_dt:
+                    continue
+
+                # Work code / label
+                code = it.get("work_code") or it.get("code") or it.get("work_name") or "WORK"
+                label = it.get("label") or it.get("name") or it.get("title") or code
+
+                # duration
+                duration_days = it.get("duration_days") or it.get("duration") or 1
+                try:
+                    duration_days = int(duration_days)
+                except Exception:
+                    duration_days = 1
+                duration_days = max(1, duration_days)
+                duration_hours = float(duration_days) * 8.0
+
+                # crew size
+                crew_roles = it.get("crew_roles") if isinstance(it.get("crew_roles"), dict) else {}
+                num_workers = sum(int(v) for v in crew_roles.values()) if crew_roles else None
+
+                # assigned workers mapping
+                assigned_map = it.get("assigned") or it.get("assigned_workers") or it.get("assignedWorkers")
+                if assigned_map is None:
+                    assigned_map = it.get("assigned_workers")
+
+                worker_ids: list[str] = []
+                if assign and isinstance(assigned_map, dict):
+                    for _, ids in assigned_map.items():
+                        if isinstance(ids, list):
+                            worker_ids.extend([str(x) for x in ids if x])
+                    # de-dup preserving order
+                    worker_ids = list(dict.fromkeys(worker_ids))
+                    total_assigned += len(worker_ids)
+
+                if num_workers is None:
+                    num_workers = float(len(worker_ids) or 1)
+                else:
+                    num_workers = float(num_workers or 1)
+
+                # WorkItem (ProjectDoc è strict=False, quindi possiamo includere work_code)
+                work_item = {
+                    "work_name": str(label),
+                    "status": "planned",
+                    # Mongo/PyMongo can store datetime, but not datetime.date
+                    "start_date_planned": start_dt,
+                    "end_date_planned": end_dt,
+                    "duration_estimated_hours": duration_hours,
+                    "number_of_workers": num_workers,
+                    "workers": worker_ids,
+                    "work_code": str(code),
+                }
+                works_to_save.append(work_item)
+
+            if not works_to_save:
+                raise ValueError("Nessun work pianificato da salvare (controlla start/end o start_day/end_day)")
+
+            # overwrite works
+            res = db["projects"].update_one({"_id": oid}, {"$set": {"works": works_to_save}})
+            if res.matched_count == 0:
+                raise ValueError("Progetto non trovato")
+
+            # If we are assigning workers, also ensure a foreman (capo cantiere) is set for the project.
+            if assign:
+                try:
+                    capo_norm = ScheduleService._norm_role("capo cantiere")
+
+                    # Prefer a capo cantiere among the roles present in assigned_map
+                    foreman_id: str | None = None
+                    if isinstance(assigned_map, dict):
+                        for role_k, ids in assigned_map.items():
+                            if ScheduleService._norm_role(role_k) == capo_norm and isinstance(ids, list) and ids:
+                                foreman_id = str(ids[0])
+                                break
+
+                    # Fallback: pick any available capo cantiere
+                    if not foreman_id:
+                        w = db["workers"].find_one(
+                            {"available": True, "role": {"$regex": ScheduleService._role_regex("capo cantiere"), "$options": "i"}},
+                            {"_id": 1, "role": 1}
+                        )
+                        if w and ScheduleService._norm_role(w.get("role") or "") == capo_norm:
+                            foreman_id = str(w.get("_id"))
+
+                    if foreman_id:
+                        # Write multiple keys for backward/forward compatibility
+                        db["projects"].update_one(
+                            {"_id": oid},
+                            {"$set": {
+                                "meta_extra.foreman_id": foreman_id,
+                                "meta_extra.capo_cantiere_id": foreman_id,
+                                "foreman_id": foreman_id,
+                                "capo_cantiere_id": foreman_id,
+                            }}
+                        )
+                except Exception:
+                    # Never fail the commit because of foreman persistence
+                    print("FOREMAN ASSIGN ERROR:\n" + traceback.format_exc(), flush=True)
+
+            return {
+                "ok": True,
+                "project_id": str(project_id),
+                "works_saved": len(works_to_save),
+                "workers_assigned": total_assigned if assign else 0,
+                "overwritten": True,
             }
-            
-            works_to_save.append(work_item)
-        
-        if not works_to_save:
-            raise ValueError("Nessun work pianificato da salvare")
-        
-        # ✅ Salva in works usando $push
-        res = db["projects"].update_one(
-            {"_id": oid},
-            {"$push": {"works": {"$each": works_to_save}}}
-        )
-        
-        if res.matched_count == 0:
-            raise ValueError(f"Progetto {project_id} non trovato durante update")
-        
-        return {
-            "ok": True,
-            "project_id": project_id,
-            "works_added": len(works_to_save),
-            "workers_assigned": total_assigned if assign else 0
-        }
-        
-        # ============================================
+        except Exception:
+            print("SCHEDULE SERVICE commit_plan ERROR:\n" + traceback.format_exc(), flush=True)
+            raise
 
     @staticmethod
     def assign_worker_to_work(project_id: str, work_name: str, worker_id: str) -> Dict[str, Any]:
-        """
-        Assegna un worker a un work specifico.
-        
-        Args:
-            project_id: ObjectId string del progetto
-            work_name: Nome del work (work_name field)
-            worker_id: ObjectId string del worker
-            
-        Returns:
-            Dict con risultato operazione
-            
-        Raises:
-            ValueError: Se parametri invalidi o progetto/work non trovato
-        """
-        from bson import ObjectId
-        from mongoengine.connection import get_db
-        
-        # Validazione input
-        if not work_name or not worker_id:
-            raise ValueError("work_name e worker_id sono richiesti")
-        
-        # Converti project_id in ObjectId
+        """Assegna un worker a un work specifico (addToSet)."""
+        if not project_id or not work_name or not worker_id:
+            raise ValueError("project_id, work_name e worker_id sono richiesti")
+
+        db = get_db()
         try:
-            oid = ObjectId(project_id)
+            oid = ObjectId(str(project_id))
         except Exception:
             raise ValueError(f"project_id invalido: {project_id}")
-        
-        # Verifica che worker_id sia valido ObjectId
+
         try:
-            ObjectId(worker_id)
+            wid_oid = ObjectId(str(worker_id))
         except Exception:
             raise ValueError(f"worker_id invalido: {worker_id}")
-        
-        db = get_db()
-        
-        # Verifica che il worker esista ed è disponibile
-        worker = db["workers"].find_one(
-            {"_id": ObjectId(worker_id)},
-            {"_id": 1, "available": 1, "name": 1}
-        )
-        
+
+        worker = db["workers"].find_one({"_id": wid_oid}, {"_id": 1, "name": 1})
         if not worker:
-            raise ValueError(f"Worker {worker_id} non trovato")
-        
-        # Aggiungi worker all'array (addToSet evita duplicati)
+            raise ValueError("Worker non trovato")
+
         result = db["projects"].update_one(
-            {
-                "_id": oid,
-                "works.work_name": work_name
-            },
-            {
-                "$addToSet": {"works.$.workers": worker_id}
-            }
+            {"_id": oid, "works.work_name": work_name},
+            {"$addToSet": {"works.$.workers": str(worker_id)}},
         )
-        
+
         if result.matched_count == 0:
-            raise ValueError(f"Progetto {project_id} o work '{work_name}' non trovato")
-        
-        if result.modified_count == 0:
-            # Worker già assegnato (addToSet non ha modificato)
-            return {
-                "success": True,
-                "message": "Worker già assegnato a questo work",
-                "already_assigned": True
-            }
-        
+            raise ValueError("Progetto o work non trovato")
+
         return {
             "success": True,
-            "message": f"Worker {worker.get('name', worker_id)} assegnato a {work_name}",
-            "already_assigned": False
+            "message": f"Worker {worker.get('name', str(worker_id))} assegnato a {work_name}",
+            "already_assigned": result.modified_count == 0,
         }
 
     @staticmethod
     def unassign_worker_from_work(project_id: str, work_name: str, worker_id: str) -> Dict[str, Any]:
-        """
-        Rimuove un worker da un work specifico.
-        
-        Args:
-            project_id: ObjectId string del progetto
-            work_name: Nome del work
-            worker_id: ObjectId string del worker
-            
-        Returns:
-            Dict con risultato operazione
-            
-        Raises:
-            ValueError: Se parametri invalidi o progetto/work non trovato
-        """
-        from bson import ObjectId
-        from mongoengine.connection import get_db
-        
-        # Validazione input
-        if not work_name or not worker_id:
-            raise ValueError("work_name e worker_id sono richiesti")
-        
-        # Converti project_id in ObjectId
+        """Rimuove un worker da un work e pulisce eventuale booking del worker."""
+        if not project_id or not work_name or not worker_id:
+            raise ValueError("project_id, work_name e worker_id sono richiesti")
+
+        db = get_db()
         try:
-            oid = ObjectId(project_id)
+            oid = ObjectId(str(project_id))
         except Exception:
             raise ValueError(f"project_id invalido: {project_id}")
-        
-        db = get_db()
-        
-        # Rimuovi worker dall'array
+
+        # 1) pull dal work
         result = db["projects"].update_one(
-            {
-                "_id": oid,
-                "works.work_name": work_name
-            },
-            {
-                "$pull": {"works.$.workers": worker_id}
-            }
+            {"_id": oid, "works.work_name": work_name},
+            {"$pull": {"works.$.workers": str(worker_id)}},
         )
-        
+
         if result.matched_count == 0:
-            raise ValueError(f"Progetto {project_id} o work '{work_name}' non trovato")
-        
-        if result.modified_count == 0:
-            return {
-                "success": True,
-                "message": "Worker non era assegnato a questo work",
-                "was_assigned": False
-            }
-        
+            raise ValueError("Progetto o work non trovato")
+
+        # 2) rimuovi anche assignment in meta_extra (se presente)
+        db["projects"].update_one(
+            {"_id": oid},
+            {"$pull": {"meta_extra.assignments": {"work_name": work_name, "worker_id": str(worker_id)}}},
+        )
+
+        # 3) rimuovi booking dal worker (se esiste)
+        try:
+            db["workers"].update_one(
+                {"_id": ObjectId(str(worker_id))},
+                {"$pull": {"bookings": {"project_id": str(project_id), "work_name": work_name}}},
+            )
+        except Exception:
+            pass
+
         return {
             "success": True,
             "message": f"Worker rimosso da {work_name}",
-            "was_assigned": True
+            "was_assigned": result.modified_count > 0,
         }
 
     @staticmethod
     def update_work_status(project_id: str, work_name: str, status: str) -> Dict[str, Any]:
-        """
-        Aggiorna lo status di un work.
-        
-        Args:
-            project_id: ObjectId string del progetto
-            work_name: Nome del work
-            status: Nuovo status ("planned", "in_progress", "completed", "blocked")
-            
-        Returns:
-            Dict con risultato operazione
-            
-        Raises:
-            ValueError: Se parametri invalidi o status non valido
-        """
-        from bson import ObjectId
-        from mongoengine.connection import get_db
-        from datetime import datetime
-        
-        # Validazione input
-        if not work_name or not status:
-            raise ValueError("work_name e status sono richiesti")
-        
-        # Valida status
-        valid_statuses = ["planned", "in_progress", "completed", "blocked", "cancelled"]
+        """Aggiorna lo status di un work (planned/in_progress/completed/blocked/cancelled)."""
+        if not project_id or not work_name or not status:
+            raise ValueError("project_id, work_name e status sono richiesti")
+
+        valid_statuses = {"planned", "in_progress", "completed", "blocked", "cancelled"}
         if status not in valid_statuses:
-            raise ValueError(f"Status invalido. Valori ammessi: {', '.join(valid_statuses)}")
-        
-        # Converti project_id in ObjectId
+            raise ValueError(f"Status invalido. Valori ammessi: {', '.join(sorted(valid_statuses))}")
+
+        db = get_db()
         try:
-            oid = ObjectId(project_id)
+            oid = ObjectId(str(project_id))
         except Exception:
             raise ValueError(f"project_id invalido: {project_id}")
-        
-        db = get_db()
-        
-        # Prepara update
-        update_data = {"works.$.status": status}
-        
-        # Gestione date automatiche
+
+        update_data: dict[str, Any] = {"works.$.status": status}
+        now_dt = datetime.utcnow()
+
         if status == "in_progress":
-            # Quando inizia, setta start_date_actual se non già presente
-            update_data["works.$.start_date_actual"] = datetime.now()
-        
+            update_data["works.$.start_date_actual"] = now_dt
         elif status == "completed":
-            # Quando completa, setta end_date_actual
-            update_data["works.$.end_date_actual"] = datetime.now()
-        
-        # Esegui update
+            update_data["works.$.end_date_actual"] = now_dt
+
         result = db["projects"].update_one(
-            {
-                "_id": oid,
-                "works.work_name": work_name
-            },
-            {"$set": update_data}
+            {"_id": oid, "works.work_name": work_name},
+            {"$set": update_data},
         )
-        
+
         if result.matched_count == 0:
-            raise ValueError(f"Progetto {project_id} o work '{work_name}' non trovato")
-        
+            raise ValueError("Progetto o work non trovato")
+
         return {
             "success": True,
             "message": f"Status di '{work_name}' aggiornato a '{status}'",
-            "status": status
+            "status": status,
         }
 
     @staticmethod
     def get_work_details(project_id: str, work_name: str) -> Dict[str, Any]:
-        """
-        Recupera i dettagli di un work specifico.
-        
-        Args:
-            project_id: ObjectId string del progetto
-            work_name: Nome del work
-            
-        Returns:
-            Dict con dettagli del work o None se non trovato
-        """
-        from bson import ObjectId
-        from mongoengine.connection import get_db
-        
+        """Recupera i dettagli di un work specifico."""
+        db = get_db()
         try:
-            oid = ObjectId(project_id)
+            oid = ObjectId(str(project_id))
         except Exception:
             raise ValueError(f"project_id invalido: {project_id}")
-        
-        db = get_db()
-        
-        project = db["projects"].find_one(
-            {"_id": oid},
-            {"works": 1}
-        )
-        
+
+        project = db["projects"].find_one({"_id": oid}, {"works": 1})
         if not project:
-            raise ValueError(f"Progetto {project_id} non trovato")
-        
-        # Cerca il work specifico
-        for work in project.get("works", []):
+            raise ValueError("Progetto non trovato")
+
+        for work in project.get("works", []) or []:
             if work.get("work_name") == work_name:
-                return {
-                    "found": True,
-                    "work": work
-                }
-        
+                return {"found": True, "work": work}
+
         return {"found": False}
 
     @staticmethod
     def list_project_workers(project_id: str) -> Dict[str, Any]:
-        """
-        Lista tutti i workers assegnati a qualsiasi work del progetto.
-        
-        Args:
-            project_id: ObjectId string del progetto
-            
-        Returns:
-            Dict con lista worker IDs unici e dettagli
-        """
-        from bson import ObjectId
-        from mongoengine.connection import get_db
-        
+        """Lista tutti i workers assegnati (unici) nel progetto."""
+        db = get_db()
         try:
-            oid = ObjectId(project_id)
+            oid = ObjectId(str(project_id))
         except Exception:
             raise ValueError(f"project_id invalido: {project_id}")
-        
-        db = get_db()
-        
-        project = db["projects"].find_one(
-            {"_id": oid},
-            {"works": 1}
-        )
-        
+
+        project = db["projects"].find_one({"_id": oid}, {"works": 1})
         if not project:
-            raise ValueError(f"Progetto {project_id} non trovato")
-        
-        # Raccogli tutti i worker IDs (set per unicità)
-        worker_ids = set()
-        for work in project.get("works", []):
-            worker_ids.update(work.get("workers", []))
-        
-        worker_ids = list(worker_ids)
-        
-        # Opzionale: recupera dettagli workers
-        workers_details = []
-        if worker_ids:
-            workers = db["workers"].find(
-                {"_id": {"$in": [ObjectId(wid) for wid in worker_ids]}},
-                {"_id": 1, "name": 1, "role": 1, "available": 1}
-            )
-            workers_details = [
-                {
-                    "id": str(w["_id"]),
-                    "name": w.get("name"),
-                    "role": w.get("role"),
-                    "available": w.get("available")
-                }
-                for w in workers
-            ]
-        
+            raise ValueError("Progetto non trovato")
+
+        worker_ids: set[str] = set()
+        for work in project.get("works", []) or []:
+            for wid in (work.get("workers") or []):
+                if wid:
+                    worker_ids.add(str(wid))
+
+        ids_list = sorted(worker_ids)
+
+        workers_details: list[dict] = []
+        if ids_list:
+            try:
+                oid_list = [ObjectId(x) for x in ids_list]
+                cur = db["workers"].find({"_id": {"$in": oid_list}}, {"_id": 1, "name": 1, "role": 1, "available": 1})
+                workers_details = [
+                    {
+                        "id": str(w.get("_id")),
+                        "name": w.get("name"),
+                        "role": w.get("role"),
+                        "available": w.get("available"),
+                    }
+                    for w in cur
+                ]
+            except Exception:
+                workers_details = []
+
         return {
-            "project_id": project_id,
-            "total_workers": len(worker_ids),
-            "worker_ids": worker_ids,
-            "workers": workers_details
+            "project_id": str(project_id),
+            "total_workers": len(ids_list),
+            "worker_ids": ids_list,
+            "workers": workers_details,
         }

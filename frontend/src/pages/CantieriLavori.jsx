@@ -81,17 +81,34 @@ export default function CantieriLavori() {
     };
 
     const handleRemoveWorker = async (work, worker) => {
-        // ✅ Debug log
+        // WorkCard passa spesso una stringa (workerId). Manteniamo compatibilità
+        // anche se in futuro passasse un oggetto worker.
         console.log('handleRemoveWorker called:', { work: work.work_name, worker });
-        
-        const workerName = worker.name || worker.worker_id || worker.id || 'operaio';
+
+        const workerId =
+            typeof worker === 'string'
+                ? worker
+                : (worker?.worker_id || worker?.id || worker?._id);
+
+        // Recupera il nome se possibile
+        const workerObj =
+            typeof worker === 'object' && worker
+                ? worker
+                : (workersData || []).find(w => (w.id || w._id) === workerId);
+
+        const workerName = workerObj?.name || workerObj?.worker_name || (workerId ? `Worker ${String(workerId).slice(-4)}` : 'operaio');
+
+        if (!workerId) {
+            toast('ID operaio non valido', 'error');
+            return;
+        }
+
         if (!window.confirm(`Rimuovere ${workerName} da questo lavoro?`)) return;
 
-        const workerId = worker.worker_id || worker.id;
         console.log('Sending unassign request:', {
             projectId: selectedProjectId,
             workName: work.work_name,
-            workerId
+            workerId,
         });
 
         try {

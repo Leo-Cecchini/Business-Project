@@ -248,6 +248,8 @@ class ChatService:
         # Skills progetto (se abbiamo project_id)
         if project_id:
             for skill_method in [
+                ChatSkills.list_project_workers,
+                ChatSkills.work_deadline,
                 ChatSkills.list_project_works,
                 ChatSkills.computo_category_items,
                 ChatSkills.computo_top_expensive,

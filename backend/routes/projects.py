@@ -1,7 +1,10 @@
 # routes/projects.py
 from flask import Blueprint, request, jsonify
-from services import ProjectService, ScheduleService
+from services import ProjectService
+from services.schedule_service import ScheduleService
+from services.work_service import WorkService
 from bson import ObjectId
+import traceback
 
 projects_bp = Blueprint('projects', __name__, url_prefix='/api/projects')
 
@@ -121,8 +124,6 @@ def upload_document(project_id):
     except Exception as e:
         return jsonify({"error": f"Upload failed: {str(e)}"}), 500
     
-# AGGIUNGI import all'inizio
-from services.schedule_service import ScheduleService
 
 # ============================================
 # PLANNING & SCHEDULING
@@ -134,7 +135,9 @@ def auto_plan_project(project_id):
     Genera piano lavori automatico per il progetto.
     Era: POST /api/schedule/auto_plan
     """
-    data = request.get_json(force=True) or {}
+    # Do not use force=True here: when the body is empty or invalid JSON, Flask
+    # can raise a BadRequest before we reach our error handling.
+    data = request.get_json(silent=True) or {}
     
     # Valida ObjectId
     try:
@@ -142,18 +145,14 @@ def auto_plan_project(project_id):
     except Exception:
         return jsonify({"ok": False, "error": "project_id invalido"}), 400
     
+    # Frontend contract (SiteHeader.jsx):
+    #   POST /api/projects/<id>/plan  body: { start_from: 'auto' | 'YYYY-MM-DD', replace: true }
+    # Planning in questo progetto è gestita dal WorkService (calcola start/end e numero operai per work).
     try:
-        res = ScheduleService.generate_plan(
-            items=data.get("items", []),
-            start_date=data.get("start"),
-            region=data.get("region"),
-            city=data.get("city"),
-            daily_hours=data.get("daily_hours"),
-            require_foreman=data.get("require_foreman")
-        )
-        return jsonify({"ok": True, **res})
-    except ValueError as e:
-        return jsonify({"ok": False, "error": str(e)}), 422
+        start_from = data.get("start_from") or data.get("start")
+        res = WorkService.plan_project(project_id, start_from=start_from)
+        status = 200 if res.get("ok") else 422
+        return jsonify(res), status
     except Exception as e:
         return jsonify({"ok": False, "error": str(e)}), 500
 
@@ -163,18 +162,20 @@ def commit_plan_project(project_id):
     Salva e assegna il piano generato.
     Era: POST /api/schedule/commit_plan
     """
-    data = request.get_json(force=True) or {}
+    # Do not use force=True here: when the body is empty or invalid JSON, Flask
+    # can raise a BadRequest before we reach our error handling.
+    data = request.get_json(silent=True) or {}
+    print(f"DEBUG /schedule/assign project_id={project_id} body={data}", flush=True)
     
+    # Frontend contract (SiteHeader.jsx):
+    #   POST /api/projects/<id>/schedule/assign body: {}
+    # Deve assegnare automaticamente operai in base a date/ruoli e garantire 1 capo cantiere.
     try:
-        res = ScheduleService.commit_plan(
-            project_id=project_id,
-            plan_data=data.get("plan", []),
-            assign=bool(data.get("assign_now", True))
-        )
-        return jsonify(res)
-    except ValueError as e:
-        return jsonify({"ok": False, "error": str(e)}), 422
+        res = WorkService.auto_assign(project_id)
+        status = 200 if res.get("ok") else 422
+        return jsonify(res), status
     except Exception as e:
+        print("SCHEDULE ASSIGN ROUTE ERROR:\n" + traceback.format_exc(), flush=True)
         return jsonify({"ok": False, "error": str(e)}), 500
     
 # ============================================
@@ -187,7 +188,9 @@ def assign_worker_to_work(project_id):
     Assegna un worker a un work specifico.
     Frontend: useAssignWorkerToWork()
     """
-    data = request.get_json(force=True) or {}
+    # Do not use force=True here: when the body is empty or invalid JSON, Flask
+    # can raise a BadRequest before we reach our error handling.
+    data = request.get_json(silent=True) or {}
     work_name = data.get('work_name')
     worker_id = data.get('worker_id')
     
@@ -210,7 +213,8 @@ def unassign_worker_from_work(project_id):
     Rimuove un worker da un work specifico.
     Frontend: useRemoveWorkerFromWork()
     """
-    data = request.get_json(force=True) or {}
+    # Avoid force=True: empty/invalid bodies would raise BadRequest and become 500.
+    data = request.get_json(silent=True) or {}
     work_name = data.get('work_name')
     worker_id = data.get('worker_id')
     
@@ -234,7 +238,8 @@ def update_work_status(project_id):
     Frontend: useUpdateWorkStatus()
     Status validi: "planned", "in_progress", "completed", "blocked", "cancelled"
     """
-    data = request.get_json(force=True) or {}
+    # Avoid force=True: empty/invalid bodies would raise BadRequest and become 500.
+    data = request.get_json(silent=True) or {}
     work_name = data.get('work_name')
     status = data.get('status')
     
@@ -298,7 +303,7 @@ def update_project(project_id):
     Aggiorna campi del progetto.
     Frontend: useUpdateProject()
     """
-    data = request.get_json(force=True) or {}
+    data = request.get_json(silent=True) or {}
     
     if not data:
         return jsonify({"error": "Nessun dato da aggiornare"}), 400
